@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AffConvert — Chuyển Đổi Link Affiliate Shopee & TikTok Shop</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <!-- Top Header -->
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-logo">⚡</div>
+        <div>
+          <h1 class="brand-title">AffConvert <span class="badge-pro">Shopee & TikTok</span></h1>
+          <p class="brand-subtitle">Giải mã link rút gọn, xoá mã aff cũ & gắn link Affiliate hàng loạt</p>
+        </div>
+      </div>
+
+      <div class="topbar-actions">
+        <div id="statusPills" class="status-pills">
+          <span id="shopeeStatusPill" class="status-pill pill-warn" title="Bấm để cài đặt">Shopee: Chưa nhập ID</span>
+          <span id="tiktokStatusPill" class="status-pill pill-info" title="Bấm để cài đặt">TikTok: Bóc Product ID</span>
+        </div>
+        <button id="openSettingsBtn" class="btn btn-secondary">
+          ⚙️ Cài đặt nâng cao & Hướng dẫn
+        </button>
+      </div>
+    </header>
+
+    <!-- Quick Config Bar -->
+    <section class="quick-config-card">
+      <div class="quick-grid">
+        <div class="field-group">
+          <label for="quickShopeeId">
+            <span class="dot-shopee"></span> Mã Shopee Affiliate ID của bạn
+            <button type="button" class="link-help" data-open-guide="shopee">Cách lấy ID?</button>
+          </label>
+          <input
+            type="text"
+            id="quickShopeeId"
+            placeholder="VD: 17382910234 (Nhập 1 lần tự lưu)"
+            autocomplete="off"
+          />
+        </div>
+
+        <div class="field-group">
+          <label for="quickTikTokMode">
+            <span class="dot-tiktok"></span> Chế độ xử lý TikTok Shop
+            <button type="button" class="link-help" data-open-guide="tiktok">Chi tiết</button>
+          </label>
+          <select id="quickTikTokMode">
+            <option value="clean_extract">Bóc Product ID sạch + Nút mở nhanh TikTok Affiliate</option>
+            <option value="openapi">TikTok Shop Open API (Tự động ra vt.tiktok.com)</option>
+            <option value="cookie">TikTok Web Cookie (affiliate.tiktok.com)</option>
+            <option value="deeplink">DeepLink (Accesstrade / Ecomobi / Custom)</option>
+          </select>
+        </div>
+
+        <div class="field-group">
+          <label for="quickSubId">🏷️ Sub ID (Đánh dấu nguồn đơn)</label>
+          <input
+            type="text"
+            id="quickSubId"
+            placeholder="VD: fb_group, zalo, threads (Tùy chọn)"
+            autocomplete="off"
+          />
+        </div>
+
+        <div class="field-group">
+          <label for="quickShortener">🔗 Tự động rút gọn link dài</label>
+          <select id="quickShortener">
+            <option value="isgd">Rút gọn bằng is.gd (Khuyên dùng - Ngắn đẹp)</option>
+            <option value="tinyurl">Rút gọn bằng TinyURL.com</option>
+            <option value="none">Giữ nguyên link Affiliate đầy đủ</option>
+          </select>
+        </div>
+      </div>
+    </section>
+
+    <!-- Main Converter Workspace -->
+    <main class="workspace-grid">
+      <!-- Left Column: Input -->
+      <section class="panel input-panel">
+        <div class="panel-header">
+          <div>
+            <h2>1. Dán Link hoặc Bài viết gốc</h2>
+            <p class="panel-desc">Hỗ trợ dán 1 link lẻ hoặc cả bài đăng có lẫn nhiều link Shopee & TikTok</p>
+          </div>
+          <div id="liveDetectedBadges" class="detected-badges">
+            <span class="badge-neutral">Chưa có link</span>
+          </div>
+        </div>
+
+        <div class="textarea-wrapper">
+          <textarea
+            id="inputText"
+            rows="10"
+            placeholder="Dán link vào đây...&#10;&#10;Ví dụ:&#10;🔥 Săn deal tai nghe Bluetooth cực êm: https://s.shopee.vn/4L2xYzAbCd&#10;🛒 Đặt thêm áo thun trên TikTok Shop: https://vt.tiktok.com/ZS8xYz123/"
+          ></textarea>
+        </div>
+
+        <div class="panel-actions">
+          <div class="left-tools">
+            <button type="button" id="pasteClipboardBtn" class="btn btn-ghost" title="Dán nhanh từ bộ nhớ tạm">
+              📋 Dán nhanh
+            </button>
+            <button type="button" id="sampleBtn" class="btn btn-ghost" title="Thử nghiệm với bài mẫu">
+              🧪 Dán bài mẫu
+            </button>
+            <button type="button" id="clearBtn" class="btn btn-ghost">
+              🗑️ Xoá
+            </button>
+          </div>
+
+          <button type="button" id="convertBtn" class="btn btn-primary">
+            ⚡ Chuyển đổi sang Link Affiliate
+          </button>
+        </div>
+      </section>
+
+      <!-- Right Column: Output -->
+      <section class="panel output-panel">
+        <div class="panel-header">
+          <div>
+            <h2>2. Kết quả đã gắn mã Affiliate</h2>
+            <p class="panel-desc">Giữ nguyên nội dung bài viết, chỉ thay toàn bộ link thành link của bạn</p>
+          </div>
+          <button type="button" id="copyAllTextBtn" class="btn btn-success" disabled>
+            📋 Copy toàn bộ bài viết
+          </button>
+        </div>
+
+        <div class="textarea-wrapper">
+          <textarea
+            id="outputText"
+            rows="6"
+            readonly
+            placeholder="Bài viết hoặc link sau khi chuyển đổi sẽ xuất hiện tại đây..."
+          ></textarea>
+        </div>
+
+        <!-- Detailed Link Breakdown -->
+        <div class="breakdown-section">
+          <div class="breakdown-header">
+            <h3>Chi tiết từng link trong bài (<span id="linkCountLabel">0</span>)</h3>
+            <span id="summaryStats" class="summary-stats"></span>
+          </div>
+          <div id="linkCardsContainer" class="link-cards-list">
+            <div class="empty-state">
+              Dán link ở cột bên trái và bấm <strong>"Chuyển đổi sang Link Affiliate"</strong> để xem chi tiết từng sản phẩm.
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- History Section -->
+    <section class="panel history-panel">
+      <div class="panel-header">
+        <div>
+          <h2>🕒 Lịch sử chuyển đổi gần đây</h2>
+          <p class="panel-desc">Lưu trực tiếp trên trình duyệt của bạn để copy lại khi cần</p>
+        </div>
+        <button type="button" id="clearHistoryBtn" class="btn btn-ghost">Xoá lịch sử</button>
+      </div>
+      <div id="historyContainer" class="history-list">
+        <div class="empty-state-sm">Chưa có lịch sử chuyển đổi nào.</div>
+      </div>
+    </section>
+  </div>
+
+  <!-- Settings & Guide Modal -->
+  <div id="settingsModal" class="modal-backdrop hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2>⚙️ Cài đặt Tài khoản Affiliate (Shopee & TikTok Shop)</h2>
+        <button type="button" id="closeSettingsBtn" class="btn-icon">✕</button>
+      </div>
+
+      <div class="modal-tabs">
+        <button type="button" class="tab-btn active" data-tab="tab-shopee">🟠 Cài đặt Shopee</button>
+        <button type="button" class="tab-btn" data-tab="tab-tiktok">⚫ Cài đặt TikTok Shop</button>
+      </div>
+
+      <div class="modal-body">
+        <!-- TAB SHOPEE -->
+        <div id="tab-shopee" class="tab-content active">
+          <div class="guide-box">
+            <h4>💡 Hướng dẫn lấy Shopee Affiliate ID (Chỉ mất 30 giây - Dùng mãi mãi):</h4>
+            <ol>
+              <li>Đăng nhập vào trang <a href="https://affiliate.shopee.vn/" target="_blank" rel="noopener">https://affiliate.shopee.vn</a> trên máy tính hoặc trình duyệt điện thoại.</li>
+              <li>Bấm vào tên tài khoản góc phải trên cùng $\rightarrow$ Chọn <strong>Cài đặt tài khoản (Account Settings)</strong>.</li>
+              <li>Copy dãy số ở mục <strong>Affiliate ID</strong> (Ví dụ: <code>17382910234</code>) và dán vào ô bên dưới.</li>
+            </ol>
+          </div>
+
+          <div class="form-row">
+            <label for="modalShopeeMode">Phương thức tạo link Shopee</label>
+            <select id="modalShopeeMode">
+              <option value="an_redir">Cách 1 (Khuyên dùng): Ghép trực tiếp bằng Affiliate ID (an_redir)</option>
+              <option value="openapi">Cách 2: Dùng Shopee Affiliate Open API (Cần App ID & Secret)</option>
+            </select>
+          </div>
+
+          <div class="form-row">
+            <label for="modalShopeeId">Mã Shopee Affiliate ID</label>
+            <input type="text" id="modalShopeeId" placeholder="VD: 17382910234" />
+          </div>
+
+          <div id="shopeeOpenApiFields" class="sub-box">
+            <h4>Cấu hình Shopee Open API (Tùy chọn khi tài khoản đã được cấp API)</h4>
+            <div class="form-row">
+              <label for="modalShopeeAppId">Shopee App ID</label>
+              <input type="text" id="modalShopeeAppId" placeholder="Nhập App ID từ trang Open API Shopee..." />
+            </div>
+            <div class="form-row">
+              <label for="modalShopeeAppSecret">Shopee Secret Key</label>
+              <input type="password" id="modalShopeeAppSecret" placeholder="Nhập Secret Key..." />
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB TIKTOK -->
+        <div id="tab-tiktok" class="tab-content">
+          <div class="guide-box">
+            <h4>💡 Hướng dẫn chọn chế độ cho Tài khoản TikTok Shop của bạn:</h4>
+            <ul>
+              <li><strong>Chế độ 1 (Bóc tách Product ID & Mở nhanh TikTok Affiliate):</strong> Không cần lấy Token hay Cookie. Web App sẽ tự giải mã link <code>vt.tiktok.com</code> của người khác, xoá sạch mã aff cũ, lấy ra <strong>Product ID</strong> và tạo nút mở thẳng sản phẩm đó trên trang <a href="https://affiliate.tiktok.com/connection/product?shop_region=VN" target="_blank" rel="noopener">affiliate.tiktok.com</a> để bạn bấm lấy link chỉ trong 1 click.</li>
+              <li><strong>Chế độ 2 (TikTok Shop Open API):</strong> Dành cho tài khoản đã tạo App trên <a href="https://partner.tiktokshop.com" target="_blank" rel="noopener">partner.tiktokshop.com</a> và lấy được <code>App Key</code>, <code>App Secret</code>, <code>Access Token</code>. Tự động xuất ra link <code>vt.tiktok.com/...</code>.</li>
+              <li><strong>Chế độ 3 (TikTok Web Cookie):</strong> Đăng nhập <a href="https://affiliate.tiktok.com" target="_blank" rel="noopener">affiliate.tiktok.com</a> trên máy tính, bấm F12 $\rightarrow$ Network $\rightarrow$ copy chuỗi <code>Cookie</code> dán vào đây.</li>
+              <li><strong>Chế độ 4 (DeepLink Accesstrade / Custom):</strong> Dành cho bạn chạy chiến dịch TikTok Shop qua Accesstrade/Ecomobi.</li>
+            </ul>
+          </div>
+
+          <div class="form-row">
+            <label for="modalTikTokMode">Chế độ xử lý link TikTok</label>
+            <select id="modalTikTokMode">
+              <option value="clean_extract">Chế độ 1: Bóc tách Product ID sạch + Nút mở nhanh TikTok Affiliate</option>
+              <option value="openapi">Chế độ 2: TikTok Shop Open API (App Key + Access Token)</option>
+              <option value="cookie">Chế độ 3: TikTok Affiliate Web Cookie (affiliate.tiktok.com)</option>
+              <option value="deeplink">Chế độ 4: DeepLink (Accesstrade / Ecomobi / Custom)</option>
+            </select>
+          </div>
+
+          <div id="tiktokOpenApiBox" class="sub-box">
+            <h4>Cấu hình TikTok Shop Open API (Partner Center)</h4>
+            <div class="form-row">
+              <label for="modalTikTokAppKey">App Key</label>
+              <input type="text" id="modalTikTokAppKey" placeholder="Nhập TikTok App Key..." />
+            </div>
+            <div class="form-row">
+              <label for="modalTikTokAppSecret">App Secret</label>
+              <input type="password" id="modalTikTokAppSecret" placeholder="Nhập TikTok App Secret..." />
+            </div>
+            <div class="form-row">
+              <label for="modalTikTokAccessToken">Access Token (x-tts-access-token)</label>
+              <input type="password" id="modalTikTokAccessToken" placeholder="Nhập Access Token..." />
+            </div>
+          </div>
+
+          <div id="tiktokCookieBox" class="sub-box">
+            <h4>Cấu hình Cookie trang affiliate.tiktok.com</h4>
+            <div class="form-row">
+              <label for="modalTikTokCookie">Chuỗi Cookie (Header Cookie)</label>
+              <textarea id="modalTikTokCookie" rows="3" placeholder="sessionid=...; msToken=..."></textarea>
+            </div>
+          </div>
+
+          <div id="tiktokDeepLinkBox" class="sub-box">
+            <h4>Cấu hình DeepLink (Accesstrade / Custom URL)</h4>
+            <div class="form-row">
+              <label for="modalTikTokDeepLink">Mẫu URL DeepLink (Hỗ trợ biến <code>{encoded_url}</code>, <code>{product_id}</code>, <code>{sub_id}</code>)</label>
+              <input
+                type="text"
+                id="modalTikTokDeepLink"
+                placeholder="VD: https://go.isclix.com/deep_link/623819283/5829102?url={encoded_url}&utm_source={sub_id}"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" id="saveSettingsBtn" class="btn btn-primary">💾 Lưu cài đặt</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
