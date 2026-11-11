@@ -1,0 +1,12 @@
+{
+  "version": 2,
+  "functions": {
+    "api/*.js": {
+      "maxDuration": 30
+    }
+  },
+  "rewrites": [
+    { "source": "/api/convert", "destination": "/api/convert" },
+    { "source": "/api/health", "destination": "/api/health" }
+  ]
+}
