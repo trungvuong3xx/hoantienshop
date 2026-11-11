@@ -515,17 +515,25 @@ function registerCashbackRoutes(app) {
       const s = db.settings;
       const authUser = getAuthUser(req);
 
+      const DEFAULT_TIKTOK_DEEPLINK =
+        'https://go.isclix.com/deep_link/v6/7110811489339796158/6648523843406889655?sub4=oneatweb';
+
       const effectiveConfig = {
         shopeeMode: process.env.SHOPEE_MODE || s.shopeeMode || 'an_redir',
         shopeeAffiliateId: process.env.SHOPEE_AFFILIATE_ID || s.shopeeAffiliateId || '17346310715',
         shopeeAppId: process.env.SHOPEE_APP_ID || s.shopeeAppId || '',
         shopeeAppSecret: process.env.SHOPEE_APP_SECRET || s.shopeeAppSecret || '',
-        tiktokMode: process.env.TIKTOK_MODE || s.tiktokMode || 'clean_extract',
+        tiktokMode:
+          process.env.TIKTOK_MODE ||
+          (s.tiktokMode === 'clean_extract' ? 'deeplink' : s.tiktokMode) ||
+          'deeplink',
         tiktokAppKey: process.env.TIKTOK_APP_KEY || s.tiktokAppKey || '',
         tiktokAppSecret: process.env.TIKTOK_APP_SECRET || s.tiktokAppSecret || '',
         tiktokAccessToken: process.env.TIKTOK_ACCESS_TOKEN || s.tiktokAccessToken || '',
         tiktokDeepLinkTemplate:
-          process.env.TIKTOK_DEEPLINK_TEMPLATE || s.tiktokDeepLinkTemplate || '',
+          process.env.TIKTOK_DEEPLINK_TEMPLATE ||
+          s.tiktokDeepLinkTemplate ||
+          DEFAULT_TIKTOK_DEEPLINK,
         shortenerProvider: s.shortenerProvider || 'none'
       };
 

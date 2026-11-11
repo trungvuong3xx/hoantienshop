@@ -75,7 +75,7 @@ async function processSingleUrl(originalUrl, config = {}) {
         productId: conv.productId,
         clickId,
         productName: cleanInfo.titleHint || 'Sản phẩm TikTok Shop',
-        imageUrl: '',
+        imageUrl: cleanInfo.imageUrl || '',
         price: 0,
         commissionRate: 0,
         affiliateUrl: conv.affiliateUrl,

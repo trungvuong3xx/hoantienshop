@@ -27,7 +27,8 @@ app.use(
           'https://img.vietqr.io',
           'https://*.shopee.vn',
           'https://*.susercontent.com',
-          'https://*.tiktokcdn.com'
+          'https://*.tiktokcdn.com',
+          'https://*.ibyteimg.com'
         ],
         connectSrc: ["'self'"],
         frameSrc: ['https://challenges.cloudflare.com'],

@@ -339,15 +339,28 @@ function cleanTikTokUrl(rawUrl, htmlSnippet = '') {
     if (htmlMatch) productId = htmlMatch[1];
   }
 
-  const titleHint = extractProductTitleHint(rawUrl, htmlSnippet);
+  let titleHint = extractProductTitleHint(rawUrl, htmlSnippet);
+  let imageUrl = '';
+
+  const ogInfoRaw = parsed.searchParams.get('og_info');
+  if (ogInfoRaw) {
+    try {
+      const ogObj = JSON.parse(ogInfoRaw);
+      if (ogObj.title) titleHint = String(ogObj.title).trim().slice(0, 140);
+      if (ogObj.image && /^https:\/\//i.test(ogObj.image)) {
+        imageUrl = ogObj.image;
+      }
+    } catch {}
+  }
 
   if (productId) {
-    const cleanUrl = `https://shop.tiktok.com/view/product/${productId}`;
+    const cleanUrl = `https://www.tiktok.com/view/product/${productId}`;
     logger.logLeave('cleanTikTokUrl', { cleanUrl, productId });
     return {
       cleanUrl,
       productId,
       titleHint: titleHint || `Sản phẩm TikTok Shop #${productId}`,
+      imageUrl,
       linkType: 'product'
     };
   }
@@ -359,6 +372,7 @@ function cleanTikTokUrl(rawUrl, htmlSnippet = '') {
     cleanUrl,
     productId: null,
     titleHint: titleHint || 'Sản phẩm TikTok Shop',
+    imageUrl,
     linkType: 'content'
   };
 }

@@ -640,7 +640,7 @@ async function loadAdminDashboard() {
     document.getElementById('admShopeeAffiliateId').value = s.shopeeAffiliateId || '';
     document.getElementById('admShopeeAppId').value = s.shopeeAppId || '';
     document.getElementById('admShopeeAppSecret').value = s.shopeeAppSecret || '';
-    document.getElementById('admTiktokMode').value = s.tiktokMode || 'clean_extract';
+    document.getElementById('admTiktokMode').value = s.tiktokMode || 'deeplink';
     document.getElementById('admTiktokDeepLink').value = s.tiktokDeepLinkTemplate || '';
     document.getElementById('admTaxDeductPercent').value = s.taxDeductPercent ?? 10;
     document.getElementById('admCashbackPercent').value = s.cashbackPercent || 70;

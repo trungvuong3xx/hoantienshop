@@ -128,11 +128,13 @@ function getDefaultSettings() {
     shopeeAffiliateId: process.env.SHOPEE_AFFILIATE_ID || '17346310715',
     shopeeAppId: process.env.SHOPEE_APP_ID || '',
     shopeeAppSecret: process.env.SHOPEE_APP_SECRET || '',
-    tiktokMode: process.env.TIKTOK_MODE || 'clean_extract',
+    tiktokMode: process.env.TIKTOK_MODE || 'deeplink',
     tiktokAppKey: process.env.TIKTOK_APP_KEY || '',
     tiktokAppSecret: process.env.TIKTOK_APP_SECRET || '',
     tiktokAccessToken: process.env.TIKTOK_ACCESS_TOKEN || '',
-    tiktokDeepLinkTemplate: process.env.TIKTOK_DEEPLINK_TEMPLATE || '',
+    tiktokDeepLinkTemplate:
+      process.env.TIKTOK_DEEPLINK_TEMPLATE ||
+      'https://go.isclix.com/deep_link/v6/7110811489339796158/6648523843406889655?sub4=oneatweb',
     shortenerProvider: process.env.SHORTENER_PROVIDER || 'none',
     cashbackPercent: Number(process.env.CASHBACK_PERCENT || 70),
     taxDeductPercent: Number(process.env.TAX_DEDUCT_PERCENT ?? 10),
@@ -196,6 +198,19 @@ function ensureDbLoaded() {
     }
     if (process.env.TIKTOK_ACCESS_TOKEN) {
       memoryCache.settings.tiktokAccessToken = envSettings.tiktokAccessToken;
+    }
+    if (process.env.TIKTOK_MODE) {
+      memoryCache.settings.tiktokMode = envSettings.tiktokMode;
+    } else if (memoryCache.settings.tiktokMode === 'clean_extract') {
+      memoryCache.settings.tiktokMode = 'deeplink';
+    }
+    if (process.env.TIKTOK_DEEPLINK_TEMPLATE) {
+      memoryCache.settings.tiktokDeepLinkTemplate = envSettings.tiktokDeepLinkTemplate;
+    } else if (!memoryCache.settings.tiktokDeepLinkTemplate) {
+      memoryCache.settings.tiktokDeepLinkTemplate = envSettings.tiktokDeepLinkTemplate;
+    }
+    if (memoryCache.settings.shopeeAffiliateId === '17388899900') {
+      memoryCache.settings.shopeeAffiliateId = envSettings.shopeeAffiliateId;
     }
     return memoryCache;
   }

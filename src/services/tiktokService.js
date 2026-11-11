@@ -91,7 +91,7 @@ async function generateTikTokOpenApiLink(productId, config = {}) {
 }
 
 /**
- * Mode 2: Build DeepLink (AccessTrade / Ecomobi) - validates cleanUrl domain first.
+ * Mode 2: Build DeepLink (AccessTrade v6 url_enc / Standard DeepLink / Custom) - validates cleanUrl domain first.
  */
 function buildTikTokDeepLink(cleanUrl, productId, config = {}) {
   logger.logEnter('buildTikTokDeepLink', { cleanUrl, productId });
@@ -107,23 +107,49 @@ function buildTikTokDeepLink(cleanUrl, productId, config = {}) {
     throw new Error('Chưa cấu hình mẫu DeepLink (AccessTrade / Ecomobi) cho TikTok.');
   }
 
-  if (!template.includes('{url}') && !template.includes('{encoded_url}')) {
-    const parsed = new URL(template);
-    parsed.searchParams.set('url', parsedClean.toString());
+  const targetUrlStr = parsedClean.toString();
+  const base64Url = Buffer.from(targetUrlStr, 'utf8').toString('base64');
+
+  // If template uses explicit placeholders
+  if (
+    template.includes('{url}') ||
+    template.includes('{encoded_url}') ||
+    template.includes('{base64_url}')
+  ) {
+    const result = template
+      .replace(/\{base64_url\}/g, encodeURIComponent(base64Url))
+      .replace(/\{encoded_url\}/g, encodeURIComponent(targetUrlStr))
+      .replace(/\{url\}/g, targetUrlStr)
+      .replace(/\{product_id\}/g, String(productId || ''))
+      .replace(/\{sub_id\}/g, encodeURIComponent(subId));
+
+    logger.logLeave('buildTikTokDeepLink', { status: 'ok', format: 'placeholder' });
+    return result;
+  }
+
+  const parsed = new URL(template);
+  const isAccessTradeV6 =
+    parsed.pathname.includes('/deep_link/v6/') || parsed.searchParams.has('url_enc');
+
+  // Remove old target params to avoid conflicting redirects
+  parsed.searchParams.delete('url');
+  parsed.searchParams.delete('url_enc');
+
+  if (isAccessTradeV6) {
+    parsed.searchParams.set('url_enc', base64Url);
+    if (subId) {
+      parsed.searchParams.set('sub1', subId);
+    }
+  } else {
+    parsed.searchParams.set('url', targetUrlStr);
     if (subId) {
       parsed.searchParams.set('utm_source', subId);
     }
-    return parsed.toString();
   }
 
-  const result = template
-    .replace(/\{encoded_url\}/g, encodeURIComponent(parsedClean.toString()))
-    .replace(/\{url\}/g, parsedClean.toString())
-    .replace(/\{product_id\}/g, String(productId || ''))
-    .replace(/\{sub_id\}/g, encodeURIComponent(subId));
-
-  logger.logLeave('buildTikTokDeepLink', { status: 'ok' });
-  return result;
+  const finalUrl = parsed.toString();
+  logger.logLeave('buildTikTokDeepLink', { status: 'ok', format: isAccessTradeV6 ? 'v6' : 'legacy' });
+  return finalUrl;
 }
 
 /**
@@ -133,42 +159,31 @@ async function convertTikTokLink(cleanInfo, config = {}) {
   logger.logEnter('convertTikTokLink', {
     cleanUrl: cleanInfo.cleanUrl,
     productId: cleanInfo.productId,
-    mode: config.tiktokMode || 'clean_extract'
+    mode: config.tiktokMode || 'deeplink'
   });
 
-  const mode = config.tiktokMode || 'clean_extract';
+  const mode = config.tiktokMode || 'deeplink';
   const shortenerProvider = config.shortenerProvider || 'none';
   const productId = cleanInfo.productId;
 
-  let affiliateUrl = cleanInfo.cleanUrl;
-  let fullAffiliateUrl = cleanInfo.cleanUrl;
+  let affiliateUrl = '';
+  let fullAffiliateUrl = '';
   let usedMethod = '';
   let note = '';
 
   if (mode === 'openapi') {
-    try {
-      affiliateUrl = await generateTikTokOpenApiLink(productId, config);
-      fullAffiliateUrl = affiliateUrl;
-      usedMethod = 'TikTok Shop Open API';
-    } catch (err) {
-      logger.warning('convertTikTokLink', 'TikTok Open API fallback to clean link');
-      note = err.message;
-      usedMethod = 'Clean Link';
-    }
+    affiliateUrl = await generateTikTokOpenApiLink(productId, config);
+    fullAffiliateUrl = affiliateUrl;
+    usedMethod = 'TikTok Shop Open API';
   } else if (mode === 'deeplink') {
     fullAffiliateUrl = buildTikTokDeepLink(cleanInfo.cleanUrl, productId, config);
     affiliateUrl =
       shortenerProvider !== 'none'
         ? await shortenUrl(fullAffiliateUrl, shortenerProvider)
         : fullAffiliateUrl;
-    usedMethod = 'TikTok DeepLink';
+    usedMethod = 'TikTok DeepLink (AccessTrade)';
   } else {
-    fullAffiliateUrl = cleanInfo.cleanUrl;
-    affiliateUrl =
-      shortenerProvider !== 'none'
-        ? await shortenUrl(fullAffiliateUrl, shortenerProvider)
-        : fullAffiliateUrl;
-    usedMethod = 'Clean Link';
+    throw new Error('Tính năng hoàn tiền TikTok Shop hiện đang được nâng cấp, vui lòng sử dụng link Shopee.');
   }
 
   logger.logLeave('convertTikTokLink', { usedMethod, productId });
