@@ -2,6 +2,22 @@ const logger = require('./logger');
 
 const rateBuckets = new Map();
 
+// Startup security audit for production environments
+if (process.env.VERCEL || process.env.NODE_ENV === 'production') {
+  if (!process.env.TURNSTILE_SECRET_KEY) {
+    logger.error(
+      'SecurityStartupAudit',
+      'TURNSTILE_SECRET_KEY is missing in production environment!'
+    );
+  }
+  if (!process.env.UPSTASH_REDIS_REST_URL || !process.env.UPSTASH_REDIS_REST_TOKEN) {
+    logger.warning(
+      'SecurityStartupAudit',
+      'UPSTASH_REDIS_REST_URL / TOKEN not configured; distributed rate limiting is inactive.'
+    );
+  }
+}
+
 function getClientIp(req) {
   const xff = req.headers['x-forwarded-for'];
   if (xff && typeof xff === 'string') {
@@ -11,16 +27,25 @@ function getClientIp(req) {
 }
 
 /**
- * Rate limiter middleware supporting Upstash Redis REST (serverless-safe) + memory fallback.
+ * Rate limiter middleware supporting Upstash Redis REST (serverless-safe).
+ * When failClosed=true (auth & withdrawal routes), Redis errors reject the request (503) instead of falling back to RAM.
  */
-function createRateLimiter({ windowMs = 60000, max = 30, keyPrefix = 'rl' } = {}) {
+function createRateLimiter({
+  windowMs = 60000,
+  max = 30,
+  keyPrefix = 'rl',
+  failClosed = false
+} = {}) {
   return async function rateLimitMiddleware(req, res, next) {
     const ip = getClientIp(req);
     const key = `${keyPrefix}:${ip}`;
     const now = Date.now();
 
-    // If Upstash Redis REST env vars are configured, use distributed rate limit
-    if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
+    const hasUpstash = Boolean(
+      process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
+    );
+
+    if (hasUpstash) {
       try {
         const upstashUrl = `${process.env.UPSTASH_REDIS_REST_URL.replace(/\/$/, '')}/pipeline`;
         const ttlSec = Math.ceil(windowMs / 1000);
@@ -36,23 +61,40 @@ function createRateLimiter({ windowMs = 60000, max = 30, keyPrefix = 'rl' } = {}
           ]),
           signal: AbortSignal.timeout(1500)
         });
-        if (resp.ok) {
-          const data = await resp.json();
-          const count = Number(data?.[0]?.result || 1);
-          if (count > max) {
-            logger.warning('rateLimitMiddleware', 'Rate limit exceeded (Upstash)', { ip, keyPrefix });
-            return res.status(429).json({
-              error: 'Bạn thao tác quá nhanh. Vui lòng thử lại sau ít phút.'
-            });
-          }
-          return next();
+        if (!resp.ok) {
+          throw new Error(`Upstash HTTP ${resp.status}`);
         }
-      } catch {
-        // Fallback to local memory bucket
+        const data = await resp.json();
+        const count = Number(data?.[0]?.result || 1);
+        if (count > max) {
+          logger.warning('rateLimitMiddleware', 'Rate limit exceeded (Upstash)', { ip, keyPrefix });
+          return res.status(429).json({
+            error: 'Bạn thao tác quá nhanh. Vui lòng thử lại sau ít phút.'
+          });
+        }
+        return next();
+      } catch (err) {
+        logger.error('rateLimitMiddleware', 'Upstash Redis error', {
+          keyPrefix,
+          failClosed,
+          error: err.message
+        });
+        if (failClosed) {
+          return res.status(503).json({
+            error: 'Hệ thống kiểm soát bảo mật đang tạm gián đoạn. Vui lòng thử lại sau ít giây.'
+          });
+        }
       }
+    } else if (failClosed && process.env.STRICT_PRODUCTION_SECURITY === 'true') {
+      logger.error('rateLimitMiddleware', 'Fail-closed route blocked: Upstash Redis not configured', {
+        keyPrefix
+      });
+      return res.status(503).json({
+        error: 'Hệ thống chưa cấu hình bộ giới hạn tốc độ phân tán (Upstash Redis).'
+      });
     }
 
-    // Memory sliding window fallback
+    // Memory sliding window (used for local dev or non-critical routes when Upstash is not set)
     if (rateBuckets.size > 5000) {
       rateBuckets.clear();
     }
@@ -75,11 +117,23 @@ function createRateLimiter({ windowMs = 60000, max = 30, keyPrefix = 'rl' } = {}
 }
 
 /**
- * Verify Cloudflare Turnstile token if TURNSTILE_SECRET_KEY is configured in environment.
+ * Verify Cloudflare Turnstile token (Fail-closed if TURNSTILE_SECRET_KEY or REQUIRE_TURNSTILE is enabled).
  */
 async function verifyTurnstileIfEnabled(turnstileToken, remoteIp) {
   const secret = process.env.TURNSTILE_SECRET_KEY;
-  if (!secret) return true; // Not enabled yet
+  const requireTurnstile =
+    process.env.REQUIRE_TURNSTILE === 'true' || Boolean(process.env.TURNSTILE_SITE_KEY);
+
+  if (!secret) {
+    if (requireTurnstile) {
+      logger.error(
+        'verifyTurnstileIfEnabled',
+        'Fail-closed: TURNSTILE_SITE_KEY / REQUIRE_TURNSTILE is set but TURNSTILE_SECRET_KEY is missing!'
+      );
+      return false;
+    }
+    return true;
+  }
   if (!turnstileToken) return false;
 
   try {
@@ -93,9 +147,13 @@ async function verifyTurnstileIfEnabled(turnstileToken, remoteIp) {
       }),
       signal: AbortSignal.timeout(4000)
     });
+    if (!res.ok) return false;
     const data = await res.json();
     return Boolean(data.success);
-  } catch {
+  } catch (err) {
+    logger.error('verifyTurnstileIfEnabled', 'Turnstile verification network error (failing closed)', {
+      error: err.message
+    });
     return false;
   }
 }

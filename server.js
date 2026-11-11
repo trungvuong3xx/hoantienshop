@@ -13,7 +13,7 @@ app.set('trust proxy', 1);
 // Security headers via Helmet + strict no-referrer to hide cashback site origin from Shopee/TikTok
 app.use(
   helmet({
-    referrerPolicy: { policy: 'no-referrer' },
+    referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],

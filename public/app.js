@@ -1,12 +1,17 @@
 const TOKEN_KEY = 'hoantienshop_token_v1';
 const USER_KEY = 'hoantienshop_user_v1';
 
-let authToken = localStorage.getItem(TOKEN_KEY) || '';
+// Purge any legacy token from localStorage; auth now uses HttpOnly; SameSite=Lax cookie (hts_auth)
+try {
+  localStorage.removeItem(TOKEN_KEY);
+} catch {}
+
 let currentUser = null;
 try {
   const saved = localStorage.getItem(USER_KEY);
   if (saved) currentUser = JSON.parse(saved);
 } catch {}
+let authToken = currentUser ? 'httponly_cookie_session' : '';
 
 let publicConfig = {
   siteName: 'HoànTiềnShop',
@@ -31,7 +36,19 @@ function escapeHtml(str) {
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function safeHttpsUrl(rawUrl) {
+  const s = String(rawUrl || '').trim();
+  if (!s) return '';
+  try {
+    const u = new URL(s);
+    return u.protocol === 'https:' ? escapeHtml(u.toString()) : '';
+  } catch {
+    return '';
+  }
 }
 
 function showToast(msg) {
@@ -62,10 +79,11 @@ async function apiFetch(url, options = {}) {
     'Content-Type': 'application/json',
     ...(options.headers || {})
   };
-  if (authToken) {
-    headers.Authorization = `Bearer ${authToken}`;
-  }
-  const res = await fetch(url, { ...options, headers });
+  const res = await fetch(url, {
+    ...options,
+    headers,
+    credentials: 'same-origin'
+  });
   const data = await res.json().catch(() => ({}));
   if (res.status === 401 && authToken && !url.includes('/api/auth/')) {
     clearSession();
@@ -160,10 +178,10 @@ function syncAuthUi() {
   }
 }
 
-function setSession(token, user) {
-  authToken = token;
+function setSession(_token, user) {
+  authToken = 'httponly_cookie_session';
   currentUser = user;
-  localStorage.setItem(TOKEN_KEY, token);
+  localStorage.removeItem(TOKEN_KEY);
   localStorage.setItem(USER_KEY, JSON.stringify(user));
   syncAuthUi();
 }
@@ -173,6 +191,7 @@ function clearSession() {
   currentUser = null;
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(USER_KEY);
+  fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' }).catch(() => {});
   syncAuthUi();
   switchView('home');
 }
@@ -342,8 +361,12 @@ async function handleGetCashbackLink() {
           ? '⚫ TikTok Shop'
           : '🔗 Liên kết';
 
-        const thumbHtml = item.imageUrl
-          ? `<img src="${escapeHtml(item.imageUrl)}" alt="Sản phẩm" class="product-thumb" referrerpolicy="no-referrer" />`
+        const safeThumbUrl = safeHttpsUrl(item.imageUrl);
+        const safeQrUrl = safeHttpsUrl(item.qrUrl);
+        const safeAffUrl = safeHttpsUrl(item.affiliateUrl);
+
+        const thumbHtml = safeThumbUrl
+          ? `<img src="${safeThumbUrl}" alt="Sản phẩm" class="product-thumb" referrerpolicy="no-referrer" />`
           : `<div class="product-thumb" style="display:flex;align-items:center;justify-content:center;font-size:26px;">🛍️</div>`;
 
         const priceInfoHtml =
@@ -379,22 +402,18 @@ async function handleGetCashbackLink() {
 
           <div class="cp-body-flex">
             <div class="qr-box" title="Quét mã QR bằng điện thoại để mua hàng nhanh chóng">
-              <img src="${escapeHtml(item.qrUrl)}" alt="QR Mua Hàng" loading="lazy" referrerpolicy="no-referrer" />
+              <img src="${safeQrUrl}" alt="QR Mua Hàng" loading="lazy" referrerpolicy="no-referrer" />
             </div>
 
             <div class="cp-actions-col">
               <div style="font-size:12.5px;color:#475569;font-weight:600;">Liên kết mua hàng hoàn tiền của bạn:</div>
-              <div class="short-link-box">${escapeHtml(item.affiliateUrl)}</div>
+              <div class="short-link-box">${safeAffUrl}</div>
 
               <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:4px;">
-                <a href="${escapeHtml(
-                  item.affiliateUrl
-                )}" target="_blank" rel="noreferrer noopener" class="btn btn-primary" style="flex:1;">
+                <a href="${safeAffUrl}" target="_blank" rel="noopener" class="btn btn-primary" style="flex:1;">
                   Mở Mua Hàng Nhận Hoàn Tiền
                 </a>
-                <button type="button" class="btn btn-outline" data-copy="${escapeHtml(
-                  item.affiliateUrl
-                )}">
+                <button type="button" class="btn btn-outline" data-copy="${safeAffUrl}">
                   Sao chép
                 </button>
               </div>

@@ -10,6 +10,8 @@ const {
   calculateCommissionSplit,
   recalculateUserWallet,
   recalculateAllWallets,
+  executeAtomicWithdrawal,
+  auditLedgerIntegrity,
   createToken,
   verifyToken,
   sanitizeUser,
@@ -26,9 +28,40 @@ const {
   buildVietQrImageUrl
 } = require('../utils/securityMiddleware');
 
+function parseCookieToken(req) {
+  const raw = req.headers.cookie || '';
+  const match = raw.match(/(?:^|;\s*)hts_auth=([^;]+)/);
+  if (!match) return '';
+  try {
+    return decodeURIComponent(match[1].trim());
+  } catch {
+    return '';
+  }
+}
+
+function setAuthCookie(res, token) {
+  const isProd = Boolean(process.env.VERCEL || process.env.NODE_ENV === 'production');
+  const securePart = isProd ? '; Secure' : '';
+  res.setHeader(
+    'Set-Cookie',
+    `hts_auth=${encodeURIComponent(token)}; HttpOnly; Path=/; Max-Age=${3600 * 6}; SameSite=Lax${securePart}`
+  );
+}
+
+function clearAuthCookie(res) {
+  const isProd = Boolean(process.env.VERCEL || process.env.NODE_ENV === 'production');
+  const securePart = isProd ? '; Secure' : '';
+  res.setHeader(
+    'Set-Cookie',
+    `hts_auth=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax${securePart}`
+  );
+}
+
 function getAuthUser(req) {
+  const cookieToken = parseCookieToken(req);
   const authHeader = req.headers.authorization || '';
-  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
+  const headerToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
+  const token = cookieToken || headerToken;
   if (!token) return null;
   const payload = verifyToken(token);
   if (!payload) return null;
@@ -361,9 +394,19 @@ function triggerLazyAutoSyncIfNeeded() {
 }
 
 function registerCashbackRoutes(app) {
-  const authLimiter = createRateLimiter({ windowMs: 60000, max: 12, keyPrefix: 'auth' });
-  const convertLimiter = createRateLimiter({ windowMs: 60000, max: 25, keyPrefix: 'convert' });
-  const withdrawLimiter = createRateLimiter({ windowMs: 60000, max: 6, keyPrefix: 'withdraw' });
+  const authLimiter = createRateLimiter({
+    windowMs: 60000,
+    max: 15,
+    keyPrefix: 'auth',
+    failClosed: true
+  });
+  const convertLimiter = createRateLimiter({ windowMs: 60000, max: 30, keyPrefix: 'convert' });
+  const withdrawLimiter = createRateLimiter({
+    windowMs: 60000,
+    max: 30,
+    keyPrefix: 'withdraw',
+    failClosed: true
+  });
 
   // Ensure Postgres state is initialized on first request if DATABASE_URL is set
   app.use(async (req, res, next) => {
@@ -373,7 +416,7 @@ function registerCashbackRoutes(app) {
     next();
   });
 
-  // Safe Outbound Redirect Route (/go/:clickId) - Whitelist enforced & Referrer stripped
+  // Safe Outbound Redirect Route (/go/:clickId) - Whitelist enforced & strict-origin-when-cross-origin
   app.get('/go/:clickId', (req, res) => {
     logger.logEnter('GET /go/:clickId', { clickId: req.params.clickId });
     const db = ensureDbLoaded();
@@ -387,7 +430,7 @@ function registerCashbackRoutes(app) {
       if (target.protocol !== 'https:' || !isAllowedHost(target.hostname)) {
         return res.status(400).send('Liên kết đích không hợp lệ.');
       }
-      res.setHeader('Referrer-Policy', 'no-referrer');
+      res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
       res.setHeader('Cache-Control', 'no-store');
       return res.redirect(302, target.toString());
     } catch {
@@ -475,11 +518,12 @@ function registerCashbackRoutes(app) {
     saveDb(db);
 
     const token = createToken(newUser);
+    setAuthCookie(res, token);
     logger.logLeave('POST /api/auth/register', { userCode: newUser.code });
     return res.json({ token, user: sanitizeUser(newUser) });
   });
 
-  // 3. Auth: Login (timingSafeEqual + automatic upgrade to scrypt)
+  // 3. Auth: Login (timingSafeEqual + automatic upgrade to scrypt + HttpOnly cookie)
   app.post('/api/auth/login', authLimiter, async (req, res) => {
     logger.logEnter('POST /api/auth/login');
     const { identifier, password, turnstileToken } = req.body || {};
@@ -514,8 +558,16 @@ function registerCashbackRoutes(app) {
 
     recalculateUserWallet(user.id);
     const token = createToken(user);
+    setAuthCookie(res, token);
     logger.logLeave('POST /api/auth/login', { userCode: user.code, role: user.role });
     return res.json({ token, user: sanitizeUser(user) });
+  });
+
+  app.post('/api/auth/logout', (req, res) => {
+    logger.logEnter('POST /api/auth/logout');
+    clearAuthCookie(res);
+    logger.logLeave('POST /api/auth/logout');
+    return res.json({ status: 'ok' });
   });
 
   // 4. Current User Dashboard (Includes Orders, Withdrawals, Immutable Ledger & Referral Count)
@@ -659,29 +711,16 @@ function registerCashbackRoutes(app) {
     return res.json({ order: newOrd });
   });
 
-  // 7. User Request Withdrawal (Verifies password when changing bank account, locks balance in ledger)
-  app.post('/api/user/withdraw', withdrawLimiter, (req, res) => {
+  // 7. User Request Withdrawal (Atomic per-user lock + Postgres FOR UPDATE transaction)
+  app.post('/api/user/withdraw', withdrawLimiter, async (req, res) => {
     logger.logEnter('POST /api/user/withdraw');
     const user = getAuthUser(req);
     if (!user) return res.status(401).json({ error: 'Vui lòng đăng nhập.' });
 
     const db = ensureDbLoaded();
-    recalculateUserWallet(user.id);
-
     const { amount, method, bankName, bankAccount, bankOwner, currentPassword } = req.body || {};
     const numAmount = Math.round(Number(amount || 0));
     const minWithdraw = Number(db.settings.minWithdrawAmount || 50000);
-
-    if (!Number.isFinite(numAmount) || numAmount < minWithdraw) {
-      return res.status(400).json({
-        error: `Số tiền rút tối thiểu là ${minWithdraw.toLocaleString('vi-VN')}đ.`
-      });
-    }
-    if (numAmount > user.balanceAvailable) {
-      return res.status(400).json({
-        error: 'Số dư khả dụng không đủ để thực hiện lệnh rút này.'
-      });
-    }
 
     const cleanAcc = String(bankAccount || '').trim().slice(0, 30);
     const cleanOwner = String(bankOwner || '').trim().toUpperCase().slice(0, 60);
@@ -702,34 +741,25 @@ function registerCashbackRoutes(app) {
       }
     }
 
-    user.bankName = cleanBank;
-    user.bankAccount = cleanAcc;
-    user.bankOwner = cleanOwner;
-
-    const withdrawal = {
-      id: `wd_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`,
-      userId: user.id,
-      userCode: user.code,
-      userName: user.name,
-      userPhone: user.phone,
-      amount: numAmount,
-      method: method === 'momo' ? 'momo' : 'bank',
-      bankName: user.bankName,
-      bankAccount: user.bankAccount,
-      bankOwner: user.bankOwner,
-      status: 'pending',
-      createdAt: new Date().toISOString(),
-      processedAt: null
-    };
-
-    db.withdrawals.unshift(withdrawal);
-    recalculateUserWallet(user.id);
-
-    logger.logLeave('POST /api/user/withdraw', { amount: numAmount, userCode: user.code });
-    return res.json({
-      withdrawal,
-      user: sanitizeUser(user)
-    });
+    try {
+      const result = await executeAtomicWithdrawal({
+        userId: user.id,
+        amount: numAmount,
+        method,
+        bankName: cleanBank,
+        bankAccount: cleanAcc,
+        bankOwner: cleanOwner,
+        minWithdraw
+      });
+      logger.logLeave('POST /api/user/withdraw', { amount: numAmount, userCode: user.code });
+      return res.json(result);
+    } catch (err) {
+      logger.warning('POST /api/user/withdraw', 'Withdrawal rejected', {
+        userCode: user.code,
+        error: err.message
+      });
+      return res.status(400).json({ error: err.message });
+    }
   });
 
   // 8. Convert Link (Generates opaque random click_id -> maps to userId in db.clicks)
