@@ -6,7 +6,6 @@
     }
   },
   "rewrites": [
-    { "source": "/api/convert", "destination": "/api/convert" },
-    { "source": "/api/health", "destination": "/api/health" }
+    { "source": "/api/(.*)", "destination": "/api/index.js" }
   ]
 }

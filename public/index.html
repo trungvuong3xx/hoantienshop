@@ -3,295 +3,633 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AffConvert — Chuyển Đổi Link Affiliate Shopee & TikTok Shop</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <title>Hoàn Tiền Shop — Hoàn Tiền Mua Sắm Shopee & TikTok Shop Lên Đến 70%</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
-  <div class="app-shell">
-    <!-- Top Header -->
-    <header class="topbar">
-      <div class="brand">
-        <div class="brand-logo">⚡</div>
+  <!-- Top Navigation Header -->
+  <header class="navbar">
+    <div class="nav-container">
+      <a href="#home" class="brand" data-nav="home">
+        <div class="brand-icon">💸</div>
         <div>
-          <h1 class="brand-title">AffConvert <span class="badge-pro">Shopee & TikTok</span></h1>
-          <p class="brand-subtitle">Giải mã link rút gọn, xoá mã aff cũ & gắn link Affiliate hàng loạt</p>
+          <span class="brand-name" id="navSiteName">HoànTiềnShop</span>
+          <span class="brand-tag">Cashback 70%</span>
+        </div>
+      </a>
+
+      <nav class="nav-links">
+        <button type="button" class="nav-btn active" data-nav="home">🏠 Tạo Link Hoàn Tiền</button>
+        <button type="button" class="nav-btn" data-nav="wallet">💰 Ví & Đơn Hàng</button>
+        <button type="button" class="nav-btn" data-nav="guide">📖 Hướng Dẫn</button>
+        <button type="button" class="nav-btn nav-admin hidden" id="navAdminBtn" data-nav="admin">👑 Quản Trị Admin</button>
+      </nav>
+
+      <div class="nav-auth" id="navAuthArea">
+        <button type="button" class="btn btn-outline" id="openLoginBtn">Đăng nhập</button>
+        <button type="button" class="btn btn-primary" id="openRegisterBtn">Đăng ký nhận 70%</button>
+      </div>
+
+      <div class="nav-user hidden" id="navUserArea">
+        <div class="user-chip" data-nav="wallet" title="Bấm để mở Ví của bạn">
+          <span class="user-code-badge" id="headerUserCode">U0000</span>
+          <span class="user-name-label" id="headerUserName">Khách hàng</span>
+          <span class="user-balance-pill" id="headerUserBalance">0đ</span>
+        </div>
+        <button type="button" class="btn btn-ghost btn-sm" id="logoutBtn">Thoát</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="main-container">
+    <!-- ==================== VIEW 1: HOME (CASHBACK CONVERTER) ==================== -->
+    <section id="view-home" class="view-section active">
+      <!-- Hero Banner -->
+      <div class="hero-card">
+        <div class="hero-pill">
+          🔥 Tiền hoàn được chia sẻ <strong id="heroCashbackRate">70%</strong> từ hoa hồng của sàn Shopee & TikTok Shop
+        </div>
+        <h1 class="hero-title">
+          Mua Sắm <span class="text-shopee">Shopee</span>, <span class="text-tiktok">TikTok</span><br />
+          Nhận Lại Tiền Hoàn Dễ Dàng Nhanh Chóng
+        </h1>
+        <p class="hero-desc">
+          Dán link sản phẩm bất kỳ từ Shopee hoặc TikTok Shop để lấy link mua hàng, mở link được hệ thống tạo sau đó đặt mua như bình thường. Tiền hoàn <strong>70% hoa hồng</strong> sẽ được cộng vào ví của bạn!
+        </p>
+
+        <div class="platform-badges">
+          <span class="plat-pill plat-shopee">🟠 Hỗ trợ Shopee</span>
+          <span class="plat-pill plat-tiktok">⚫ Hỗ trợ TikTok Shop</span>
+          <span class="plat-pill plat-bank">🏦 Rút tiền VietQR / MoMo</span>
+        </div>
+
+        <!-- Converter Box -->
+        <div class="converter-box">
+          <div class="input-row">
+            <textarea
+              id="productUrlInput"
+              rows="3"
+              placeholder="Dán link sản phẩm Shopee (s.shopee.vn, shopee.vn...) hoặc TikTok Shop (vt.tiktok.com...) tại đây..."
+            ></textarea>
+          </div>
+          <div class="converter-actions">
+            <div class="left-quick-btns">
+              <button type="button" class="btn btn-ghost btn-sm" id="pasteBtn">📋 Dán link từ bộ nhớ</button>
+              <button type="button" class="btn btn-ghost btn-sm" id="demoLinkBtn">🧪 Thử link mẫu</button>
+              <button type="button" class="btn btn-ghost btn-sm" id="clearInputBtn">🗑️ Xoá</button>
+            </div>
+            <button type="button" class="btn btn-cta" id="getCashbackLinkBtn">
+              ⚡ Lấy Link Hoàn Tiền Ngay
+            </button>
+          </div>
+        </div>
+
+        <!-- Guest Notice Bar -->
+        <div id="guestWarningBanner" class="guest-notice">
+          💡 <strong>Mẹo quan trọng:</strong> Bạn đang dùng ở chế độ Khách. Hãy <button type="button" class="inline-link" id="guestLoginPromptBtn">Đăng nhập / Đăng ký (10 giây)</button> trước khi tạo link để hệ thống tự động gắn mã tài khoản của bạn và cộng <strong>70% tiền hoàn</strong> vào ví!
         </div>
       </div>
 
-      <div class="topbar-actions">
-        <div id="statusPills" class="status-pills">
-          <span id="shopeeStatusPill" class="status-pill pill-warn" title="Bấm để cài đặt">Shopee: Chưa nhập ID</span>
-          <span id="tiktokStatusPill" class="status-pill pill-info" title="Bấm để cài đặt">TikTok: Bóc Product ID</span>
+      <!-- Result Container (Hidden until converted) -->
+      <div id="conversionResultSection" class="result-section hidden">
+        <div class="result-header-bar">
+          <div>
+            <h2>🎉 Sản Phẩm Hợp Lệ Nhận Hoàn Tiền (<span id="resCountLabel">0</span> link)</h2>
+            <p>Hãy bấm nút <strong>"Mở Mua Hàng Nhận Hoàn Tiền"</strong> bên dưới và thêm sản phẩm vào giỏ hàng mới.</p>
+          </div>
+          <button type="button" class="btn btn-success hidden" id="copyFullPostBtn">📋 Copy cả bài viết</button>
         </div>
-        <button id="openSettingsBtn" class="btn btn-secondary">
-          ⚙️ Cài đặt nâng cao & Hướng dẫn
-        </button>
+
+        <div id="resultCardsList" class="result-cards-grid"></div>
       </div>
-    </header>
 
-    <!-- Quick Config Bar -->
-    <section class="quick-config-card">
-      <div class="quick-grid">
-        <div class="field-group">
-          <label for="quickShopeeId">
-            <span class="dot-shopee"></span> Mã Shopee Affiliate ID của bạn
-            <button type="button" class="link-help" data-open-guide="shopee">Cách lấy ID?</button>
-          </label>
-          <input
-            type="text"
-            id="quickShopeeId"
-            placeholder="VD: 17382910234 (Nhập 1 lần tự lưu)"
-            autocomplete="off"
-          />
+      <!-- 3-Step Roadmap (Like hoantien.com) -->
+      <div class="section-block">
+        <div class="section-title-wrap">
+          <span class="section-kicker">LỘ TRÌNH HOÀN TIỀN SIÊU TỐC</span>
+          <h2>Quy Trình Nhận Hoàn Tiền Trong 3 Bước</h2>
+          <p>Hiểu rõ quy trình ghi nhận đơn hàng và thời gian tiền hoàn 70% về ví tài khoản của bạn.</p>
         </div>
 
-        <div class="field-group">
-          <label for="quickTikTokMode">
-            <span class="dot-tiktok"></span> Chế độ xử lý TikTok Shop
-            <button type="button" class="link-help" data-open-guide="tiktok">Chi tiết</button>
-          </label>
-          <select id="quickTikTokMode">
-            <option value="clean_extract">Bóc Product ID sạch + Nút mở nhanh TikTok Affiliate</option>
-            <option value="openapi">TikTok Shop Open API (Tự động ra vt.tiktok.com)</option>
-            <option value="cookie">TikTok Web Cookie (affiliate.tiktok.com)</option>
-            <option value="deeplink">DeepLink (Accesstrade / Ecomobi / Custom)</option>
-          </select>
+        <div class="steps-grid">
+          <div class="step-card">
+            <div class="step-badge step-1">Bước 1 • Hôm nay</div>
+            <h3>🛒 Dán Link & Mua Hàng</h3>
+            <p>Sao chép link sản phẩm từ ứng dụng Shopee hoặc TikTok Shop, dán vào ô trên đầu trang và nhấn <strong>"Mở Mua Hàng Nhận Hoàn Tiền"</strong> để đặt đơn.</p>
+          </div>
+          <div class="step-card">
+            <div class="step-badge step-2">Bước 2 • 24h - 48h</div>
+            <h3>📊 Đối Soát Ghi Nhận Đơn</h3>
+            <p>Hệ thống tự động ghi nhận đơn hàng thông qua mã định danh tài khoản của bạn (<code>Sub_ID</code>) và hiển thị số tiền hoàn <strong>70%</strong> tạm tính trong mục Ví của bạn.</p>
+          </div>
+          <div class="step-card">
+            <div class="step-badge step-3">Bước 3 • Sau khi giao hàng</div>
+            <h3>🏦 Cộng Ví & Rút Tiền Nhanh</h3>
+            <p>Sau khi đơn hàng giao thành công và sàn đối soát hoa hồng, tiền khả dụng được cộng vào ví. Bạn rút trực tiếp về Ngân hàng (VietQR) hoặc MoMo!</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- 5 Golden Rules (Like hoantien.com) -->
+      <div class="section-block rules-card">
+        <div class="section-title-wrap">
+          <span class="section-kicker">LƯU Ý QUAN TRỌNG</span>
+          <h2>5 Lưu Ý Vàng Để Đơn Hàng Được Ghi Nhận Hoàn Tiền 100%</h2>
         </div>
 
-        <div class="field-group">
-          <label for="quickSubId">🏷️ Sub ID (Đánh dấu nguồn đơn)</label>
-          <input
-            type="text"
-            id="quickSubId"
-            placeholder="VD: fb_group, zalo, threads (Tùy chọn)"
-            autocomplete="off"
-          />
-        </div>
-
-        <div class="field-group">
-          <label for="quickShortener">🔗 Tự động rút gọn link dài</label>
-          <select id="quickShortener">
-            <option value="isgd">Rút gọn bằng is.gd (Khuyên dùng - Ngắn đẹp)</option>
-            <option value="tinyurl">Rút gọn bằng TinyURL.com</option>
-            <option value="none">Giữ nguyên link Affiliate đầy đủ</option>
-          </select>
+        <div class="rules-grid">
+          <div class="rule-item">
+            <div class="rule-num">1</div>
+            <div>
+              <h4>Tạo giỏ hàng trống trước khi mua</h4>
+              <p>Hãy đảm bảo giỏ hàng trên App Shopee/TikTok của bạn chưa có sẵn sản phẩm đó. Sau khi bấm qua link hoàn tiền mới thêm sản phẩm vào giỏ và thanh toán.</p>
+            </div>
+          </div>
+          <div class="rule-item">
+            <div class="rule-num">2</div>
+            <div>
+              <h4>Không bấm vào link chia sẻ khác</h4>
+              <p>Từ lúc bấm link hoàn tiền đến khi thanh toán xong, không click vào bất kỳ link chia sẻ nào khác trên Facebook, Zalo, Livestream hay Youtube để tránh bị ghi đè mã.</p>
+            </div>
+          </div>
+          <div class="rule-item">
+            <div class="rule-num">3</div>
+            <div>
+              <h4>Hoàn tất đặt hàng trong 20 - 30 phút</h4>
+              <p>Nên thanh toán đơn hàng ngay sau khi chuyển hướng sang ứng dụng Shopee/TikTok để đảm bảo phiên ghi nhận hoa hồng còn hiệu lực.</p>
+            </div>
+          </div>
+          <div class="rule-item">
+            <div class="rule-num">4</div>
+            <div>
+              <h4>Tắt trình chặn quảng cáo (Adblock)</h4>
+              <p>Các tiện ích chặn quảng cáo có thể làm mất tham số định danh tài khoản của bạn trên link liên kết.</p>
+            </div>
+          </div>
+          <div class="rule-item">
+            <div class="rule-num">5</div>
+            <div>
+              <h4>Không hủy đơn rồi đặt lại trực tiếp</h4>
+              <p>Nếu bạn hủy đơn hàng và muốn mua lại, hãy quay lại trang web để bấm vào link hoàn tiền một lần nữa rồi mới đặt lại.</p>
+            </div>
+          </div>
         </div>
       </div>
     </section>
 
-    <!-- Main Converter Workspace -->
-    <main class="workspace-grid">
-      <!-- Left Column: Input -->
-      <section class="panel input-panel">
-        <div class="panel-header">
+    <!-- ==================== VIEW 2: USER WALLET & ORDERS ==================== -->
+    <section id="view-wallet" class="view-section">
+      <div id="walletGuestPrompt" class="panel empty-auth-box">
+        <h2>🔐 Đăng nhập để quản lý Ví Hoàn Tiền & Đơn Hàng</h2>
+        <p>Tài khoản của bạn dùng để gắn mã tự động vào link mua hàng, giúp hệ thống biết chính xác đơn hàng nào là của bạn để cộng <strong>70% tiền hoa hồng</strong>.</p>
+        <div style="display:flex;gap:12px;justify-content:center;margin-top:14px;">
+          <button type="button" class="btn btn-primary" id="walletLoginBtn">Đăng nhập ngay</button>
+          <button type="button" class="btn btn-outline" id="walletRegisterBtn">Tạo tài khoản mới</button>
+        </div>
+      </div>
+
+      <div id="walletAuthenticatedContent" class="hidden">
+        <div class="wallet-header-banner">
           <div>
-            <h2>1. Dán Link hoặc Bài viết gốc</h2>
-            <p class="panel-desc">Hỗ trợ dán 1 link lẻ hoặc cả bài đăng có lẫn nhiều link Shopee & TikTok</p>
+            <h2>Xin chào, <span id="walletUserName">Khách hàng</span>!</h2>
+            <p>Mã định danh nhận hoàn tiền của bạn: <strong class="code-highlight" id="walletUserCode">U0000</strong> (Tự động gắn vào mọi link bạn tạo)</p>
           </div>
-          <div id="liveDetectedBadges" class="detected-badges">
-            <span class="badge-neutral">Chưa có link</span>
+          <button type="button" class="btn btn-outline btn-sm" id="refreshWalletBtn">🔄 Làm mới số dư</button>
+        </div>
+
+        <!-- 4 Stat Cards -->
+        <div class="stats-grid-4">
+          <div class="stat-box stat-green">
+            <span class="stat-label">💵 Số dư khả dụng (Có thể rút)</span>
+            <strong class="stat-value" id="statAvailable">0đ</strong>
+          </div>
+          <div class="stat-box stat-orange">
+            <span class="stat-label">⏳ Tiền hoàn chờ đối soát</span>
+            <strong class="stat-value" id="statPending">0đ</strong>
+          </div>
+          <div class="stat-box stat-blue">
+            <span class="stat-label">🎉 Tổng tiền hoàn đã duyệt</span>
+            <strong class="stat-value" id="statTotalEarned">0đ</strong>
+          </div>
+          <div class="stat-box stat-gray">
+            <span class="stat-label">🏦 Đã rút thành công</span>
+            <strong class="stat-value" id="statWithdrawn">0đ</strong>
           </div>
         </div>
 
-        <div class="textarea-wrapper">
-          <textarea
-            id="inputText"
-            rows="10"
-            placeholder="Dán link vào đây...&#10;&#10;Ví dụ:&#10;🔥 Săn deal tai nghe Bluetooth cực êm: https://s.shopee.vn/4L2xYzAbCd&#10;🛒 Đặt thêm áo thun trên TikTok Shop: https://vt.tiktok.com/ZS8xYz123/"
-          ></textarea>
-        </div>
+        <div class="wallet-two-col">
+          <!-- Left: Submit Order SN + Orders Table -->
+          <div class="panel">
+            <h3>📦 Báo Mã Đơn Hàng Vừa Mua (Đối soát nhanh)</h3>
+            <p class="panel-sub">Sau khi đặt hàng qua link hoàn tiền, bạn có thể dán Mã đơn hàng Shopee/TikTok vào đây để lưu lịch sử đối soát.</p>
+            <div class="inline-form-grid">
+              <select id="claimPlatform">
+                <option value="shopee">🟠 Shopee</option>
+                <option value="tiktok">⚫ TikTok Shop</option>
+              </select>
+              <input type="text" id="claimOrderSn" placeholder="Nhập Mã đơn hàng (VD: 261111ABCXYZ)" />
+              <input type="text" id="claimProductName" placeholder="Tên sản phẩm (Tùy chọn)" />
+              <button type="button" class="btn btn-primary" id="submitOrderClaimBtn">+ Lưu mã đơn</button>
+            </div>
 
-        <div class="panel-actions">
-          <div class="left-tools">
-            <button type="button" id="pasteClipboardBtn" class="btn btn-ghost" title="Dán nhanh từ bộ nhớ tạm">
-              📋 Dán nhanh
-            </button>
-            <button type="button" id="sampleBtn" class="btn btn-ghost" title="Thử nghiệm với bài mẫu">
-              🧪 Dán bài mẫu
-            </button>
-            <button type="button" id="clearBtn" class="btn btn-ghost">
-              🗑️ Xoá
-            </button>
+            <h3 style="margin-top:20px;">📋 Lịch Sử Đơn Hàng Hoàn Tiền Của Bạn</h3>
+            <div class="table-responsive">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Mã Đơn</th>
+                    <th>Sàn / Sản phẩm</th>
+                    <th>Tiền hoàn của bạn (70%)</th>
+                    <th>Trạng thái</th>
+                  </tr>
+                </thead>
+                <tbody id="userOrdersTableBody">
+                  <tr><td colspan="4" class="text-center">Chưa có đơn hàng nào.</td></tr>
+                </tbody>
+              </table>
+            </div>
           </div>
 
-          <button type="button" id="convertBtn" class="btn btn-primary">
-            ⚡ Chuyển đổi sang Link Affiliate
-          </button>
-        </div>
-      </section>
+          <!-- Right: Withdraw Form & History -->
+          <div class="panel">
+            <h3>🏦 Rút Tiền Hoàn Về Ngân Hàng / MoMo</h3>
+            <p class="panel-sub">Hạn mức rút tối thiểu: <strong id="minWithdrawLabel">50.000đ</strong>. Hỗ trợ chuyển khoản nhanh qua VietQR và MoMo.</p>
 
-      <!-- Right Column: Output -->
-      <section class="panel output-panel">
-        <div class="panel-header">
-          <div>
-            <h2>2. Kết quả đã gắn mã Affiliate</h2>
-            <p class="panel-desc">Giữ nguyên nội dung bài viết, chỉ thay toàn bộ link thành link của bạn</p>
-          </div>
-          <button type="button" id="copyAllTextBtn" class="btn btn-success" disabled>
-            📋 Copy toàn bộ bài viết
-          </button>
-        </div>
+            <div class="form-stack">
+              <div class="form-group">
+                <label>Hình thức nhận tiền</label>
+                <select id="wdMethod">
+                  <option value="bank">🏦 Chuyển khoản Ngân hàng (VietQR)</option>
+                  <option value="momo">📱 Ví điện tử MoMo</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Tên Ngân hàng (Hoặc ghi MoMo)</label>
+                <input type="text" id="wdBankName" placeholder="VD: Vietcombank, MBBank, Techcombank, MoMo..." />
+              </div>
+              <div class="form-group">
+                <label>Số tài khoản / SĐT MoMo</label>
+                <input type="text" id="wdBankAccount" placeholder="Nhập chính xác số tài khoản..." />
+              </div>
+              <div class="form-group">
+                <label>Tên chủ tài khoản (Viết hoa không dấu)</label>
+                <input type="text" id="wdBankOwner" placeholder="VD: NGUYEN VAN A" />
+              </div>
+              <div class="form-group">
+                <label>Số tiền muốn rút (VNĐ)</label>
+                <input type="number" id="wdAmount" placeholder="VD: 50000" step="1000" />
+              </div>
+              <button type="button" class="btn btn-success" id="submitWithdrawBtn">💸 Gửi Yêu Cầu Rút Tiền</button>
+            </div>
 
-        <div class="textarea-wrapper">
-          <textarea
-            id="outputText"
-            rows="6"
-            readonly
-            placeholder="Bài viết hoặc link sau khi chuyển đổi sẽ xuất hiện tại đây..."
-          ></textarea>
-        </div>
-
-        <!-- Detailed Link Breakdown -->
-        <div class="breakdown-section">
-          <div class="breakdown-header">
-            <h3>Chi tiết từng link trong bài (<span id="linkCountLabel">0</span>)</h3>
-            <span id="summaryStats" class="summary-stats"></span>
-          </div>
-          <div id="linkCardsContainer" class="link-cards-list">
-            <div class="empty-state">
-              Dán link ở cột bên trái và bấm <strong>"Chuyển đổi sang Link Affiliate"</strong> để xem chi tiết từng sản phẩm.
+            <h4 style="margin-top:18px;">Lịch sử rút tiền</h4>
+            <div class="table-responsive">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Ngày</th>
+                    <th>Số tiền</th>
+                    <th>Nhận tại</th>
+                    <th>Trạng thái</th>
+                  </tr>
+                </thead>
+                <tbody id="userWithdrawalsTableBody">
+                  <tr><td colspan="4" class="text-center">Chưa có lịch sử rút tiền.</td></tr>
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
-      </section>
-    </main>
-
-    <!-- History Section -->
-    <section class="panel history-panel">
-      <div class="panel-header">
-        <div>
-          <h2>🕒 Lịch sử chuyển đổi gần đây</h2>
-          <p class="panel-desc">Lưu trực tiếp trên trình duyệt của bạn để copy lại khi cần</p>
-        </div>
-        <button type="button" id="clearHistoryBtn" class="btn btn-ghost">Xoá lịch sử</button>
-      </div>
-      <div id="historyContainer" class="history-list">
-        <div class="empty-state-sm">Chưa có lịch sử chuyển đổi nào.</div>
       </div>
     </section>
-  </div>
 
-  <!-- Settings & Guide Modal -->
-  <div id="settingsModal" class="modal-backdrop hidden">
-    <div class="modal-card">
-      <div class="modal-header">
-        <h2>⚙️ Cài đặt Tài khoản Affiliate (Shopee & TikTok Shop)</h2>
-        <button type="button" id="closeSettingsBtn" class="btn-icon">✕</button>
-      </div>
+    <!-- ==================== VIEW 3: GUIDE ==================== -->
+    <section id="view-guide" class="view-section">
+      <div class="panel">
+        <h2>📖 Hướng Dẫn Chi Tiết Cách Mua Hàng Nhận Hoàn Tiền 70%</h2>
+        <p class="panel-sub">Cơ chế minh bạch: Khi bạn mua hàng qua link của Hoàn Tiền Shop, sàn Shopee/TikTok trả hoa hồng giới thiệu cho hệ thống. Hệ thống trích lại <strong>70% số tiền hoa hồng đó</strong> trả thẳng vào ví của bạn!</p>
 
-      <div class="modal-tabs">
-        <button type="button" class="tab-btn active" data-tab="tab-shopee">🟠 Cài đặt Shopee</button>
-        <button type="button" class="tab-btn" data-tab="tab-tiktok">⚫ Cài đặt TikTok Shop</button>
-      </div>
-
-      <div class="modal-body">
-        <!-- TAB SHOPEE -->
-        <div id="tab-shopee" class="tab-content active">
-          <div class="guide-box">
-            <h4>💡 Hướng dẫn lấy Shopee Affiliate ID (Chỉ mất 30 giây - Dùng mãi mãi):</h4>
-            <ol>
-              <li>Đăng nhập vào trang <a href="https://affiliate.shopee.vn/" target="_blank" rel="noopener">https://affiliate.shopee.vn</a> trên máy tính hoặc trình duyệt điện thoại.</li>
-              <li>Bấm vào tên tài khoản góc phải trên cùng $\rightarrow$ Chọn <strong>Cài đặt tài khoản (Account Settings)</strong>.</li>
-              <li>Copy dãy số ở mục <strong>Affiliate ID</strong> (Ví dụ: <code>17382910234</code>) và dán vào ô bên dưới.</li>
-            </ol>
-          </div>
-
-          <div class="form-row">
-            <label for="modalShopeeMode">Phương thức tạo link Shopee</label>
-            <select id="modalShopeeMode">
-              <option value="an_redir">Cách 1 (Khuyên dùng): Ghép trực tiếp bằng Affiliate ID (an_redir)</option>
-              <option value="openapi">Cách 2: Dùng Shopee Affiliate Open API (Cần App ID & Secret)</option>
-            </select>
-          </div>
-
-          <div class="form-row">
-            <label for="modalShopeeId">Mã Shopee Affiliate ID</label>
-            <input type="text" id="modalShopeeId" placeholder="VD: 17382910234" />
-          </div>
-
-          <div id="shopeeOpenApiFields" class="sub-box">
-            <h4>Cấu hình Shopee Open API (Tùy chọn khi tài khoản đã được cấp API)</h4>
-            <div class="form-row">
-              <label for="modalShopeeAppId">Shopee App ID</label>
-              <input type="text" id="modalShopeeAppId" placeholder="Nhập App ID từ trang Open API Shopee..." />
-            </div>
-            <div class="form-row">
-              <label for="modalShopeeAppSecret">Shopee Secret Key</label>
-              <input type="password" id="modalShopeeAppSecret" placeholder="Nhập Secret Key..." />
+        <div class="guide-steps-detail">
+          <div class="guide-step-row">
+            <span class="step-circle">1</span>
+            <div>
+              <h3>Đăng ký tài khoản (Miễn phí 100%)</h3>
+              <p>Bấm nút <strong>Đăng ký</strong> ở góc phải màn hình bằng Số điện thoại của bạn. Bạn sẽ được cấp một mã định danh riêng (ví dụ: <code>U889912</code>).</p>
             </div>
           </div>
-        </div>
-
-        <!-- TAB TIKTOK -->
-        <div id="tab-tiktok" class="tab-content">
-          <div class="guide-box">
-            <h4>💡 Hướng dẫn chọn chế độ cho Tài khoản TikTok Shop của bạn:</h4>
-            <ul>
-              <li><strong>Chế độ 1 (Bóc tách Product ID & Mở nhanh TikTok Affiliate):</strong> Không cần lấy Token hay Cookie. Web App sẽ tự giải mã link <code>vt.tiktok.com</code> của người khác, xoá sạch mã aff cũ, lấy ra <strong>Product ID</strong> và tạo nút mở thẳng sản phẩm đó trên trang <a href="https://affiliate.tiktok.com/connection/product?shop_region=VN" target="_blank" rel="noopener">affiliate.tiktok.com</a> để bạn bấm lấy link chỉ trong 1 click.</li>
-              <li><strong>Chế độ 2 (TikTok Shop Open API):</strong> Dành cho tài khoản đã tạo App trên <a href="https://partner.tiktokshop.com" target="_blank" rel="noopener">partner.tiktokshop.com</a> và lấy được <code>App Key</code>, <code>App Secret</code>, <code>Access Token</code>. Tự động xuất ra link <code>vt.tiktok.com/...</code>.</li>
-              <li><strong>Chế độ 3 (TikTok Web Cookie):</strong> Đăng nhập <a href="https://affiliate.tiktok.com" target="_blank" rel="noopener">affiliate.tiktok.com</a> trên máy tính, bấm F12 $\rightarrow$ Network $\rightarrow$ copy chuỗi <code>Cookie</code> dán vào đây.</li>
-              <li><strong>Chế độ 4 (DeepLink Accesstrade / Custom):</strong> Dành cho bạn chạy chiến dịch TikTok Shop qua Accesstrade/Ecomobi.</li>
-            </ul>
-          </div>
-
-          <div class="form-row">
-            <label for="modalTikTokMode">Chế độ xử lý link TikTok</label>
-            <select id="modalTikTokMode">
-              <option value="clean_extract">Chế độ 1: Bóc tách Product ID sạch + Nút mở nhanh TikTok Affiliate</option>
-              <option value="openapi">Chế độ 2: TikTok Shop Open API (App Key + Access Token)</option>
-              <option value="cookie">Chế độ 3: TikTok Affiliate Web Cookie (affiliate.tiktok.com)</option>
-              <option value="deeplink">Chế độ 4: DeepLink (Accesstrade / Ecomobi / Custom)</option>
-            </select>
-          </div>
-
-          <div id="tiktokOpenApiBox" class="sub-box">
-            <h4>Cấu hình TikTok Shop Open API (Partner Center)</h4>
-            <div class="form-row">
-              <label for="modalTikTokAppKey">App Key</label>
-              <input type="text" id="modalTikTokAppKey" placeholder="Nhập TikTok App Key..." />
-            </div>
-            <div class="form-row">
-              <label for="modalTikTokAppSecret">App Secret</label>
-              <input type="password" id="modalTikTokAppSecret" placeholder="Nhập TikTok App Secret..." />
-            </div>
-            <div class="form-row">
-              <label for="modalTikTokAccessToken">Access Token (x-tts-access-token)</label>
-              <input type="password" id="modalTikTokAccessToken" placeholder="Nhập Access Token..." />
+          <div class="guide-step-row">
+            <span class="step-circle">2</span>
+            <div>
+              <h3>Copy link sản phẩm từ App Shopee hoặc TikTok</h3>
+              <p>Vào ứng dụng Shopee hoặc TikTok, chọn món hàng muốn mua $\rightarrow$ Bấm nút <strong>Chia sẻ (Share)</strong> $\rightarrow$ Chọn <strong>Sao chép đường dẫn (Copy Link)</strong>.</p>
             </div>
           </div>
-
-          <div id="tiktokCookieBox" class="sub-box">
-            <h4>Cấu hình Cookie trang affiliate.tiktok.com</h4>
-            <div class="form-row">
-              <label for="modalTikTokCookie">Chuỗi Cookie (Header Cookie)</label>
-              <textarea id="modalTikTokCookie" rows="3" placeholder="sessionid=...; msToken=..."></textarea>
+          <div class="guide-step-row">
+            <span class="step-circle">3</span>
+            <div>
+              <h3>Dán link vào Hoàn Tiền Shop & Mở App mua hàng</h3>
+              <p>Dán link vào trang chủ, bấm <strong>"Lấy Link Hoàn Tiền Ngay"</strong> rồi bấm <strong>"Mở Mua Hàng Nhận Hoàn Tiền"</strong>. Thêm mới sản phẩm vào giỏ hàng và đặt mua trong vòng 20 phút.</p>
             </div>
           </div>
-
-          <div id="tiktokDeepLinkBox" class="sub-box">
-            <h4>Cấu hình DeepLink (Accesstrade / Custom URL)</h4>
-            <div class="form-row">
-              <label for="modalTikTokDeepLink">Mẫu URL DeepLink (Hỗ trợ biến <code>{encoded_url}</code>, <code>{product_id}</code>, <code>{sub_id}</code>)</label>
-              <input
-                type="text"
-                id="modalTikTokDeepLink"
-                placeholder="VD: https://go.isclix.com/deep_link/623819283/5829102?url={encoded_url}&utm_source={sub_id}"
-              />
+          <div class="guide-step-row">
+            <span class="step-circle">4</span>
+            <div>
+              <h3>Đối soát & Rút tiền về tài khoản</h3>
+              <p>Khi đơn hàng hoàn thành, 70% tiền hoa hồng sẽ chuyển vào mục <strong>Số dư khả dụng</strong>. Bạn chỉ cần đặt lệnh rút tiền về Ngân hàng hoặc MoMo.</p>
             </div>
           </div>
         </div>
       </div>
+    </section>
 
-      <div class="modal-footer">
-        <button type="button" id="saveSettingsBtn" class="btn btn-primary">💾 Lưu cài đặt</button>
+    <!-- ==================== VIEW 4: ADMIN PANEL (70/30 MANAGEMENT) ==================== -->
+    <section id="view-admin" class="view-section">
+      <div class="admin-banner">
+        <div>
+          <h2>👑 Bảng Điều Khiển Chủ Shop (Quản Trị Hoàn Tiền 70/30)</h2>
+          <p>Cấu hình tài khoản Affiliate của bạn, nhập đơn hàng từ Shopee/TikTok, tự động chia 70% cho khách & 30% lợi nhuận của bạn.</p>
+        </div>
+        <button type="button" class="btn btn-outline btn-sm" id="refreshAdminBtn">🔄 Tải lại dữ liệu</button>
+      </div>
+
+      <!-- Admin Revenue Summary -->
+      <div class="stats-grid-4">
+        <div class="stat-box stat-blue">
+          <span class="stat-label">💰 Tổng Hoa Hồng Sàn Trả (100%)</span>
+          <strong class="stat-value" id="admTotalComm">0đ</strong>
+        </div>
+        <div class="stat-box stat-orange">
+          <span class="stat-label">🎁 Chia Cho Khách Hàng (70%)</span>
+          <strong class="stat-value" id="admUserShare">0đ</strong>
+        </div>
+        <div class="stat-box stat-green">
+          <span class="stat-label">💎 Lợi Nhuận Của Bạn (30%)</span>
+          <strong class="stat-value" id="admProfit">0đ</strong>
+        </div>
+        <div class="stat-box stat-gray">
+          <span class="stat-label">👥 Thành Viên / Đơn Hàng</span>
+          <strong class="stat-value" id="admUsersOrders">0 / 0</strong>
+        </div>
+      </div>
+
+      <div class="admin-grid">
+        <!-- Admin Box 1: Affiliate Credentials & 70/30 Config -->
+        <div class="panel">
+          <h3>⚙️ 1. Cài Đặt Mã Affiliate Của Bạn & Tỷ Lệ Chia Hoa Hồng</h3>
+          <p class="panel-sub">Toàn bộ link khách dán trên trang chủ sẽ tự động gắn mã Affiliate bên dưới của bạn kèm <code>Sub_ID</code> là mã của khách.</p>
+
+          <div class="form-stack">
+            <div class="two-inputs">
+              <div class="form-group">
+                <label>🟠 Chế độ Shopee Affiliate</label>
+                <select id="admShopeeMode">
+                  <option value="an_redir">Ghép bằng Affiliate ID (an_redir - Khuyên dùng)</option>
+                  <option value="openapi">Shopee Open API (App ID & Secret)</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>🟠 Mã Shopee Affiliate ID của bạn</label>
+                <input type="text" id="admShopeeAffiliateId" placeholder="VD: 17382910234" />
+              </div>
+            </div>
+
+            <div class="two-inputs">
+              <div class="form-group">
+                <label>Shopee Open API - App ID (Nếu có)</label>
+                <input type="text" id="admShopeeAppId" placeholder="Tùy chọn..." />
+              </div>
+              <div class="form-group">
+                <label>Shopee Open API - Secret Key (Nếu có)</label>
+                <input type="password" id="admShopeeAppSecret" placeholder="Tùy chọn..." />
+              </div>
+            </div>
+
+            <hr class="divider" />
+
+            <div class="two-inputs">
+              <div class="form-group">
+                <label>⚫ Chế độ TikTok Shop</label>
+                <select id="admTiktokMode">
+                  <option value="clean_extract">Làm sạch Link & Bóc Product ID</option>
+                  <option value="deeplink">DeepLink (Accesstrade / Ecomobi)</option>
+                  <option value="openapi">TikTok Shop Open API</option>
+                  <option value="cookie">TikTok Web Cookie</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Mẫu DeepLink TikTok (Hoặc Cookie / API)</label>
+                <input type="text" id="admTiktokDeepLink" placeholder="VD: https://go.isclix.com/deep_link/...?url={encoded_url}&utm_source={sub_id}" />
+              </div>
+            </div>
+
+            <hr class="divider" />
+
+            <div class="three-inputs">
+              <div class="form-group">
+                <label>🎁 % Hoa hồng chia cho Khách</label>
+                <input type="number" id="admCashbackPercent" value="70" min="1" max="100" />
+              </div>
+              <div class="form-group">
+                <label>🏦 Rút tối thiểu (VNĐ)</label>
+                <input type="number" id="admMinWithdraw" value="50000" step="10000" />
+              </div>
+              <div class="form-group">
+                <label>🔗 Rút gọn link tự động</label>
+                <select id="admShortener">
+                  <option value="isgd">is.gd (Ngắn gọn)</option>
+                  <option value="tinyurl">TinyURL</option>
+                  <option value="none">Giữ nguyên link gốc</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="two-inputs">
+              <div class="form-group">
+                <label>SĐT / Zalo Hỗ trợ hiển thị trên web</label>
+                <input type="text" id="admSupportZalo" placeholder="VD: 0912345678" />
+              </div>
+              <div class="form-group">
+                <label>Đổi mật khẩu Admin mới (Bỏ trống nếu giữ nguyên)</label>
+                <input type="password" id="admNewPass" placeholder="Mặc định đang là: admin123" />
+              </div>
+            </div>
+
+            <button type="button" class="btn btn-primary" id="saveAdminSettingsBtn">💾 Lưu Cấu Hình Hệ Thống</button>
+          </div>
+        </div>
+
+        <!-- Admin Box 2: Add / Import Orders & Calculate 70/30 -->
+        <div class="panel">
+          <h3>📦 2. Cập Nhật Đơn Hàng & Tự Động Chia 70% Khách / 30% Admin</h3>
+          <p class="panel-sub">Nhập đơn từ Báo cáo chuyển đổi Shopee Affiliate. Hệ thống dựa vào <strong>Sub_id1 (Mã khách)</strong> để tự tính 70% hoa hồng cộng vào ví khách.</p>
+
+          <div class="form-stack">
+            <div class="two-inputs">
+              <div class="form-group">
+                <label>Mã Đơn Hàng (Order ID)</label>
+                <input type="text" id="admOrdSn" placeholder="VD: 261111XYZ889" />
+              </div>
+              <div class="form-group">
+                <label>Mã Khách Hàng (Sub_id1 trên báo cáo Shopee)</label>
+                <input type="text" id="admOrdUserCode" placeholder="VD: U998812 hoặc SĐT khách" />
+              </div>
+            </div>
+
+            <div class="two-inputs">
+              <div class="form-group">
+                <label>Tên sản phẩm</label>
+                <input type="text" id="admOrdProduct" placeholder="VD: Tai nghe Bluetooth..." />
+              </div>
+              <div class="form-group">
+                <label>Giá trị đơn hàng (VNĐ)</label>
+                <input type="number" id="admOrdAmount" placeholder="VD: 250000" />
+              </div>
+            </div>
+
+            <div class="three-inputs">
+              <div class="form-group">
+                <label>💰 Tổng Hoa Hồng Sàn Trả (100%)</label>
+                <input type="number" id="admOrdCommission" placeholder="VD: 30000" />
+              </div>
+              <div class="form-group">
+                <label>🎁 Khách nhận (70%) - Tự tính</label>
+                <input type="text" id="admOrdPreview70" readonly placeholder="21.000đ (Bạn nhận 9.000đ)" />
+              </div>
+              <div class="form-group">
+                <label>Trạng thái đơn</label>
+                <select id="admOrdStatus">
+                  <option value="pending">⏳ Chờ đối soát (Tạm tính)</option>
+                  <option value="approved">✅ Đã duyệt (Cộng vào Số dư khả dụng)</option>
+                  <option value="cancelled">❌ Đã huỷ</option>
+                </select>
+              </div>
+            </div>
+
+            <div style="display:flex;gap:10px;flex-wrap:wrap;">
+              <button type="button" class="btn btn-success" id="admSaveOrderBtn">+ Lưu Đơn & Cộng Tiền Ví Khách</button>
+              <label class="btn btn-outline" style="cursor:pointer;">
+                📂 Nhập File CSV Báo Cáo Shopee
+                <input type="file" id="admCsvInput" accept=".csv" style="display:none;" />
+              </label>
+            </div>
+          </div>
+
+          <h4 style="margin-top:18px;">Danh sách đơn hàng trên hệ thống</h4>
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Mã Đơn</th>
+                  <th>Mã Khách (Sub_ID)</th>
+                  <th>Hoa hồng (100%)</th>
+                  <th>Khách (70%) / Bạn (30%)</th>
+                  <th>Trạng thái</th>
+                  <th>Thao tác</th>
+                </tr>
+              </thead>
+              <tbody id="admOrdersTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Admin Box 3: Withdrawal Requests & Users -->
+      <div class="admin-grid" style="margin-top:20px;">
+        <div class="panel">
+          <h3>💸 3. Duyệt Yêu Cầu Rút Tiền Của Khách</h3>
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Khách hàng</th>
+                  <th>Số tiền rút</th>
+                  <th>Thông tin Ngân hàng / MoMo</th>
+                  <th>Trạng thái</th>
+                  <th>Xử lý</th>
+                </tr>
+              </thead>
+              <tbody id="admWithdrawalsTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h3>👥 4. Danh Sách Thành Viên Đăng Ký</h3>
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Mã Sub_ID</th>
+                  <th>Tên / SĐT</th>
+                  <th>Khả dụng</th>
+                  <th>Chờ duyệt</th>
+                </tr>
+              </thead>
+              <tbody id="admUsersTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="footer-inner">
+      <p><strong>Hoàn Tiền Shop</strong> — Nền tảng mua sắm hoàn tiền Shopee & TikTok Shop minh bạch. Chia sẻ 70% hoa hồng tiếp thị liên kết trực tiếp về ví người tiêu dùng.</p>
+      <p class="footer-sub">Mọi giao dịch đặt hàng và thanh toán đều diễn ra trực tiếp trên ứng dụng chính thức của Shopee và TikTok Shop.</p>
+    </div>
+  </footer>
+
+  <!-- Auth Modal (Login / Register) -->
+  <div id="authModal" class="modal-backdrop hidden">
+    <div class="modal-box">
+      <div class="modal-head">
+        <h3 id="authModalTitle">Đăng nhập tài khoản</h3>
+        <button type="button" class="close-btn" id="closeAuthModalBtn">✕</button>
+      </div>
+
+      <div class="auth-tabs">
+        <button type="button" class="auth-tab active" data-auth-tab="login">Đăng nhập</button>
+        <button type="button" class="auth-tab" data-auth-tab="register">Đăng ký mới</button>
+      </div>
+
+      <!-- Login Form -->
+      <div id="loginFormBox" class="modal-body-form">
+        <div class="form-group">
+          <label>Số điện thoại / Mã tài khoản (Admin gõ: <code>admin</code>)</label>
+          <input type="text" id="loginIdentifier" placeholder="Nhập SĐT của bạn (hoặc admin)..." />
+        </div>
+        <div class="form-group">
+          <label>Mật khẩu (Admin mặc định: <code>admin123</code>)</label>
+          <input type="password" id="loginPassword" placeholder="Nhập mật khẩu..." />
+        </div>
+        <button type="button" class="btn btn-primary btn-full" id="doLoginBtn">Đăng Nhập Ngay</button>
+      </div>
+
+      <!-- Register Form -->
+      <div id="registerFormBox" class="modal-body-form hidden">
+        <div class="form-group">
+          <label>Họ và tên của bạn</label>
+          <input type="text" id="regName" placeholder="VD: Nguyễn Văn A" />
+        </div>
+        <div class="form-group">
+          <label>Số điện thoại (Dùng để đăng nhập & nhận thông báo hoàn tiền)</label>
+          <input type="text" id="regPhone" placeholder="VD: 0912345678" />
+        </div>
+        <div class="form-group">
+          <label>Mật khẩu (Tối thiểu 4 ký tự)</label>
+          <input type="password" id="regPassword" placeholder="Tạo mật khẩu..." />
+        </div>
+        <button type="button" class="btn btn-primary btn-full" id="doRegisterBtn">🎁 Tạo Tài Khoản Nhận Hoàn Tiền 70%</button>
       </div>
     </div>
   </div>
 
-  <!-- Toast Notification -->
+  <!-- Toast -->
   <div id="toast" class="toast hidden"></div>
 
   <script src="/app.js"></script>

@@ -1,275 +1,24 @@
-const STORAGE_KEY_CONFIG = 'affconvert_config_v1';
-const STORAGE_KEY_HISTORY = 'affconvert_history_v1';
+const TOKEN_KEY = 'hoantienshop_token_v1';
+const USER_KEY = 'hoantienshop_user_v1';
 
-const defaultConfig = {
-  shopeeMode: 'an_redir',
-  shopeeAffiliateId: '',
-  shopeeAppId: '',
-  shopeeAppSecret: '',
-  tiktokMode: 'clean_extract',
-  tiktokAppKey: '',
-  tiktokAppSecret: '',
-  tiktokAccessToken: '',
-  tiktokCookie: '',
-  tiktokDeepLinkTemplate: '',
-  subId: '',
-  shortenerProvider: 'isgd'
+let authToken = localStorage.getItem(TOKEN_KEY) || '';
+let currentUser = null;
+try {
+  const saved = localStorage.getItem(USER_KEY);
+  if (saved) currentUser = JSON.parse(saved);
+} catch {}
+
+let publicConfig = {
+  siteName: 'HoànTiềnShop',
+  cashbackPercent: 70,
+  minWithdrawAmount: 50000
 };
 
-let currentConfig = loadConfig();
+let lastConvertedFullText = '';
 
-// DOM Elements
-const quickShopeeId = document.getElementById('quickShopeeId');
-const quickTikTokMode = document.getElementById('quickTikTokMode');
-const quickSubId = document.getElementById('quickSubId');
-const quickShortener = document.getElementById('quickShortener');
-
-const shopeeStatusPill = document.getElementById('shopeeStatusPill');
-const tiktokStatusPill = document.getElementById('tiktokStatusPill');
-
-const inputText = document.getElementById('inputText');
-const outputText = document.getElementById('outputText');
-const liveDetectedBadges = document.getElementById('liveDetectedBadges');
-const convertBtn = document.getElementById('convertBtn');
-const copyAllTextBtn = document.getElementById('copyAllTextBtn');
-const pasteClipboardBtn = document.getElementById('pasteClipboardBtn');
-const sampleBtn = document.getElementById('sampleBtn');
-const clearBtn = document.getElementById('clearBtn');
-
-const linkCountLabel = document.getElementById('linkCountLabel');
-const summaryStats = document.getElementById('summaryStats');
-const linkCardsContainer = document.getElementById('linkCardsContainer');
-const historyContainer = document.getElementById('historyContainer');
-const clearHistoryBtn = document.getElementById('clearHistoryBtn');
-
-// Modal Elements
-const settingsModal = document.getElementById('settingsModal');
-const openSettingsBtn = document.getElementById('openSettingsBtn');
-const closeSettingsBtn = document.getElementById('closeSettingsBtn');
-const saveSettingsBtn = document.getElementById('saveSettingsBtn');
-
-const modalShopeeMode = document.getElementById('modalShopeeMode');
-const modalShopeeId = document.getElementById('modalShopeeId');
-const modalShopeeAppId = document.getElementById('modalShopeeAppId');
-const modalShopeeAppSecret = document.getElementById('modalShopeeAppSecret');
-
-const modalTikTokMode = document.getElementById('modalTikTokMode');
-const modalTikTokAppKey = document.getElementById('modalTikTokAppKey');
-const modalTikTokAppSecret = document.getElementById('modalTikTokAppSecret');
-const modalTikTokAccessToken = document.getElementById('modalTikTokAccessToken');
-const modalTikTokCookie = document.getElementById('modalTikTokCookie');
-const modalTikTokDeepLink = document.getElementById('modalTikTokDeepLink');
-
-const toastEl = document.getElementById('toast');
-
-function loadConfig() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY_CONFIG);
-    if (!raw) return { ...defaultConfig };
-    return { ...defaultConfig, ...JSON.parse(raw) };
-  } catch {
-    return { ...defaultConfig };
-  }
-}
-
-function saveConfig(newConf) {
-  currentConfig = { ...currentConfig, ...newConf };
-  localStorage.setItem(STORAGE_KEY_CONFIG, JSON.stringify(currentConfig));
-  syncUiFromConfig();
-}
-
-function syncUiFromConfig() {
-  quickShopeeId.value = currentConfig.shopeeAffiliateId || '';
-  quickTikTokMode.value = currentConfig.tiktokMode || 'clean_extract';
-  quickSubId.value = currentConfig.subId || '';
-  quickShortener.value = currentConfig.shortenerProvider || 'isgd';
-
-  modalShopeeMode.value = currentConfig.shopeeMode || 'an_redir';
-  modalShopeeId.value = currentConfig.shopeeAffiliateId || '';
-  modalShopeeAppId.value = currentConfig.shopeeAppId || '';
-  modalShopeeAppSecret.value = currentConfig.shopeeAppSecret || '';
-
-  modalTikTokMode.value = currentConfig.tiktokMode || 'clean_extract';
-  modalTikTokAppKey.value = currentConfig.tiktokAppKey || '';
-  modalTikTokAppSecret.value = currentConfig.tiktokAppSecret || '';
-  modalTikTokAccessToken.value = currentConfig.tiktokAccessToken || '';
-  modalTikTokCookie.value = currentConfig.tiktokCookie || '';
-  modalTikTokDeepLink.value = currentConfig.tiktokDeepLinkTemplate || '';
-
-  // Update header status pills
-  const hasShopee =
-    (currentConfig.shopeeMode === 'openapi' && currentConfig.shopeeAppId) ||
-    Boolean(currentConfig.shopeeAffiliateId && currentConfig.shopeeAffiliateId.trim());
-
-  if (hasShopee) {
-    shopeeStatusPill.className = 'status-pill pill-ok';
-    shopeeStatusPill.textContent =
-      currentConfig.shopeeMode === 'openapi'
-        ? 'Shopee: Open API'
-        : `Shopee ID: ${currentConfig.shopeeAffiliateId.trim()}`;
-  } else {
-    shopeeStatusPill.className = 'status-pill pill-warn';
-    shopeeStatusPill.textContent = 'Shopee: Chưa nhập Affiliate ID';
-  }
-
-  const tiktokModeLabels = {
-    clean_extract: 'TikTok: Bóc Product ID & Link sạch',
-    openapi: 'TikTok: Open API',
-    cookie: 'TikTok: Web Cookie',
-    deeplink: 'TikTok: DeepLink'
-  };
-  tiktokStatusPill.className = 'status-pill pill-info';
-  tiktokStatusPill.textContent =
-    tiktokModeLabels[currentConfig.tiktokMode] || 'TikTok: Bóc Product ID';
-}
-
-function showToast(msg) {
-  toastEl.textContent = msg;
-  toastEl.classList.remove('hidden');
-  clearTimeout(showToast._timer);
-  showToast._timer = setTimeout(() => {
-    toastEl.classList.add('hidden');
-  }, 2600);
-}
-
-async function copyToClipboard(text, label = 'Đã sao chép vào Clipboard!') {
-  try {
-    await navigator.clipboard.writeText(text);
-    showToast(`✅ ${label}`);
-  } catch {
-    const temp = document.createElement('textarea');
-    temp.value = text;
-    document.body.appendChild(temp);
-    temp.select();
-    document.execCommand('copy');
-    document.body.removeChild(temp);
-    showToast(`✅ ${label}`);
-  }
-}
-
-// Live URL detection in input textarea
-function updateLiveBadges() {
-  const val = inputText.value || '';
-  const urls = (val.match(/https?:\/\/[^\s<>"')\]}]+/gi) || []).map((u) =>
-    u.replace(/[.,;!?]+$/, '')
-  );
-
-  if (urls.length === 0) {
-    liveDetectedBadges.innerHTML = '<span class="badge-neutral">Chưa phát hiện link</span>';
-    return;
-  }
-
-  let shopee = 0;
-  let tiktok = 0;
-  let other = 0;
-
-  urls.forEach((u) => {
-    const lower = u.toLowerCase();
-    if (lower.includes('shopee.vn') || lower.includes('shp.ee') || lower.includes('shope.ee')) {
-      shopee++;
-    } else if (lower.includes('tiktok.com')) {
-      tiktok++;
-    } else {
-      other++;
-    }
-  });
-
-  const badges = [];
-  if (shopee > 0) badges.push(`<span class="badge-shopee">🟠 ${shopee} link Shopee</span>`);
-  if (tiktok > 0) badges.push(`<span class="badge-tiktok">⚫ ${tiktok} link TikTok</span>`);
-  if (other > 0) badges.push(`<span class="badge-neutral">🔗 ${other} link khác</span>`);
-  liveDetectedBadges.innerHTML = badges.join('');
-}
-
-// Render detailed breakdown cards
-function renderLinkCards(items, summary) {
-  linkCountLabel.textContent = items.length;
-  if (summary) {
-    summaryStats.textContent = `Thành công: ${summary.successCount}/${summary.total}`;
-  } else {
-    summaryStats.textContent = '';
-  }
-
-  if (!items || items.length === 0) {
-    linkCardsContainer.innerHTML = `
-      <div class="empty-state">
-        Không tìm thấy link nào trong văn bản. Hãy kiểm tra lại nội dung dán vào.
-      </div>`;
-    return;
-  }
-
-  linkCardsContainer.innerHTML = items
-    .map((item, idx) => {
-      const isShopee = item.platform === 'shopee';
-      const isTikTok = item.platform === 'tiktok';
-      const cardClass =
-        item.status === 'error'
-          ? 'card-error'
-          : isShopee
-          ? 'card-shopee'
-          : isTikTok
-          ? 'card-tiktok'
-          : '';
-
-      const badgeHtml = isShopee
-        ? '<span class="badge-shopee">🟠 Shopee</span>'
-        : isTikTok
-        ? '<span class="badge-tiktok">⚫ TikTok Shop</span>'
-        : '<span class="badge-neutral">🔗 Link khác</span>';
-
-      const idText = item.productId
-        ? `<span class="id-pill" data-copy="${escapeHtml(item.productId)}" title="Bấm để copy mã ID sản phẩm">ID: ${escapeHtml(
-            item.productId
-          )} 📋</span>`
-        : '';
-
-      const errorOrNoteHtml = item.error
-        ? `<div class="card-note">⚠️ ${escapeHtml(item.error)}</div>`
-        : item.note
-        ? `<div class="card-note">ℹ️ ${escapeHtml(item.note)}</div>`
-        : '';
-
-      const tiktokQuickBtn =
-        isTikTok && item.affiliateCenterUrl
-          ? `<a href="${escapeHtml(
-              item.affiliateCenterUrl
-            )}" target="_blank" rel="noopener" class="btn btn-secondary btn-sm">🚀 Mở trong TikTok Affiliate Center</a>`
-          : '';
-
-      return `
-        <div class="link-card ${cardClass}">
-          <div class="card-top">
-            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-              ${badgeHtml}
-              <span class="method-tag">${escapeHtml(item.usedMethod || '')}</span>
-            </div>
-            ${idText}
-          </div>
-
-          <div class="url-row">
-            <span class="url-mono" id="aff-url-${idx}">${escapeHtml(item.affiliateUrl)}</span>
-            <button type="button" class="btn btn-primary btn-sm" data-copy="${escapeHtml(
-              item.affiliateUrl
-            )}">Copy Link</button>
-          </div>
-
-          <div class="url-sub">
-            <strong>Link gốc sạch:</strong> <a href="${escapeHtml(
-              item.cleanUrl
-            )}" target="_blank" rel="noopener">${escapeHtml(item.cleanUrl)}</a>
-          </div>
-
-          ${errorOrNoteHtml}
-
-          ${
-            tiktokQuickBtn
-              ? `<div class="card-actions">${tiktokQuickBtn}</div>`
-              : ''
-          }
-        </div>
-      `;
-    })
-    .join('');
+// Helpers
+function fmtVnd(amount) {
+  return Number(amount || 0).toLocaleString('vi-VN') + 'đ';
 }
 
 function escapeHtml(str) {
@@ -280,262 +29,749 @@ function escapeHtml(str) {
     .replace(/"/g, '&quot;');
 }
 
-// Perform conversion
-async function handleConvert() {
-  const text = inputText.value.trim();
-  if (!text) {
-    showToast('⚠️ Vui lòng dán link hoặc bài viết vào ô bên trái trước!');
-    inputText.focus();
-    return;
-  }
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.remove('hidden');
+  clearTimeout(showToast._timer);
+  showToast._timer = setTimeout(() => t.classList.add('hidden'), 2800);
+}
 
-  // Sync quick bar fields into currentConfig
-  saveConfig({
-    shopeeAffiliateId: quickShopeeId.value.trim(),
-    tiktokMode: quickTikTokMode.value,
-    subId: quickSubId.value.trim(),
-    shortenerProvider: quickShortener.value
+async function copyText(text, msg = 'Đã sao chép liên kết!') {
+  try {
+    await navigator.clipboard.writeText(text);
+    showToast(`✅ ${msg}`);
+  } catch {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    showToast(`✅ ${msg}`);
+  }
+}
+
+async function apiFetch(url, options = {}) {
+  const headers = {
+    'Content-Type': 'application/json',
+    ...(options.headers || {})
+  };
+  if (authToken) {
+    headers.Authorization = `Bearer ${authToken}`;
+  }
+  const res = await fetch(url, { ...options, headers });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.error || `Lỗi kết nối (${res.status})`);
+  }
+  return data;
+}
+
+// Navigation
+function switchView(viewName) {
+  document.querySelectorAll('.view-section').forEach((sec) => {
+    sec.classList.toggle('active', sec.id === `view-${viewName}`);
+  });
+  document.querySelectorAll('.nav-btn').forEach((btn) => {
+    btn.classList.toggle('active', btn.getAttribute('data-nav') === viewName);
   });
 
-  // Check if Shopee link exists but no Affiliate ID entered
-  const hasShopeeUrl = /shopee\.vn|shp\.ee|shope\.ee/i.test(text);
-  if (
-    hasShopeeUrl &&
-    currentConfig.shopeeMode !== 'openapi' &&
-    !currentConfig.shopeeAffiliateId
-  ) {
-    showToast('⚠️ Hãy nhập Mã Shopee Affiliate ID của bạn ở thanh trên cùng!');
-    quickShopeeId.focus();
+  if (viewName === 'wallet' && authToken) {
+    loadUserDashboard();
+  }
+  if (viewName === 'admin' && authToken && currentUser?.role === 'admin') {
+    loadAdminDashboard();
+  }
+}
+
+document.body.addEventListener('click', (e) => {
+  const navEl = e.target.closest('[data-nav]');
+  if (navEl) {
+    e.preventDefault();
+    switchView(navEl.getAttribute('data-nav'));
     return;
   }
 
-  convertBtn.disabled = true;
-  convertBtn.textContent = '⏳ Đang giải mã & chuyển đổi...';
+  const copyBtn = e.target.closest('[data-copy]');
+  if (copyBtn) {
+    copyText(copyBtn.getAttribute('data-copy'));
+  }
+});
+
+// Sync Auth UI
+function syncAuthUi() {
+  const navAuthArea = document.getElementById('navAuthArea');
+  const navUserArea = document.getElementById('navUserArea');
+  const navAdminBtn = document.getElementById('navAdminBtn');
+  const guestWarningBanner = document.getElementById('guestWarningBanner');
+  const walletGuestPrompt = document.getElementById('walletGuestPrompt');
+  const walletAuthenticatedContent = document.getElementById('walletAuthenticatedContent');
+
+  if (authToken && currentUser) {
+    navAuthArea.classList.add('hidden');
+    navUserArea.classList.remove('hidden');
+    guestWarningBanner.classList.add('hidden');
+    walletGuestPrompt.classList.add('hidden');
+    walletAuthenticatedContent.classList.remove('hidden');
+
+    document.getElementById('headerUserCode').textContent = currentUser.code;
+    document.getElementById('headerUserName').textContent = currentUser.name;
+    document.getElementById('headerUserBalance').textContent = fmtVnd(
+      currentUser.balanceAvailable
+    );
+
+    if (currentUser.role === 'admin') {
+      navAdminBtn.classList.remove('hidden');
+    } else {
+      navAdminBtn.classList.add('hidden');
+    }
+  } else {
+    navAuthArea.classList.remove('hidden');
+    navUserArea.classList.add('hidden');
+    navAdminBtn.classList.add('hidden');
+    guestWarningBanner.classList.remove('hidden');
+    walletGuestPrompt.classList.remove('hidden');
+    walletAuthenticatedContent.classList.add('hidden');
+  }
+}
+
+function setSession(token, user) {
+  authToken = token;
+  currentUser = user;
+  localStorage.setItem(TOKEN_KEY, token);
+  localStorage.setItem(USER_KEY, JSON.stringify(user));
+  syncAuthUi();
+}
+
+function clearSession() {
+  authToken = '';
+  currentUser = null;
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(USER_KEY);
+  syncAuthUi();
+  switchView('home');
+}
+
+// Public Config
+async function initPublicConfig() {
+  try {
+    const data = await apiFetch('/api/public-config');
+    publicConfig = { ...publicConfig, ...data };
+    document.getElementById('heroCashbackRate').textContent = `${publicConfig.cashbackPercent}%`;
+    document.getElementById('minWithdrawLabel').textContent = fmtVnd(
+      publicConfig.minWithdrawAmount
+    );
+  } catch {}
+}
+
+// Auth Modal Logic
+const authModal = document.getElementById('authModal');
+function openAuthModal(tab = 'login') {
+  authModal.classList.remove('hidden');
+  document.querySelectorAll('.auth-tab').forEach((t) => {
+    t.classList.toggle('active', t.getAttribute('data-auth-tab') === tab);
+  });
+  document.getElementById('loginFormBox').classList.toggle('hidden', tab !== 'login');
+  document.getElementById('registerFormBox').classList.toggle('hidden', tab !== 'register');
+  document.getElementById('authModalTitle').textContent =
+    tab === 'login' ? 'Đăng nhập tài khoản' : 'Đăng ký nhận hoàn tiền 70%';
+}
+
+document.getElementById('openLoginBtn').addEventListener('click', () => openAuthModal('login'));
+document.getElementById('openRegisterBtn').addEventListener('click', () => openAuthModal('register'));
+document.getElementById('guestLoginPromptBtn').addEventListener('click', () => openAuthModal('register'));
+document.getElementById('walletLoginBtn').addEventListener('click', () => openAuthModal('login'));
+document.getElementById('walletRegisterBtn').addEventListener('click', () => openAuthModal('register'));
+document.getElementById('closeAuthModalBtn').addEventListener('click', () => authModal.classList.add('hidden'));
+
+document.querySelectorAll('.auth-tab').forEach((tabBtn) => {
+  tabBtn.addEventListener('click', () => openAuthModal(tabBtn.getAttribute('data-auth-tab')));
+});
+
+document.getElementById('doLoginBtn').addEventListener('click', async () => {
+  const identifier = document.getElementById('loginIdentifier').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  try {
+    const data = await apiFetch('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ identifier, password })
+    });
+    setSession(data.token, data.user);
+    authModal.classList.add('hidden');
+    showToast(`🎉 Chào mừng ${data.user.name} quay trở lại!`);
+    if (data.user.role === 'admin') {
+      switchView('admin');
+    }
+  } catch (err) {
+    showToast(`❌ ${err.message}`);
+  }
+});
+
+document.getElementById('doRegisterBtn').addEventListener('click', async () => {
+  const name = document.getElementById('regName').value.trim();
+  const phone = document.getElementById('regPhone').value.trim();
+  const password = document.getElementById('regPassword').value;
+  try {
+    const data = await apiFetch('/api/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({ name, phone, password })
+    });
+    setSession(data.token, data.user);
+    authModal.classList.add('hidden');
+    showToast(`🎉 Đăng ký thành công! Mã nhận hoàn tiền của bạn là ${data.user.code}`);
+  } catch (err) {
+    showToast(`❌ ${err.message}`);
+  }
+});
+
+document.getElementById('logoutBtn').addEventListener('click', () => {
+  clearSession();
+  showToast('Đã đăng xuất tài khoản.');
+});
+
+// ================= HOME CONVERTER =================
+const productUrlInput = document.getElementById('productUrlInput');
+const getCashbackLinkBtn = document.getElementById('getCashbackLinkBtn');
+const conversionResultSection = document.getElementById('conversionResultSection');
+const resultCardsList = document.getElementById('resultCardsList');
+const resCountLabel = document.getElementById('resCountLabel');
+const copyFullPostBtn = document.getElementById('copyFullPostBtn');
+
+document.getElementById('pasteBtn').addEventListener('click', async () => {
+  try {
+    const text = await navigator.clipboard.readText();
+    if (text) {
+      productUrlInput.value = text;
+      showToast('📋 Đã dán link từ bộ nhớ tạm!');
+    }
+  } catch {
+    productUrlInput.focus();
+    showToast('Hãy nhấn Ctrl+V vào ô nhập để dán link.');
+  }
+});
+
+document.getElementById('demoLinkBtn').addEventListener('click', () => {
+  productUrlInput.value =
+    'https://shopee.vn/Tai-nghe-Bluetooth-Hoco-W35-i.12345678.9876543210?sp_atk=old_tracking';
+  showToast('🧪 Đã điền link sản phẩm mẫu! Hãy bấm "Lấy Link Hoàn Tiền Ngay".');
+});
+
+document.getElementById('clearInputBtn').addEventListener('click', () => {
+  productUrlInput.value = '';
+  conversionResultSection.classList.add('hidden');
+});
+
+async function handleGetCashbackLink() {
+  const text = productUrlInput.value.trim();
+  if (!text) {
+    showToast('⚠️ Vui lòng dán link sản phẩm Shopee hoặc TikTok Shop!');
+    productUrlInput.focus();
+    return;
+  }
+
+  getCashbackLinkBtn.disabled = true;
+  getCashbackLinkBtn.textContent = '⏳ Đang phân tích & tạo link hoàn tiền...';
 
   try {
-    const res = await fetch('/api/convert', {
+    const data = await apiFetch('/api/convert', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        text,
-        config: currentConfig
-      })
+      body: JSON.stringify({ text })
     });
 
-    const data = await res.json();
-    if (!res.ok) {
-      showToast(`❌ ${data.error || 'Có lỗi xảy ra'}`);
+    lastConvertedFullText = data.convertedText || '';
+    const items = data.items || [];
+    resCountLabel.textContent = items.length;
+    conversionResultSection.classList.remove('hidden');
+
+    if (items.length > 1) {
+      copyFullPostBtn.classList.remove('hidden');
+    } else {
+      copyFullPostBtn.classList.add('hidden');
+    }
+
+    resultCardsList.innerHTML = items
+      .map((item) => {
+        const isShopee = item.platform === 'shopee';
+        const isTikTok = item.platform === 'tiktok';
+        const platLabel = isShopee
+          ? '🟠 Sàn Shopee Việt Nam'
+          : isTikTok
+          ? '⚫ Sàn TikTok Shop'
+          : '🔗 Liên kết khác';
+
+        return `
+        <div class="cashback-product-card">
+          <div class="cp-top">
+            <span class="valid-badge">✅ Hợp lệ nhận hoàn tiền</span>
+            <span style="font-size:12px;font-weight:700;color:#475569;">${platLabel}</span>
+          </div>
+
+          <div class="rate-highlight-box">
+            <div>
+              <div style="font-size:12.5px;color:#9a3412;font-weight:600;">Tỷ lệ chia sẻ tiền hoàn cho bạn:</div>
+              <div style="font-size:12px;color:#7c2d12;">Mã ghi nhận đơn (Sub_ID): <strong>${escapeHtml(
+                item.trackingSubId || 'GUEST'
+              )}</strong></div>
+            </div>
+            <div class="rate-number">Hoàn ${item.cashbackPercent || 70}%</div>
+          </div>
+
+          <div class="cp-body-flex">
+            <div class="qr-box" title="Quét mã QR bằng điện thoại để mở App mua hàng">
+              <img src="${escapeHtml(item.qrUrl)}" alt="QR Mua Hàng" loading="lazy" />
+            </div>
+
+            <div class="cp-actions-col">
+              <div style="font-size:12px;color:#475569;font-weight:600;">Liên kết mua hàng hoàn tiền của riêng bạn:</div>
+              <div class="short-link-box">${escapeHtml(item.affiliateUrl)}</div>
+
+              <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;">
+                <a href="${escapeHtml(
+                  item.affiliateUrl
+                )}" target="_blank" rel="noopener" class="btn btn-primary" style="flex:1;">
+                  🛒 Mở Mua Hàng Nhận Hoàn Tiền
+                </a>
+                <button type="button" class="btn btn-outline" data-copy="${escapeHtml(
+                  item.affiliateUrl
+                )}">
+                  📋 Copy Link
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+      })
+      .join('');
+
+    showToast('✅ Đã tạo link mua hàng hoàn tiền thành công!');
+  } catch (err) {
+    showToast(`❌ ${err.message}`);
+  } finally {
+    getCashbackLinkBtn.disabled = false;
+    getCashbackLinkBtn.textContent = '⚡ Lấy Link Hoàn Tiền Ngay';
+  }
+}
+
+getCashbackLinkBtn.addEventListener('click', handleGetCashbackLink);
+copyFullPostBtn.addEventListener('click', () => {
+  if (lastConvertedFullText) {
+    copyText(lastConvertedFullText, 'Đã sao chép toàn bộ bài viết kèm link hoàn tiền!');
+  }
+});
+
+// ================= USER WALLET & ORDERS =================
+async function loadUserDashboard() {
+  if (!authToken) return;
+  try {
+    const data = await apiFetch('/api/user/me');
+    currentUser = data.user;
+    localStorage.setItem(USER_KEY, JSON.stringify(currentUser));
+    syncAuthUi();
+
+    document.getElementById('walletUserName').textContent = currentUser.name;
+    document.getElementById('walletUserCode').textContent = currentUser.code;
+    document.getElementById('statAvailable').textContent = fmtVnd(currentUser.balanceAvailable);
+    document.getElementById('statPending').textContent = fmtVnd(currentUser.balancePending);
+    document.getElementById('statTotalEarned').textContent = fmtVnd(currentUser.totalEarned);
+    document.getElementById('statWithdrawn').textContent = fmtVnd(currentUser.totalWithdrawn);
+
+    // Pre-fill bank info
+    if (currentUser.bankName) document.getElementById('wdBankName').value = currentUser.bankName;
+    if (currentUser.bankAccount)
+      document.getElementById('wdBankAccount').value = currentUser.bankAccount;
+    if (currentUser.bankOwner) document.getElementById('wdBankOwner').value = currentUser.bankOwner;
+
+    // Render Orders Table
+    const ordBody = document.getElementById('userOrdersTableBody');
+    const orders = data.orders || [];
+    if (orders.length === 0) {
+      ordBody.innerHTML =
+        '<tr><td colspan="4" class="text-center">Chưa có đơn hàng nào được ghi nhận.</td></tr>';
+    } else {
+      ordBody.innerHTML = orders
+        .map((o) => {
+          const stBadge =
+            o.status === 'approved'
+              ? '<span class="status-badge st-approved">✅ Đã cộng vào ví</span>'
+              : o.status === 'cancelled'
+              ? '<span class="status-badge st-cancelled">❌ Đã huỷ</span>'
+              : '<span class="status-badge st-pending">⏳ Đang đối soát</span>';
+          return `
+            <tr>
+              <td><code>${escapeHtml(o.orderSn)}</code></td>
+              <td><strong>${o.platform === 'tiktok' ? 'TikTok' : 'Shopee'}:</strong> ${escapeHtml(
+            o.productName
+          )}</td>
+              <td><strong style="color:#059669;">+${fmtVnd(o.userCashbackAmount)}</strong></td>
+              <td>${stBadge}</td>
+            </tr>
+          `;
+        })
+        .join('');
+    }
+
+    // Render Withdrawals Table
+    const wdBody = document.getElementById('userWithdrawalsTableBody');
+    const wds = data.withdrawals || [];
+    if (wds.length === 0) {
+      wdBody.innerHTML =
+        '<tr><td colspan="4" class="text-center">Chưa có lịch sử rút tiền.</td></tr>';
+    } else {
+      wdBody.innerHTML = wds
+        .map((w) => {
+          const stBadge =
+            w.status === 'paid'
+              ? '<span class="status-badge st-paid">✅ Đã chuyển khoản</span>'
+              : w.status === 'rejected'
+              ? '<span class="status-badge st-rejected">❌ Từ chối</span>'
+              : '<span class="status-badge st-pending">⏳ Chờ thanh toán</span>';
+          return `
+            <tr>
+              <td>${new Date(w.createdAt).toLocaleDateString('vi-VN')}</td>
+              <td><strong>${fmtVnd(w.amount)}</strong></td>
+              <td>${escapeHtml(w.bankName)} - ${escapeHtml(w.bankAccount)}</td>
+              <td>${stBadge}</td>
+            </tr>
+          `;
+        })
+        .join('');
+    }
+  } catch (err) {
+    showToast(`⚠️ ${err.message}`);
+  }
+}
+
+document.getElementById('refreshWalletBtn').addEventListener('click', loadUserDashboard);
+
+document.getElementById('submitOrderClaimBtn').addEventListener('click', async () => {
+  const platform = document.getElementById('claimPlatform').value;
+  const orderSn = document.getElementById('claimOrderSn').value.trim();
+  const productName = document.getElementById('claimProductName').value.trim();
+  try {
+    await apiFetch('/api/user/submit-order', {
+      method: 'POST',
+      body: JSON.stringify({ platform, orderSn, productName })
+    });
+    document.getElementById('claimOrderSn').value = '';
+    document.getElementById('claimProductName').value = '';
+    showToast('✅ Đã lưu mã đơn hàng! Hệ thống sẽ cập nhật tiền hoàn khi sàn trả kết quả đối soát.');
+    loadUserDashboard();
+  } catch (err) {
+    showToast(`❌ ${err.message}`);
+  }
+});
+
+document.getElementById('submitWithdrawBtn').addEventListener('click', async () => {
+  const method = document.getElementById('wdMethod').value;
+  const bankName = document.getElementById('wdBankName').value.trim();
+  const bankAccount = document.getElementById('wdBankAccount').value.trim();
+  const bankOwner = document.getElementById('wdBankOwner').value.trim();
+  const amount = Number(document.getElementById('wdAmount').value);
+
+  try {
+    await apiFetch('/api/user/withdraw', {
+      method: 'POST',
+      body: JSON.stringify({ method, bankName, bankAccount, bankOwner, amount })
+    });
+    document.getElementById('wdAmount').value = '';
+    showToast('🎉 Đã gửi yêu cầu rút tiền thành công!');
+    loadUserDashboard();
+  } catch (err) {
+    showToast(`❌ ${err.message}`);
+  }
+});
+
+// ================= ADMIN DASHBOARD (70/30 MANAGEMENT) =================
+const admOrdCommission = document.getElementById('admOrdCommission');
+const admOrdPreview70 = document.getElementById('admOrdPreview70');
+
+admOrdCommission.addEventListener('input', () => {
+  const comm = Number(admOrdCommission.value || 0);
+  const rate = Number(document.getElementById('admCashbackPercent').value || 70);
+  const userGet = Math.round((comm * rate) / 100);
+  const adminGet = comm - userGet;
+  admOrdPreview70.value = `Khách: ${fmtVnd(userGet)} | Bạn: ${fmtVnd(adminGet)}`;
+});
+
+async function loadAdminDashboard() {
+  try {
+    const data = await apiFetch('/api/admin/dashboard');
+    const st = data.stats;
+    const s = data.settings;
+
+    document.getElementById('admTotalComm').textContent = fmtVnd(st.totalCommission);
+    document.getElementById('admUserShare').textContent = fmtVnd(st.totalUserCashback);
+    document.getElementById('admProfit').textContent = fmtVnd(st.totalAdminProfit);
+    document.getElementById('admUsersOrders').textContent = `${st.totalUsers} / ${st.totalOrders}`;
+
+    // Fill Settings
+    document.getElementById('admShopeeMode').value = s.shopeeMode || 'an_redir';
+    document.getElementById('admShopeeAffiliateId').value = s.shopeeAffiliateId || '';
+    document.getElementById('admShopeeAppId').value = s.shopeeAppId || '';
+    document.getElementById('admShopeeAppSecret').value = s.shopeeAppSecret || '';
+    document.getElementById('admTiktokMode').value = s.tiktokMode || 'clean_extract';
+    document.getElementById('admTiktokDeepLink').value = s.tiktokDeepLinkTemplate || '';
+    document.getElementById('admCashbackPercent').value = s.cashbackPercent || 70;
+    document.getElementById('admMinWithdraw').value = s.minWithdrawAmount || 50000;
+    document.getElementById('admShortener').value = s.shortenerProvider || 'isgd';
+    document.getElementById('admSupportZalo').value = s.supportZalo || '';
+
+    // Render Admin Orders Table
+    const ordTbody = document.getElementById('admOrdersTableBody');
+    ordTbody.innerHTML = (data.orders || [])
+      .map(
+        (o) => `
+      <tr>
+        <td><code>${escapeHtml(o.orderSn)}</code></td>
+        <td><strong class="code-highlight">${escapeHtml(o.userCode || 'GUEST')}</strong></td>
+        <td>${fmtVnd(o.totalCommission)}</td>
+        <td>
+          <span style="color:#059669;font-weight:700;">Khách: ${fmtVnd(o.userCashbackAmount)}</span><br/>
+          <span style="color:#2563eb;font-size:11.5px;">Bạn: ${fmtVnd(o.adminShareAmount)}</span>
+        </td>
+        <td>
+          <span class="status-badge st-${o.status}">${
+          o.status === 'approved'
+            ? 'Đã duyệt'
+            : o.status === 'cancelled'
+            ? 'Đã huỷ'
+            : 'Chờ duyệt'
+        }</span>
+        </td>
+        <td>
+          <button type="button" class="btn btn-success btn-sm" data-approve-ord="${escapeHtml(
+            o.orderSn
+          )}" data-comm="${o.totalCommission}" data-ucode="${escapeHtml(
+          o.userCode
+        )}">Duyệt</button>
+        </td>
+      </tr>
+    `
+      )
+      .join('');
+
+    // Render Admin Withdrawals Table
+    const wdTbody = document.getElementById('admWithdrawalsTableBody');
+    const wds = data.withdrawals || [];
+    if (wds.length === 0) {
+      wdTbody.innerHTML =
+        '<tr><td colspan="5" class="text-center">Chưa có lệnh rút tiền nào.</td></tr>';
+    } else {
+      wdTbody.innerHTML = wds
+        .map(
+          (w) => `
+        <tr>
+          <td><strong>${escapeHtml(w.userName)}</strong><br/><code>${escapeHtml(w.userCode)}</code></td>
+          <td><strong style="color:#dc2626;">${fmtVnd(w.amount)}</strong></td>
+          <td>${escapeHtml(w.bankName)}<br/>STK: <strong>${escapeHtml(
+            w.bankAccount
+          )}</strong> (${escapeHtml(w.bankOwner)})</td>
+          <td><span class="status-badge st-${w.status}">${w.status}</span></td>
+          <td>
+            ${
+              w.status === 'pending'
+                ? `<button type="button" class="btn btn-success btn-sm" data-wd-action="paid" data-wd-id="${w.id}">✅ Đã chuyển</button>
+                   <button type="button" class="btn btn-ghost btn-sm" data-wd-action="rejected" data-wd-id="${w.id}">Từ chối</button>`
+                : 'Đã xử lý'
+            }
+          </td>
+        </tr>
+      `
+        )
+        .join('');
+    }
+
+    // Render Users Table
+    const usrTbody = document.getElementById('admUsersTableBody');
+    usrTbody.innerHTML = (data.users || [])
+      .map(
+        (u) => `
+      <tr>
+        <td><strong class="code-highlight">${escapeHtml(u.code)}</strong></td>
+        <td>${escapeHtml(u.name)} (${escapeHtml(u.phone)})</td>
+        <td><strong style="color:#059669;">${fmtVnd(u.balanceAvailable)}</strong></td>
+        <td>${fmtVnd(u.balancePending)}</td>
+      </tr>
+    `
+      )
+      .join('');
+  } catch (err) {
+    showToast(`❌ ${err.message}`);
+  }
+}
+
+document.getElementById('refreshAdminBtn').addEventListener('click', loadAdminDashboard);
+
+document.getElementById('saveAdminSettingsBtn').addEventListener('click', async () => {
+  try {
+    await apiFetch('/api/admin/settings', {
+      method: 'POST',
+      body: JSON.stringify({
+        shopeeMode: document.getElementById('admShopeeMode').value,
+        shopeeAffiliateId: document.getElementById('admShopeeAffiliateId').value.trim(),
+        shopeeAppId: document.getElementById('admShopeeAppId').value.trim(),
+        shopeeAppSecret: document.getElementById('admShopeeAppSecret').value.trim(),
+        tiktokMode: document.getElementById('admTiktokMode').value,
+        tiktokDeepLinkTemplate: document.getElementById('admTiktokDeepLink').value.trim(),
+        cashbackPercent: Number(document.getElementById('admCashbackPercent').value || 70),
+        minWithdrawAmount: Number(document.getElementById('admMinWithdraw').value || 50000),
+        shortenerProvider: document.getElementById('admShortener').value,
+        supportZalo: document.getElementById('admSupportZalo').value.trim(),
+        newAdminPassword: document.getElementById('admNewPass').value.trim()
+      })
+    });
+    document.getElementById('admNewPass').value = '';
+    showToast('💾 Đã lưu cấu hình hệ thống & Mã Affiliate thành công!');
+    initPublicConfig();
+    loadAdminDashboard();
+  } catch (err) {
+    showToast(`❌ ${err.message}`);
+  }
+});
+
+document.getElementById('admSaveOrderBtn').addEventListener('click', async () => {
+  const orderSn = document.getElementById('admOrdSn').value.trim();
+  const userCode = document.getElementById('admOrdUserCode').value.trim();
+  const productName = document.getElementById('admOrdProduct').value.trim();
+  const orderAmount = Number(document.getElementById('admOrdAmount').value || 0);
+  const totalCommission = Number(document.getElementById('admOrdCommission').value || 0);
+  const status = document.getElementById('admOrdStatus').value;
+
+  try {
+    await apiFetch('/api/admin/orders', {
+      method: 'POST',
+      body: JSON.stringify({
+        orderSn,
+        userCode,
+        productName,
+        orderAmount,
+        totalCommission,
+        status
+      })
+    });
+    document.getElementById('admOrdSn').value = '';
+    document.getElementById('admOrdCommission').value = '';
+    showToast('✅ Đã cập nhật đơn hàng & chia hoa hồng 70/30 thành công!');
+    loadAdminDashboard();
+  } catch (err) {
+    showToast(`❌ ${err.message}`);
+  }
+});
+
+// Quick approve order or process withdrawal in Admin table
+document.getElementById('view-admin').addEventListener('click', async (e) => {
+  const approveBtn = e.target.closest('[data-approve-ord]');
+  if (approveBtn) {
+    const orderSn = approveBtn.getAttribute('data-approve-ord');
+    const totalCommission = Number(approveBtn.getAttribute('data-comm') || 0);
+    const userCode = approveBtn.getAttribute('data-ucode');
+    try {
+      await apiFetch('/api/admin/orders', {
+        method: 'POST',
+        body: JSON.stringify({ orderSn, userCode, totalCommission, status: 'approved' })
+      });
+      showToast(`✅ Đã duyệt đơn ${orderSn} và cộng 70% vào ví khách!`);
+      loadAdminDashboard();
+    } catch (err) {
+      showToast(`❌ ${err.message}`);
+    }
+    return;
+  }
+
+  const wdBtn = e.target.closest('[data-wd-action]');
+  if (wdBtn) {
+    const id = wdBtn.getAttribute('data-wd-id');
+    const status = wdBtn.getAttribute('data-wd-action');
+    try {
+      await apiFetch('/api/admin/withdrawals/update', {
+        method: 'POST',
+        body: JSON.stringify({ id, status })
+      });
+      showToast('✅ Đã cập nhật trạng thái rút tiền!');
+      loadAdminDashboard();
+    } catch (err) {
+      showToast(`❌ ${err.message}`);
+    }
+  }
+});
+
+// Parse Shopee Affiliate Conversion Report CSV
+document.getElementById('admCsvInput').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  try {
+    const text = await file.text();
+    const lines = text.split(/\r?\n/).filter((l) => l.trim());
+    if (lines.length < 2) {
+      showToast('⚠️ File CSV trống hoặc không đúng định dạng.');
       return;
     }
 
-    outputText.value = data.convertedText || '';
-    copyAllTextBtn.disabled = !data.convertedText;
+    const headers = lines[0].split(',').map((h) => h.replace(/^"|"$/g, '').trim().toLowerCase());
+    const rows = [];
 
-    renderLinkCards(data.items || [], data.summary);
-    saveToHistory(data);
-    showToast(`✅ Đã xử lý xong ${data.summary?.successCount || 0} link!`);
-  } catch (err) {
-    showToast(`❌ Không thể kết nối máy chủ: ${err.message}`);
-  } finally {
-    convertBtn.disabled = false;
-    convertBtn.textContent = '⚡ Chuyển đổi sang Link Affiliate';
-  }
-}
+    for (let i = 1; i < lines.length; i++) {
+      const cols = lines[i].split(',').map((c) => c.replace(/^"|"$/g, '').trim());
+      if (cols.length < 2) continue;
 
-// History management
-function loadHistory() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY_HISTORY);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
-}
+      const rowObj = {};
+      headers.forEach((h, idx) => {
+        rowObj[h] = cols[idx] || '';
+      });
 
-function saveToHistory(resultData) {
-  if (!resultData || !resultData.items || resultData.items.length === 0) return;
-  const list = loadHistory();
-  const entry = {
-    id: Date.now(),
-    time: new Date().toLocaleString('vi-VN'),
-    convertedText: resultData.convertedText,
-    shopeeCount: resultData.summary?.shopeeCount || 0,
-    tiktokCount: resultData.summary?.tiktokCount || 0
-  };
-  const updated = [entry, ...list].slice(0, 12);
-  localStorage.setItem(STORAGE_KEY_HISTORY, JSON.stringify(updated));
-  renderHistory();
-}
+      const orderSn =
+        rowObj['mã đơn hàng'] || rowObj['order id'] || rowObj['ordersn'] || cols[0];
+      const subId1 =
+        rowObj['sub_id1'] || rowObj['sub id 1'] || rowObj['sub_id'] || 'ADMIN';
+      const commRaw =
+        rowObj['tổng hoa hồng đơn hàng(₫)'] ||
+        rowObj['hoa hồng ròng'] ||
+        rowObj['total commission'] ||
+        rowObj['net commission'] ||
+        '0';
+      const statusRaw = (
+        rowObj['trạng thái đơn hàng'] ||
+        rowObj['order status'] ||
+        ''
+      ).toLowerCase();
 
-function renderHistory() {
-  const list = loadHistory();
-  if (list.length === 0) {
-    historyContainer.innerHTML = '<div class="empty-state-sm">Chưa có lịch sử chuyển đổi nào.</div>';
-    return;
-  }
+      const totalCommission = Number(String(commRaw).replace(/[^\d.]/g, '')) || 0;
+      const status =
+        statusRaw.includes('hoàn thành') || statusRaw.includes('completed')
+          ? 'approved'
+          : statusRaw.includes('huỷ') || statusRaw.includes('cancel')
+          ? 'cancelled'
+          : 'pending';
 
-  historyContainer.innerHTML = list
-    .map(
-      (item) => `
-      <div class="history-item">
-        <div class="history-meta">
-          <span>🕒 ${escapeHtml(item.time)}</span>
-          <span>🟠 ${item.shopeeCount} Shopee | ⚫ ${item.tiktokCount} TikTok</span>
-        </div>
-        <div class="history-preview">${escapeHtml(item.convertedText)}</div>
-        <div style="display:flex;justify-content:flex-end;margin-top:4px;">
-          <button type="button" class="btn btn-secondary btn-sm" data-copy="${escapeHtml(
-            item.convertedText
-          )}">📋 Copy lại bài này</button>
-        </div>
-      </div>
-    `
-    )
-    .join('');
-}
-
-// Event Listeners
-inputText.addEventListener('input', updateLiveBadges);
-
-inputText.addEventListener('keydown', (e) => {
-  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-    e.preventDefault();
-    handleConvert();
-  }
-});
-
-convertBtn.addEventListener('click', handleConvert);
-
-copyAllTextBtn.addEventListener('click', () => {
-  if (outputText.value) {
-    copyToClipboard(outputText.value, 'Đã copy toàn bộ bài viết đã đổi link!');
-  }
-});
-
-pasteClipboardBtn.addEventListener('click', async () => {
-  try {
-    const clip = await navigator.clipboard.readText();
-    if (clip) {
-      inputText.value = clip;
-      updateLiveBadges();
-      showToast('📋 Đã dán nội dung từ Clipboard!');
+      if (orderSn) {
+        rows.push({
+          orderSn,
+          userCode: subId1 || 'ADMIN',
+          totalCommission,
+          status
+        });
+      }
     }
-  } catch {
-    showToast('⚠️ Hãy nhấn Ctrl+V vào ô văn bản để dán.');
-    inputText.focus();
-  }
-});
 
-sampleBtn.addEventListener('click', () => {
-  if (!quickShopeeId.value.trim()) {
-    quickShopeeId.value = '17388899900';
-  }
-  inputText.value = [
-    '🔥 Tổng hợp deal hời hôm nay cho cả nhà:',
-    '1. Tai nghe Bluetooth chống ồn trên Shopee: https://shopee.vn/Tai-nghe-i.12345678.9876543210?sp_atk=abc123&utm_source=someone_else',
-    '2. Link rút gọn có gắn mã của người khác: https://s.shopee.vn/an_redir?origin_link=https%3A%2F%2Fshopee.vn%2Fproduct%2F88776655%2F1122334455&affiliate_id=9999999',
-    '3. Áo thun boxy trên TikTok Shop: https://shop.tiktok.com/view/product/1729584930291827364?checksum=old_aff_code&sec_uid=xxx'
-  ].join('\n\n');
-  updateLiveBadges();
-  showToast('🧪 Đã nạp bài viết mẫu! Hãy bấm "Chuyển đổi sang Link Affiliate".');
-});
-
-clearBtn.addEventListener('click', () => {
-  inputText.value = '';
-  outputText.value = '';
-  copyAllTextBtn.disabled = true;
-  updateLiveBadges();
-  linkCountLabel.textContent = '0';
-  summaryStats.textContent = '';
-  linkCardsContainer.innerHTML = `
-    <div class="empty-state">
-      Dán link ở cột bên trái và bấm <strong>"Chuyển đổi sang Link Affiliate"</strong> để xem chi tiết từng sản phẩm.
-    </div>`;
-});
-
-// Quick bar auto-save
-[quickShopeeId, quickTikTokMode, quickSubId, quickShortener].forEach((el) => {
-  el.addEventListener('change', () => {
-    saveConfig({
-      shopeeAffiliateId: quickShopeeId.value.trim(),
-      tiktokMode: quickTikTokMode.value,
-      subId: quickSubId.value.trim(),
-      shortenerProvider: quickShortener.value
+    const res = await apiFetch('/api/admin/import-orders', {
+      method: 'POST',
+      body: JSON.stringify({ rows })
     });
-  });
-});
-
-// Delegate copy buttons in cards and history
-document.body.addEventListener('click', (e) => {
-  const copyBtn = e.target.closest('[data-copy]');
-  if (copyBtn) {
-    const val = copyBtn.getAttribute('data-copy');
-    if (val) copyToClipboard(val);
-    return;
-  }
-
-  const guideBtn = e.target.closest('[data-open-guide]');
-  if (guideBtn) {
-    const target = guideBtn.getAttribute('data-open-guide');
-    openModalWithTab(target === 'tiktok' ? 'tab-tiktok' : 'tab-shopee');
+    showToast(`🎉 Đã nhập thành công ${res.importedCount} đơn hàng và chia 70/30!`);
+    loadAdminDashboard();
+  } catch (err) {
+    showToast(`❌ Lỗi đọc file CSV: ${err.message}`);
+  } finally {
+    e.target.value = '';
   }
 });
 
-// Modal logic
-function openModalWithTab(tabId = 'tab-shopee') {
-  syncUiFromConfig();
-  settingsModal.classList.remove('hidden');
-  document.querySelectorAll('.tab-btn').forEach((b) => {
-    b.classList.toggle('active', b.getAttribute('data-tab') === tabId);
-  });
-  document.querySelectorAll('.tab-content').forEach((c) => {
-    c.classList.toggle('active', c.id === tabId);
-  });
+// Boot
+initPublicConfig();
+syncAuthUi();
+if (authToken) {
+  loadUserDashboard();
 }
-
-openSettingsBtn.addEventListener('click', () => openModalWithTab('tab-shopee'));
-shopeeStatusPill.addEventListener('click', () => openModalWithTab('tab-shopee'));
-tiktokStatusPill.addEventListener('click', () => openModalWithTab('tab-tiktok'));
-
-closeSettingsBtn.addEventListener('click', () => {
-  settingsModal.classList.add('hidden');
-});
-
-settingsModal.addEventListener('click', (e) => {
-  if (e.target === settingsModal) settingsModal.classList.add('hidden');
-});
-
-document.querySelectorAll('.tab-btn').forEach((btn) => {
-  btn.addEventListener('click', () => {
-    const tabId = btn.getAttribute('data-tab');
-    openModalWithTab(tabId);
-  });
-});
-
-saveSettingsBtn.addEventListener('click', () => {
-  saveConfig({
-    shopeeMode: modalShopeeMode.value,
-    shopeeAffiliateId: modalShopeeId.value.trim(),
-    shopeeAppId: modalShopeeAppId.value.trim(),
-    shopeeAppSecret: modalShopeeAppSecret.value.trim(),
-    tiktokMode: modalTikTokMode.value,
-    tiktokAppKey: modalTikTokAppKey.value.trim(),
-    tiktokAppSecret: modalTikTokAppSecret.value.trim(),
-    tiktokAccessToken: modalTikTokAccessToken.value.trim(),
-    tiktokCookie: modalTikTokCookie.value.trim(),
-    tiktokDeepLinkTemplate: modalTikTokDeepLink.value.trim()
-  });
-  settingsModal.classList.add('hidden');
-  showToast('💾 Đã lưu cài đặt tài khoản Affiliate!');
-});
-
-clearHistoryBtn.addEventListener('click', () => {
-  localStorage.removeItem(STORAGE_KEY_HISTORY);
-  renderHistory();
-  showToast('🗑️ Đã xoá lịch sử chuyển đổi.');
-});
-
-// Initialize on page load
-syncUiFromConfig();
-renderHistory();
-updateLiveBadges();
