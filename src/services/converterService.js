@@ -1,33 +1,43 @@
+const crypto = require('crypto');
 const logger = require('../utils/logger');
 const {
   extractUrlsFromText,
   detectPlatform,
-  unshortenUrl,
+  safeResolve,
   cleanShopeeUrl,
   cleanTikTokUrl
 } = require('./urlResolver');
 const { convertShopeeLink } = require('./shopeeService');
 const { convertTikTokLink } = require('./tiktokService');
 
+function generateClickId() {
+  return crypto.randomBytes(8).toString('hex');
+}
+
 /**
- * Process a single URL: resolve redirects, detect platform, clean tracking, and convert to affiliate link.
+ * Process a single URL: safeResolve (SSRF-protected), detect platform, generate random click_id, convert.
  */
 async function processSingleUrl(originalUrl, config = {}) {
   logger.logEnter('processSingleUrl', { originalUrl });
   try {
-    // Step 1: Unshorten / resolve redirects
-    const { resolvedUrl, htmlSnippet } = await unshortenUrl(originalUrl);
-
-    // Step 2: Detect platform on the resolved URL (or original URL)
+    const { resolvedUrl, htmlSnippet } = await safeResolve(originalUrl);
     let platform = detectPlatform(resolvedUrl);
-    if (platform === 'unknown' || platform === 'shortener') {
+    if (platform === 'unknown') {
       platform = detectPlatform(originalUrl);
     }
 
-    if (platform === 'shopee') {
-      const cleanInfo = cleanShopeeUrl(resolvedUrl);
-      const conv = await convertShopeeLink(cleanInfo, config);
+    // Generate unique opaque click_id (16 hex chars, alphanumeric for Shopee Sub_id compatibility)
+    const clickId = generateClickId();
+    const perClickConfig = {
+      ...config,
+      subId: clickId
+    };
 
+    if (platform === 'shopee') {
+      const cleanInfo = cleanShopeeUrl(resolvedUrl, htmlSnippet);
+      const conv = await convertShopeeLink(cleanInfo, perClickConfig);
+
+      const meta = conv.productMeta || {};
       const itemResult = {
         originalUrl,
         resolvedUrl,
@@ -37,23 +47,24 @@ async function processSingleUrl(originalUrl, config = {}) {
         shopId: cleanInfo.shopId,
         itemId: cleanInfo.itemId,
         productId: cleanInfo.itemId,
+        clickId,
+        productName: meta.productName || cleanInfo.titleHint || 'Sản phẩm Shopee',
+        imageUrl: meta.imageUrl || '',
+        price: meta.price || 0,
+        commissionRate: meta.commissionRate || 0,
         affiliateUrl: conv.affiliateUrl,
         fullAffiliateUrl: conv.fullAffiliateUrl,
         usedMethod: conv.usedMethod,
         note: conv.note || '',
         status: 'success'
       };
-      logger.logLeave('processSingleUrl', {
-        originalUrl,
-        platform: 'shopee',
-        affiliateUrl: itemResult.affiliateUrl
-      });
+      logger.logLeave('processSingleUrl', { platform: 'shopee', clickId });
       return itemResult;
     }
 
     if (platform === 'tiktok') {
       const cleanInfo = cleanTikTokUrl(resolvedUrl, htmlSnippet);
-      const conv = await convertTikTokLink(cleanInfo, config);
+      const conv = await convertTikTokLink(cleanInfo, perClickConfig);
 
       const itemResult = {
         originalUrl,
@@ -62,45 +73,37 @@ async function processSingleUrl(originalUrl, config = {}) {
         platform: 'tiktok',
         linkType: cleanInfo.linkType,
         productId: conv.productId,
-        affiliateCenterUrl: conv.affiliateCenterUrl,
+        clickId,
+        productName: cleanInfo.titleHint || 'Sản phẩm TikTok Shop',
+        imageUrl: '',
+        price: 0,
+        commissionRate: 0,
         affiliateUrl: conv.affiliateUrl,
         fullAffiliateUrl: conv.fullAffiliateUrl,
         usedMethod: conv.usedMethod,
         note: conv.note || '',
         status: 'success'
       };
-      logger.logLeave('processSingleUrl', {
-        originalUrl,
-        platform: 'tiktok',
-        affiliateUrl: itemResult.affiliateUrl
-      });
+      logger.logLeave('processSingleUrl', { platform: 'tiktok', clickId });
       return itemResult;
     }
 
-    // Unsupported / non-affiliate URL: keep as-is
-    logger.warning('processSingleUrl', 'URL is neither Shopee nor TikTok', {
-      originalUrl,
-      resolvedUrl
-    });
     return {
       originalUrl,
       resolvedUrl,
       cleanUrl: resolvedUrl,
       platform: 'other',
       affiliateUrl: originalUrl,
-      usedMethod: 'Giữ nguyên (Không phải link Shopee/TikTok)',
+      usedMethod: 'Không hỗ trợ',
       status: 'skipped'
     };
   } catch (err) {
-    logger.error('processSingleUrl', 'Error converting URL', {
-      originalUrl,
-      error: err.message
-    });
+    logger.error('processSingleUrl', 'Error converting URL', { error: err.message });
     return {
       originalUrl,
       resolvedUrl: originalUrl,
       cleanUrl: originalUrl,
-      platform: detectPlatform(originalUrl),
+      platform: 'unknown',
       affiliateUrl: originalUrl,
       usedMethod: 'Lỗi chuyển đổi',
       error: err.message,
@@ -109,9 +112,6 @@ async function processSingleUrl(originalUrl, config = {}) {
   }
 }
 
-/**
- * Process an entire text block containing one or multiple Shopee / TikTok links.
- */
 async function convertTextLinks(inputText, config = {}) {
   logger.logEnter('convertTextLinks', { textLength: inputText ? inputText.length : 0 });
 
@@ -122,23 +122,14 @@ async function convertTextLinks(inputText, config = {}) {
       originalText: inputText,
       convertedText: inputText,
       items: [],
-      summary: {
-        total: 0,
-        shopeeCount: 0,
-        tiktokCount: 0,
-        successCount: 0,
-        errorCount: 0
-      }
+      summary: { total: 0, shopeeCount: 0, tiktokCount: 0, successCount: 0, errorCount: 0 }
     };
   }
 
-  // Process all unique URLs concurrently
   const items = await Promise.all(urls.map((u) => processSingleUrl(u, config)));
 
-  // Replace URLs in the original text (sort by length descending to prevent partial prefix replacements)
   let convertedText = inputText;
   const sortedItems = [...items].sort((a, b) => b.originalUrl.length - a.originalUrl.length);
-
   for (const item of sortedItems) {
     if (item.status === 'success' && item.affiliateUrl) {
       convertedText = convertedText.split(item.originalUrl).join(item.affiliateUrl);
@@ -164,5 +155,6 @@ async function convertTextLinks(inputText, config = {}) {
 
 module.exports = {
   processSingleUrl,
-  convertTextLinks
+  convertTextLinks,
+  generateClickId
 };

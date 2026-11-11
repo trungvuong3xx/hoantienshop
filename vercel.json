@@ -5,7 +5,25 @@
       "maxDuration": 30
     }
   },
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "Referrer-Policy", "value": "no-referrer" },
+        { "key": "X-Frame-Options", "value": "DENY" },
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "Strict-Transport-Security", "value": "max-age=63072000; includeSubDomains; preload" }
+      ]
+    }
+  ],
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/index.js" }
+    { "source": "/api/(.*)", "destination": "/api/index.js" },
+    { "source": "/go/(.*)", "destination": "/api/index.js" }
+  ],
+  "crons": [
+    {
+      "path": "/api/cron/sync-shopee",
+      "schedule": "0 3 * * *"
+    }
   ]
 }

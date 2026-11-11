@@ -245,7 +245,7 @@ body {
   border: 1px solid var(--border);
 }
 
-/* Clean Single-Line Search Bar (Like hoantien.com) */
+/* Search Bar */
 .search-bar-wrap {
   width: 100%;
   max-width: 760px;
@@ -356,6 +356,41 @@ body {
   border-radius: 999px;
 }
 
+.product-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: var(--bg-page);
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+}
+
+.product-thumb {
+  width: 64px;
+  height: 64px;
+  border-radius: 10px;
+  object-fit: cover;
+  border: 1px solid var(--border);
+  background: #fff;
+  flex-shrink: 0;
+}
+
+.product-meta-info h4 {
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--text-main);
+  margin-bottom: 4px;
+}
+
+.product-meta-sub {
+  font-size: 13px;
+  color: var(--text-sub);
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
 .cp-body-flex {
   display: flex;
   gap: 18px;
@@ -406,6 +441,74 @@ body {
   font-size: 12.5px;
   padding: 10px 14px;
   border-radius: 10px;
+}
+
+.inline-link {
+  background: none;
+  border: none;
+  color: var(--shopee);
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: underline;
+  font-family: inherit;
+}
+
+/* Referral & Order Sync Notices */
+.referral-banner {
+  background: linear-gradient(135deg, #f0fdf4, #ffffff);
+  border-color: #a7f3d0;
+  margin-bottom: 20px;
+}
+
+.referral-flex {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.ref-link-group {
+  display: flex;
+  gap: 8px;
+  min-width: 280px;
+  flex: 1;
+  max-width: 420px;
+}
+
+.order-sync-notice {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1e40af;
+  font-size: 12.5px;
+  padding: 10px 14px;
+  border-radius: 10px;
+}
+
+/* FAQ & Legal */
+.faq-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 6px;
+}
+
+.faq-item {
+  background: var(--bg-page);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 16px;
+}
+
+.faq-item h4 {
+  font-size: 14.5px;
+  color: var(--text-main);
+  margin-bottom: 6px;
+}
+
+.faq-item p {
+  font-size: 13.5px;
+  color: var(--text-sub);
 }
 
 /* Section Blocks (Roadmap & 5 Golden Rules) */
@@ -860,7 +963,7 @@ select:focus {
   align-items: flex-start;
   background: var(--bg-page);
   padding: 16px;
-  border-radius: var(--radius-md);
+  border-radius: 10px;
   border: 1px solid var(--border);
 }
 
@@ -890,10 +993,10 @@ select:focus {
 .footer-sub {
   font-size: 12px;
   color: var(--text-muted);
-  margin-top: 4px;
+  margin-top: 6px;
 }
 
-/* Auth Modal */
+/* Modals */
 .modal-backdrop {
   position: fixed;
   inset: 0;

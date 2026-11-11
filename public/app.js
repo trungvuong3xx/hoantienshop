@@ -11,10 +11,17 @@ try {
 let publicConfig = {
   siteName: 'HoànTiềnShop',
   cashbackPercent: 70,
+  taxDeductPercent: 10,
   minWithdrawAmount: 50000
 };
 
-// Helpers
+// Capture ?ref=... referral code from URL if present
+const urlParams = new URLSearchParams(window.location.search);
+const urlRefCode = urlParams.get('ref');
+if (urlRefCode) {
+  sessionStorage.setItem('hoantienshop_ref', urlRefCode.trim());
+}
+
 function fmtVnd(amount) {
   return Number(amount || 0).toLocaleString('vi-VN') + 'đ';
 }
@@ -35,7 +42,7 @@ function showToast(msg) {
   showToast._timer = setTimeout(() => t.classList.add('hidden'), 2800);
 }
 
-async function copyText(text, msg = 'Đã sao chép liên kết thành công!') {
+async function copyText(text, msg = 'Đã sao chép thành công!') {
   try {
     await navigator.clipboard.writeText(text);
     showToast(msg);
@@ -60,6 +67,9 @@ async function apiFetch(url, options = {}) {
   }
   const res = await fetch(url, { ...options, headers });
   const data = await res.json().catch(() => ({}));
+  if (res.status === 401 && authToken && !url.includes('/api/auth/')) {
+    clearSession();
+  }
   if (!res.ok) {
     throw new Error(data.error || `Lỗi kết nối (${res.status})`);
   }
@@ -100,7 +110,21 @@ document.body.addEventListener('click', (e) => {
   const openAuthEl = e.target.closest('[data-open-auth]');
   if (openAuthEl) {
     openAuthModal(openAuthEl.getAttribute('data-open-auth') || 'login');
+    return;
   }
+
+  const qrBtn = e.target.closest('[data-vietqr]');
+  if (qrBtn) {
+    const imgUrl = qrBtn.getAttribute('data-vietqr');
+    const info = qrBtn.getAttribute('data-vietqr-info') || '';
+    document.getElementById('vietQrModalImg').src = imgUrl;
+    document.getElementById('vietQrModalInfo').textContent = info;
+    document.getElementById('vietQrModal').classList.remove('hidden');
+  }
+});
+
+document.getElementById('closeVietQrModalBtn').addEventListener('click', () => {
+  document.getElementById('vietQrModal').classList.add('hidden');
 });
 
 // Sync Auth UI
@@ -158,6 +182,8 @@ async function initPublicConfig() {
   try {
     const data = await apiFetch('/api/public-config');
     publicConfig = { ...publicConfig, ...data };
+    const rateEl = document.getElementById('heroCashbackRate');
+    if (rateEl) rateEl.textContent = `${publicConfig.cashbackPercent}%`;
     const minLabel = document.getElementById('minWithdrawLabel');
     if (minLabel) minLabel.textContent = fmtVnd(publicConfig.minWithdrawAmount);
   } catch {}
@@ -174,6 +200,12 @@ function openAuthModal(tab = 'login') {
   document.getElementById('registerFormBox').classList.toggle('hidden', tab !== 'register');
   document.getElementById('authModalTitle').textContent =
     tab === 'login' ? 'Đăng nhập tài khoản' : 'Đăng ký tài khoản';
+
+  const savedRef = sessionStorage.getItem('hoantienshop_ref');
+  const regRefInput = document.getElementById('regRefCode');
+  if (savedRef && regRefInput && !regRefInput.value) {
+    regRefInput.value = savedRef;
+  }
 }
 
 document.getElementById('openLoginBtn').addEventListener('click', () => openAuthModal('login'));
@@ -209,10 +241,11 @@ document.getElementById('doRegisterBtn').addEventListener('click', async () => {
   const name = document.getElementById('regName').value.trim();
   const phone = document.getElementById('regPhone').value.trim();
   const password = document.getElementById('regPassword').value;
+  const refCode = document.getElementById('regRefCode').value.trim();
   try {
     const data = await apiFetch('/api/auth/register', {
       method: 'POST',
-      body: JSON.stringify({ name, phone, password })
+      body: JSON.stringify({ name, phone, password, refCode })
     });
     setSession(data.token, data.user);
     authModal.classList.add('hidden');
@@ -285,7 +318,8 @@ async function handleGetCashbackLink() {
 
     const items = (data.items || []).filter((i) => i.status === 'success');
     if (items.length === 0) {
-      showToast('Không tìm thấy link sản phẩm Shopee hoặc TikTok Shop hợp lệ.');
+      const firstErr = data.items?.[0]?.error;
+      showToast(firstErr || 'Không tìm thấy link sản phẩm Shopee hoặc TikTok Shop hợp lệ.');
       return;
     }
 
@@ -308,6 +342,24 @@ async function handleGetCashbackLink() {
           ? '⚫ TikTok Shop'
           : '🔗 Liên kết';
 
+        const thumbHtml = item.imageUrl
+          ? `<img src="${escapeHtml(item.imageUrl)}" alt="Sản phẩm" class="product-thumb" referrerpolicy="no-referrer" />`
+          : `<div class="product-thumb" style="display:flex;align-items:center;justify-content:center;font-size:26px;">🛍️</div>`;
+
+        const priceInfoHtml =
+          item.price > 0
+            ? `<span>Giá bán: <strong>${fmtVnd(item.price)}</strong></span>`
+            : '';
+
+        const estCashbackHtml =
+          item.estimatedCashback > 0
+            ? `<span>Tiền hoàn dự kiến: <strong style="color:#059669;">+${fmtVnd(
+                item.estimatedCashback
+              )}</strong></span>`
+            : `<span>Mức chia sẻ: <strong style="color:#059669;">Hoàn ${
+                item.cashbackPercent || 70
+              }% hoa hồng sàn</strong></span>`;
+
         return `
         <div class="cashback-product-card">
           <div class="cp-top">
@@ -315,23 +367,30 @@ async function handleGetCashbackLink() {
             <span style="font-size:13px;font-weight:700;color:#475569;">${platLabel}</span>
           </div>
 
-          <div style="font-size:13.5px;color:#475569;">
-            Số tiền hoàn thực tế và chi tiết đơn hàng sẽ được hệ thống cập nhật tự động vào ví ngay sau khi bạn mua hàng thành công qua liên kết bên dưới.
+          <div class="product-meta-row">
+            ${thumbHtml}
+            <div class="product-meta-info">
+              <h4>${escapeHtml(item.productName || 'Sản phẩm chính hãng')}</h4>
+              <div class="product-meta-sub">
+                ${priceInfoHtml}
+                ${estCashbackHtml}
+              </div>
+            </div>
           </div>
 
           <div class="cp-body-flex">
             <div class="qr-box" title="Quét mã QR bằng điện thoại để mua hàng nhanh chóng">
-              <img src="${escapeHtml(item.qrUrl)}" alt="QR Mua Hàng" loading="lazy" />
+              <img src="${escapeHtml(item.qrUrl)}" alt="QR Mua Hàng" loading="lazy" referrerpolicy="no-referrer" />
             </div>
 
             <div class="cp-actions-col">
-              <div style="font-size:12.5px;color:#475569;font-weight:600;">Liên kết rút gọn hoàn tiền của bạn:</div>
+              <div style="font-size:12.5px;color:#475569;font-weight:600;">Liên kết mua hàng hoàn tiền của bạn:</div>
               <div class="short-link-box">${escapeHtml(item.affiliateUrl)}</div>
 
               <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:4px;">
                 <a href="${escapeHtml(
                   item.affiliateUrl
-                )}" target="_blank" rel="noopener" class="btn btn-primary" style="flex:1;">
+                )}" target="_blank" rel="noreferrer noopener" class="btn btn-primary" style="flex:1;">
                   Mở Mua Hàng Nhận Hoàn Tiền
                 </a>
                 <button type="button" class="btn btn-outline" data-copy="${escapeHtml(
@@ -359,6 +418,21 @@ async function handleGetCashbackLink() {
 getCashbackLinkBtn.addEventListener('click', handleGetCashbackLink);
 
 // ================= USER WALLET & ORDERS =================
+const wdBankAccountInput = document.getElementById('wdBankAccount');
+const wdPasswordConfirmGroup = document.getElementById('wdPasswordConfirmGroup');
+
+if (wdBankAccountInput) {
+  wdBankAccountInput.addEventListener('input', () => {
+    const savedAcc = currentUser?.bankAccount || '';
+    const newAcc = wdBankAccountInput.value.trim();
+    if (savedAcc && newAcc && newAcc !== savedAcc) {
+      wdPasswordConfirmGroup.classList.remove('hidden');
+    } else {
+      wdPasswordConfirmGroup.classList.add('hidden');
+    }
+  });
+}
+
 async function loadUserDashboard() {
   if (!authToken) return;
   try {
@@ -373,11 +447,19 @@ async function loadUserDashboard() {
     document.getElementById('statTotalEarned').textContent = fmtVnd(currentUser.totalEarned);
     document.getElementById('statWithdrawn').textContent = fmtVnd(currentUser.totalWithdrawn);
 
-    if (currentUser.bankName) document.getElementById('wdBankName').value = currentUser.bankName;
-    if (currentUser.bankAccount)
-      document.getElementById('wdBankAccount').value = currentUser.bankAccount;
-    if (currentUser.bankOwner) document.getElementById('wdBankOwner').value = currentUser.bankOwner;
+    // Referral Info
+    document.getElementById('userRefCount').textContent = data.referralCount || 0;
+    const refLink = `${window.location.origin}/?ref=${encodeURIComponent(currentUser.code)}`;
+    document.getElementById('userReferralLinkInput').value = refLink;
 
+    if (currentUser.bankName) document.getElementById('wdBankName').value = currentUser.bankName;
+    if (currentUser.bankAccount) {
+      document.getElementById('wdBankAccount').value = currentUser.bankAccount;
+    }
+    if (currentUser.bankOwner) document.getElementById('wdBankOwner').value = currentUser.bankOwner;
+    wdPasswordConfirmGroup.classList.add('hidden');
+
+    // Orders
     const ordBody = document.getElementById('userOrdersTableBody');
     const orders = data.orders || [];
     if (orders.length === 0) {
@@ -404,6 +486,30 @@ async function loadUserDashboard() {
         .join('');
     }
 
+    // Ledger
+    const ledBody = document.getElementById('userLedgerTableBody');
+    const ledger = data.ledger || [];
+    if (ledger.length === 0) {
+      ledBody.innerHTML =
+        '<tr><td colspan="3" class="text-center">Chưa có biến động số dư.</td></tr>';
+    } else {
+      ledBody.innerHTML = ledger
+        .map((l) => {
+          const isPos = Number(l.amount) >= 0;
+          const color = isPos ? '#059669' : '#dc2626';
+          const prefix = isPos ? '+' : '';
+          return `
+            <tr>
+              <td>${new Date(l.createdAt).toLocaleDateString('vi-VN')}</td>
+              <td>${escapeHtml(l.note)}</td>
+              <td><strong style="color:${color};">${prefix}${fmtVnd(l.amount)}</strong></td>
+            </tr>
+          `;
+        })
+        .join('');
+    }
+
+    // Withdrawals
     const wdBody = document.getElementById('userWithdrawalsTableBody');
     const wds = data.withdrawals || [];
     if (wds.length === 0) {
@@ -434,6 +540,11 @@ async function loadUserDashboard() {
   }
 }
 
+document.getElementById('copyRefLinkBtn').addEventListener('click', () => {
+  const val = document.getElementById('userReferralLinkInput').value;
+  if (val) copyText(val, 'Đã sao chép liên kết giới thiệu bạn bè!');
+});
+
 document.getElementById('refreshWalletBtn').addEventListener('click', loadUserDashboard);
 
 document.getElementById('submitOrderClaimBtn').addEventListener('click', async () => {
@@ -460,13 +571,22 @@ document.getElementById('submitWithdrawBtn').addEventListener('click', async () 
   const bankAccount = document.getElementById('wdBankAccount').value.trim();
   const bankOwner = document.getElementById('wdBankOwner').value.trim();
   const amount = Number(document.getElementById('wdAmount').value);
+  const currentPassword = document.getElementById('wdCurrentPassword').value;
 
   try {
     await apiFetch('/api/user/withdraw', {
       method: 'POST',
-      body: JSON.stringify({ method, bankName, bankAccount, bankOwner, amount })
+      body: JSON.stringify({
+        method,
+        bankName,
+        bankAccount,
+        bankOwner,
+        amount,
+        currentPassword
+      })
     });
     document.getElementById('wdAmount').value = '';
+    document.getElementById('wdCurrentPassword').value = '';
     showToast('Đã gửi yêu cầu rút tiền thành công!');
     loadUserDashboard();
   } catch (err) {
@@ -478,14 +598,18 @@ document.getElementById('submitWithdrawBtn').addEventListener('click', async () 
 const admOrdCommission = document.getElementById('admOrdCommission');
 const admOrdPreview70 = document.getElementById('admOrdPreview70');
 
+function updateAdminSplitPreview() {
+  const gross = Number(admOrdCommission.value || 0);
+  const taxRate = Number(document.getElementById('admTaxDeductPercent').value ?? 10);
+  const cbRate = Number(document.getElementById('admCashbackPercent').value || 70);
+  const net = Math.round(gross * (1 - taxRate / 100));
+  const userGet = Math.round((net * cbRate) / 100);
+  const adminGet = net - userGet;
+  admOrdPreview70.value = `Khách: ${fmtVnd(userGet)} | Bạn: ${fmtVnd(adminGet)}`;
+}
+
 if (admOrdCommission) {
-  admOrdCommission.addEventListener('input', () => {
-    const comm = Number(admOrdCommission.value || 0);
-    const rate = Number(document.getElementById('admCashbackPercent').value || 70);
-    const userGet = Math.round((comm * rate) / 100);
-    const adminGet = comm - userGet;
-    admOrdPreview70.value = `Khách: ${fmtVnd(userGet)} | Quản trị: ${fmtVnd(adminGet)}`;
-  });
+  admOrdCommission.addEventListener('input', updateAdminSplitPreview);
 }
 
 async function loadAdminDashboard() {
@@ -493,6 +617,19 @@ async function loadAdminDashboard() {
     const data = await apiFetch('/api/admin/dashboard');
     const st = data.stats;
     const s = data.settings;
+    const dbStatus = data.dbStatus || {};
+
+    const dbTextEl = document.getElementById('admDbStatusText');
+    if (dbStatus.mode === 'postgres') {
+      dbTextEl.textContent = '🟢 Đã kết nối Cloud PostgreSQL (Dữ liệu bền vững + Sổ cái Ledger)';
+      dbTextEl.style.color = '#059669';
+    } else if (dbStatus.mode === 'ephemeral_tmp') {
+      dbTextEl.textContent =
+        '🟠 Đang chạy bộ nhớ tạm (/tmp) trên Vercel — Hãy gắn biến DATABASE_URL (Neon/Supabase) trong Vercel Settings để lưu vĩnh viễn.';
+      dbTextEl.style.color = '#d97706';
+    } else {
+      dbTextEl.textContent = '🟢 Chế độ Local JSON (Lưu trên ổ cứng máy tính)';
+    }
 
     document.getElementById('admTotalComm').textContent = fmtVnd(st.totalCommission);
     document.getElementById('admUserShare').textContent = fmtVnd(st.totalUserCashback);
@@ -505,9 +642,10 @@ async function loadAdminDashboard() {
     document.getElementById('admShopeeAppSecret').value = s.shopeeAppSecret || '';
     document.getElementById('admTiktokMode').value = s.tiktokMode || 'clean_extract';
     document.getElementById('admTiktokDeepLink').value = s.tiktokDeepLinkTemplate || '';
+    document.getElementById('admTaxDeductPercent').value = s.taxDeductPercent ?? 10;
     document.getElementById('admCashbackPercent').value = s.cashbackPercent || 70;
     document.getElementById('admMinWithdraw').value = s.minWithdrawAmount || 50000;
-    document.getElementById('admShortener').value = s.shortenerProvider || 'isgd';
+    document.getElementById('admShortener').value = s.shortenerProvider || 'none';
     document.getElementById('admSupportZalo').value = s.supportZalo || '';
 
     const ordTbody = document.getElementById('admOrdersTableBody');
@@ -517,7 +655,7 @@ async function loadAdminDashboard() {
       <tr>
         <td><strong>${escapeHtml(o.orderSn)}</strong></td>
         <td>${escapeHtml(o.userCode || 'GUEST')}</td>
-        <td>${fmtVnd(o.totalCommission)}</td>
+        <td>${fmtVnd(o.netCommission || o.totalCommission)}</td>
         <td><strong style="color:#059669;">${fmtVnd(o.userCashbackAmount)}</strong></td>
         <td>
           <span class="status-badge st-${o.status}">${
@@ -531,7 +669,7 @@ async function loadAdminDashboard() {
         <td>
           <button type="button" class="btn btn-success btn-sm" data-approve-ord="${escapeHtml(
             o.orderSn
-          )}" data-comm="${o.totalCommission}" data-ucode="${escapeHtml(
+          )}" data-comm="${o.grossCommission || o.totalCommission}" data-ucode="${escapeHtml(
           o.userCode
         )}">Duyệt</button>
         </td>
@@ -547,26 +685,34 @@ async function loadAdminDashboard() {
         '<tr><td colspan="5" class="text-center">Chưa có lệnh rút tiền nào.</td></tr>';
     } else {
       wdTbody.innerHTML = wds
-        .map(
-          (w) => `
+        .map((w) => {
+          const qrBtnHtml = w.vietQrUrl
+            ? `<button type="button" class="btn btn-outline btn-sm" data-vietqr="${escapeHtml(
+                w.vietQrUrl
+              )}" data-vietqr-info="${escapeHtml(w.bankName)} - ${escapeHtml(
+                w.bankAccount
+              )} (${escapeHtml(w.bankOwner)}): ${fmtVnd(w.amount)}">📱 Quét QR</button>`
+            : '<span style="font-size:12px;color:#64748b;">Chuyển tay</span>';
+
+          return `
         <tr>
           <td><strong>${escapeHtml(w.userName)}</strong> (${escapeHtml(w.userPhone)})</td>
           <td><strong style="color:#dc2626;">${fmtVnd(w.amount)}</strong></td>
           <td>${escapeHtml(w.bankName)} - <strong>${escapeHtml(
             w.bankAccount
           )}</strong> (${escapeHtml(w.bankOwner)})</td>
-          <td><span class="status-badge st-${w.status}">${w.status}</span></td>
+          <td>${qrBtnHtml}</td>
           <td>
             ${
               w.status === 'pending'
                 ? `<button type="button" class="btn btn-success btn-sm" data-wd-action="paid" data-wd-id="${w.id}">Đã chuyển</button>
                    <button type="button" class="btn btn-ghost btn-sm" data-wd-action="rejected" data-wd-id="${w.id}">Từ chối</button>`
-                : 'Đã xử lý'
+                : `<span class="status-badge st-${w.status}">${w.status}</span>`
             }
           </td>
         </tr>
-      `
-        )
+      `;
+        })
         .join('');
     }
 
@@ -590,6 +736,22 @@ async function loadAdminDashboard() {
 
 document.getElementById('refreshAdminBtn').addEventListener('click', loadAdminDashboard);
 
+document.getElementById('syncShopeeNowBtn').addEventListener('click', async () => {
+  const btn = document.getElementById('syncShopeeNowBtn');
+  btn.disabled = true;
+  btn.textContent = 'Đang đồng bộ...';
+  try {
+    const res = await apiFetch('/api/admin/sync-shopee', { method: 'POST', body: '{}' });
+    showToast(`Đã đồng bộ tự động ${res.syncedCount || 0} đơn hàng từ Shopee Open API!`);
+    loadAdminDashboard();
+  } catch (err) {
+    showToast(err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '🔄 Đồng bộ đơn từ Shopee Open API';
+  }
+});
+
 document.getElementById('saveAdminSettingsBtn').addEventListener('click', async () => {
   try {
     await apiFetch('/api/admin/settings', {
@@ -601,6 +763,7 @@ document.getElementById('saveAdminSettingsBtn').addEventListener('click', async 
         shopeeAppSecret: document.getElementById('admShopeeAppSecret').value.trim(),
         tiktokMode: document.getElementById('admTiktokMode').value,
         tiktokDeepLinkTemplate: document.getElementById('admTiktokDeepLink').value.trim(),
+        taxDeductPercent: Number(document.getElementById('admTaxDeductPercent').value ?? 10),
         cashbackPercent: Number(document.getElementById('admCashbackPercent').value || 70),
         minWithdrawAmount: Number(document.getElementById('admMinWithdraw').value || 50000),
         shortenerProvider: document.getElementById('admShortener').value,
@@ -639,7 +802,7 @@ document.getElementById('admSaveOrderBtn').addEventListener('click', async () =>
     });
     document.getElementById('admOrdSn').value = '';
     document.getElementById('admOrdCommission').value = '';
-    showToast('Đã lưu đơn hàng thành công!');
+    showToast('Đã lưu đơn hàng & ghi nhận vào sổ cái!');
     loadAdminDashboard();
   } catch (err) {
     showToast(err.message);
