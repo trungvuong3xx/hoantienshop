@@ -17,6 +17,7 @@ const {
 } = require('./dbService');
 const { convertTextLinks } = require('./converterService');
 const { fetchShopeeConversionReport } = require('./shopeeService');
+const { fetchAccessTradeOrders } = require('./tiktokService');
 const { isAllowedHost } = require('./urlResolver');
 const {
   getClientIp,
@@ -57,6 +58,121 @@ function maskSecret(val) {
   return '********';
 }
 
+function normalizeNetworkStatus(rawStatus) {
+  const s = String(rawStatus ?? '').trim().toUpperCase();
+  if (s === '1' || s === 'COMPLETED' || s === 'APPROVED' || s.includes('HOÀN THÀNH') || s.includes('ĐÃ DUYỆT')) {
+    return 'approved';
+  }
+  if (
+    s === '2' ||
+    s === '-1' ||
+    s === 'CANCELLED' ||
+    s === 'INVALID' ||
+    s === 'REJECTED' ||
+    s.includes('HUỶ') ||
+    s.includes('HỦY')
+  ) {
+    return 'cancelled';
+  }
+  return 'pending';
+}
+
+/**
+ * Shared order upsert that automatically maps clickId (sub_id / sub1) -> userId,
+ * preserves user-claimed orders, and calculates post-tax 70/30 cashback split.
+ */
+function upsertNetworkOrder(db, {
+  orderSn,
+  rawSubId,
+  grossCommission,
+  orderAmount,
+  status,
+  platform,
+  productName
+}) {
+  const cleanSn = String(orderSn || '').trim().toUpperCase();
+  if (!cleanSn) return null;
+
+  const cleanSub = String(rawSubId || '').split('-')[0].trim();
+  const clickRecord = cleanSub
+    ? db.clicks.find((c) => c.clickId === cleanSub)
+    : null;
+
+  const matchedUser = clickRecord?.userId
+    ? db.users.find((u) => u.id === clickRecord.userId)
+    : cleanSub
+    ? db.users.find(
+        (u) => u.code.toUpperCase() === cleanSub.toUpperCase() || u.phone === cleanSub
+      )
+    : null;
+
+  const split = calculateCommissionSplit(
+    Number(grossCommission || 0),
+    db.settings.cashbackPercent,
+    db.settings.taxDeductPercent
+  );
+
+  const normalizedPlatform =
+    String(platform || clickRecord?.platform || '').toLowerCase() === 'tiktok'
+      ? 'tiktok'
+      : 'shopee';
+
+  const existing = db.orders.find((o) => o.orderSn.toUpperCase() === cleanSn);
+  if (existing) {
+    existing.grossCommission = split.grossCommission;
+    existing.taxAmount = split.taxAmount;
+    existing.netCommission = split.netCommission;
+    existing.totalCommission = split.netCommission;
+    existing.cashbackRate = split.cashbackRate;
+    existing.userCashbackAmount = split.userCashbackAmount;
+    existing.adminShareAmount = split.adminShareAmount;
+    if (Number(orderAmount) > 0) {
+      existing.orderAmount = Number(orderAmount);
+    }
+    if (productName && (!existing.productName || existing.productName.startsWith('Đơn'))) {
+      existing.productName = productName;
+    }
+    if (status) {
+      existing.status = status;
+    }
+    if (!existing.clickId && cleanSub) {
+      existing.clickId = cleanSub;
+    }
+    // Attach matchedUser if order was previously GUEST/unassigned; preserve existing userId if user claimed early
+    if (!existing.userId && matchedUser) {
+      existing.userId = matchedUser.id;
+      existing.userCode = matchedUser.code;
+    }
+    existing.updatedAt = new Date().toISOString();
+    return existing;
+  }
+
+  const created = {
+    id: `ord_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`,
+    orderSn: cleanSn,
+    platform: normalizedPlatform,
+    clickId: clickRecord ? clickRecord.clickId : cleanSub || null,
+    userCode: matchedUser ? matchedUser.code : cleanSub || 'GUEST',
+    userId: matchedUser ? matchedUser.id : null,
+    productName:
+      productName ||
+      `Đơn ${normalizedPlatform === 'tiktok' ? 'TikTok' : 'Shopee'} #${cleanSn}`,
+    orderAmount: Number(orderAmount || 0),
+    grossCommission: split.grossCommission,
+    taxAmount: split.taxAmount,
+    netCommission: split.netCommission,
+    totalCommission: split.netCommission,
+    cashbackRate: split.cashbackRate,
+    userCashbackAmount: split.userCashbackAmount,
+    adminShareAmount: split.adminShareAmount,
+    status: status || 'pending',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+  db.orders.unshift(created);
+  return created;
+}
+
 /**
  * Shared logic to synchronize orders from Shopee Open API conversionReport.
  */
@@ -76,78 +192,172 @@ async function runShopeeAutoSync() {
 
   for (const node of reportNodes) {
     const rawSubId = String(node.utmContent || '').split('-')[0].trim();
-    const clickRecord = rawSubId
-      ? db.clicks.find((c) => c.clickId === rawSubId)
-      : null;
-
-    const matchedUser = clickRecord?.userId
-      ? db.users.find((u) => u.id === clickRecord.userId)
-      : db.users.find((u) => u.code.toUpperCase() === rawSubId.toUpperCase());
-
     const grossComm = Number(node.netCommission || node.totalCommission || 0);
-    const split = calculateCommissionSplit(
-      grossComm,
-      s.cashbackPercent,
-      s.taxDeductPercent
-    );
-
     const subOrders = Array.isArray(node.orders) ? node.orders : [];
+
     for (const ord of subOrders) {
       const orderSn = String(ord.orderId || '').trim().toUpperCase();
       if (!orderSn) continue;
 
-      const statusRaw = String(ord.orderStatus || '').toUpperCase();
-      const status =
-        statusRaw === 'COMPLETED'
-          ? 'approved'
-          : statusRaw === 'CANCELLED' || statusRaw === 'INVALID'
-          ? 'cancelled'
-          : 'pending';
-
+      const status = normalizeNetworkStatus(ord.orderStatus);
       const firstItem = ord.items?.[0];
       const productName = firstItem?.itemName || `Đơn Shopee #${orderSn}`;
       const orderAmount = Number(firstItem?.itemPrice || 0);
 
-      const existing = db.orders.find((o) => o.orderSn.toUpperCase() === orderSn);
-      if (existing) {
-        existing.grossCommission = split.grossCommission;
-        existing.taxAmount = split.taxAmount;
-        existing.netCommission = split.netCommission;
-        existing.totalCommission = split.netCommission;
-        existing.userCashbackAmount = split.userCashbackAmount;
-        existing.adminShareAmount = split.adminShareAmount;
-        existing.status = status;
-        existing.updatedAt = new Date().toISOString();
-      } else {
-        db.orders.unshift({
-          id: `ord_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`,
-          orderSn,
-          platform: 'shopee',
-          clickId: rawSubId || null,
-          userCode: matchedUser ? matchedUser.code : rawSubId || 'GUEST',
-          userId: matchedUser ? matchedUser.id : null,
-          productName,
-          orderAmount,
-          grossCommission: split.grossCommission,
-          taxAmount: split.taxAmount,
-          netCommission: split.netCommission,
-          totalCommission: split.netCommission,
-          cashbackRate: split.cashbackRate,
-          userCashbackAmount: split.userCashbackAmount,
-          adminShareAmount: split.adminShareAmount,
-          status,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        });
-      }
+      upsertNetworkOrder(db, {
+        orderSn,
+        rawSubId,
+        grossCommission: grossComm,
+        orderAmount,
+        status,
+        platform: 'shopee',
+        productName
+      });
       syncedCount++;
     }
   }
 
+  db.settings.lastAutoSyncAt = new Date().toISOString();
   recalculateAllWallets();
   saveDb(db);
   logger.logLeave('runShopeeAutoSync', { syncedCount });
   return { syncedCount };
+}
+
+/**
+ * Shared logic to synchronize orders from AccessTrade Publisher API (/v1/orders).
+ */
+async function runAccessTradeAutoSync() {
+  logger.logEnter('runAccessTradeAutoSync');
+  const db = ensureDbLoaded();
+  const s = db.settings;
+  const apiKey = process.env.ACCESSTRADE_API_KEY || s.accesstradeApiKey;
+
+  if (!apiKey) {
+    throw new Error('Chưa cấu hình AccessTrade API Key để đồng bộ đơn TikTok/AccessTrade tự động.');
+  }
+
+  const rows = await fetchAccessTradeOrders(apiKey, 30);
+  let syncedCount = 0;
+
+  for (const row of rows) {
+    const orderSn = String(
+      row.order_id || row.conversion_id || row.transaction_id || ''
+    )
+      .trim()
+      .toUpperCase();
+    if (!orderSn) continue;
+
+    const rawSubId = String(row.sub1 || row.utm_source || '').trim();
+    const grossComm = Number(
+      row.pub_commission ?? row.reward ?? row.commission ?? 0
+    );
+    const orderAmount = Number(
+      row.billing ?? row.total_amount ?? row.amount ?? 0
+    );
+    const status = normalizeNetworkStatus(
+      row.status ?? row.order_status ?? row.approval_status
+    );
+    const merchantRaw = String(row.merchant || '').toLowerCase();
+    const platform = merchantRaw.includes('shopee') ? 'shopee' : 'tiktok';
+    const firstProd = Array.isArray(row.products) ? row.products[0] : null;
+    const productName =
+      firstProd?.name ||
+      row.product_name ||
+      `Đơn ${platform === 'tiktok' ? 'TikTok' : 'Shopee'} #${orderSn}`;
+
+    upsertNetworkOrder(db, {
+      orderSn,
+      rawSubId,
+      grossCommission: grossComm,
+      orderAmount,
+      status,
+      platform,
+      productName
+    });
+    syncedCount++;
+  }
+
+  db.settings.lastAutoSyncAt = new Date().toISOString();
+  recalculateAllWallets();
+  saveDb(db);
+  logger.logLeave('runAccessTradeAutoSync', { syncedCount });
+  return { syncedCount };
+}
+
+/**
+ * Run all configured auto-sync providers (Shopee Open API + AccessTrade API).
+ */
+async function runAutoSyncAll({ requireAtLeastOne = false } = {}) {
+  logger.logEnter('runAutoSyncAll');
+  const db = ensureDbLoaded();
+  const s = db.settings;
+  const hasShopee = Boolean((process.env.SHOPEE_APP_ID || s.shopeeAppId) && (process.env.SHOPEE_APP_SECRET || s.shopeeAppSecret));
+  const hasAccessTrade = Boolean(process.env.ACCESSTRADE_API_KEY || s.accesstradeApiKey);
+
+  if (requireAtLeastOne && !hasShopee && !hasAccessTrade) {
+    throw new Error(
+      'Chưa cấu hình AccessTrade API Key hoặc Shopee Open API. Lưu ý: Bạn vẫn nhận đơn tự động qua Link Postback AccessTrade bên dưới!'
+    );
+  }
+
+  let shopeeSynced = 0;
+  let accesstradeSynced = 0;
+  const errors = [];
+
+  if (hasShopee) {
+    try {
+      const r = await runShopeeAutoSync();
+      shopeeSynced = r.syncedCount;
+    } catch (err) {
+      errors.push(`Shopee: ${err.message}`);
+    }
+  }
+
+  if (hasAccessTrade) {
+    try {
+      const r = await runAccessTradeAutoSync();
+      accesstradeSynced = r.syncedCount;
+    } catch (err) {
+      errors.push(`AccessTrade: ${err.message}`);
+    }
+  }
+
+  db.settings.lastAutoSyncAt = new Date().toISOString();
+  saveDb(db);
+  const out = {
+    shopeeSynced,
+    accesstradeSynced,
+    syncedCount: shopeeSynced + accesstradeSynced,
+    errors,
+    lastAutoSyncAt: db.settings.lastAutoSyncAt
+  };
+  logger.logLeave('runAutoSyncAll', out);
+  return out;
+}
+
+let isAutoSyncInFlight = false;
+function triggerLazyAutoSyncIfNeeded() {
+  if (isAutoSyncInFlight) return;
+  try {
+    const db = ensureDbLoaded();
+    const s = db.settings;
+    const hasShopee = Boolean((process.env.SHOPEE_APP_ID || s.shopeeAppId) && (process.env.SHOPEE_APP_SECRET || s.shopeeAppSecret));
+    const hasAccessTrade = Boolean(process.env.ACCESSTRADE_API_KEY || s.accesstradeApiKey);
+    if (!hasShopee && !hasAccessTrade) return;
+
+    const lastMs = s.lastAutoSyncAt ? new Date(s.lastAutoSyncAt).getTime() : 0;
+    if (Date.now() - lastMs < 10 * 60 * 1000) return; // Synced within last 10 mins
+
+    isAutoSyncInFlight = true;
+    runAutoSyncAll({ requireAtLeastOne: false })
+      .catch((err) => {
+        logger.warning('triggerLazyAutoSyncIfNeeded', 'Background sync warning', { error: err.message });
+      })
+      .finally(() => {
+        isAutoSyncInFlight = false;
+      });
+  } catch {}
 }
 
 function registerCashbackRoutes(app) {
@@ -316,6 +526,7 @@ function registerCashbackRoutes(app) {
       return res.status(401).json({ error: 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.' });
     }
 
+    triggerLazyAutoSyncIfNeeded();
     const db = ensureDbLoaded();
     recalculateUserWallet(user.id);
 
@@ -394,8 +605,29 @@ function registerCashbackRoutes(app) {
     const db = ensureDbLoaded();
     const existing = db.orders.find((o) => o.orderSn.toUpperCase() === cleanSn);
     if (existing) {
+      // Auto-claim if order was already synced from network under GUEST (!existing.userId)
+      if (!existing.userId || existing.userCode === 'GUEST') {
+        existing.userId = user.id;
+        existing.userCode = user.code;
+        existing.updatedAt = new Date().toISOString();
+        recalculateUserWallet(user.id);
+        saveDb(db);
+        logger.logLeave('POST /api/user/submit-order', { orderSn: cleanSn, autoClaimed: true });
+        return res.json({
+          order: existing,
+          autoMatched: true,
+          message: 'Đã khớp tự động đơn hàng từ sàn và cộng tiền hoàn vào ví của bạn!'
+        });
+      }
+      if (existing.userId === user.id) {
+        return res.json({
+          order: existing,
+          autoMatched: true,
+          message: 'Đơn hàng này đã có trong tài khoản của bạn.'
+        });
+      }
       return res.status(400).json({
-        error: 'Mã đơn hàng này đã có trên hệ thống và đang chờ sàn đối soát tự động.'
+        error: 'Mã đơn hàng này đã được ghi nhận cho một tài khoản khác.'
       });
     }
 
@@ -594,16 +826,83 @@ function registerCashbackRoutes(app) {
       return res.status(401).json({ error: 'Unauthorized Cron Request' });
     }
     try {
-      const out = await runShopeeAutoSync();
+      const out = await runAutoSyncAll({ requireAtLeastOne: false });
       return res.json({ status: 'ok', ...out });
     } catch (err) {
       return res.status(500).json({ error: err.message });
     }
   });
 
+  // Official AccessTrade Real-Time Postback (Supports both GET query macros and POST body)
+  function handleAccessTradePostback(req, res) {
+    logger.logEnter('AccessTradePostback', { method: req.method });
+    const db = ensureDbLoaded();
+    const expectedToken = String(process.env.POSTBACK_SECRET || db.settings.postbackToken || '').trim();
+    const providedToken = String(
+      req.query.token || req.headers['x-postback-token'] || req.body?.token || ''
+    ).trim();
+
+    if (!expectedToken || !providedToken) {
+      return res.status(401).json({ error: 'Missing postback token.' });
+    }
+
+    const a = Buffer.from(providedToken);
+    const b = Buffer.from(expectedToken);
+    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+      return res.status(401).json({ error: 'Invalid postback token.' });
+    }
+
+    const src = req.method === 'GET' ? req.query : { ...(req.query || {}), ...(req.body || {}) };
+    const orderSn =
+      src.order_id || src.conversion_id || src.transaction_id || src.orderSn || '';
+    if (!orderSn || String(orderSn).includes('{')) {
+      // Respond 200 on AccessTrade test ping with literal macro placeholders
+      return res.json({ status: 'ok', testPing: true });
+    }
+
+    const rawSubId = src.sub1 || src.utm_source || src.clickId || src.sub_id || '';
+    const grossCommission = Number(
+      src.pub_commission ?? src.reward ?? src.commission ?? src.grossCommission ?? 0
+    );
+    const orderAmount = Number(
+      src.billing ?? src.total_amount ?? src.amount ?? src.orderAmount ?? 0
+    );
+    const status = normalizeNetworkStatus(src.status ?? src.approval_status);
+    const merchantRaw = String(src.merchant || src.platform || 'tiktok').toLowerCase();
+    const platform = merchantRaw.includes('shopee') ? 'shopee' : 'tiktok';
+    const productName = src.product_name || src.productName || '';
+
+    const order = upsertNetworkOrder(db, {
+      orderSn,
+      rawSubId,
+      grossCommission,
+      orderAmount,
+      status,
+      platform,
+      productName
+    });
+
+    recalculateAllWallets();
+    saveDb(db);
+    logger.logLeave('AccessTradePostback', {
+      orderSn: order?.orderSn,
+      userCode: order?.userCode,
+      status: order?.status
+    });
+    return res.json({
+      status: 'ok',
+      orderSn: order?.orderSn,
+      userCode: order?.userCode
+    });
+  }
+
+  app.get('/api/webhooks/accesstrade', handleAccessTradePostback);
+  app.post('/api/webhooks/accesstrade', handleAccessTradePostback);
+
   app.post('/api/webhooks/postback', (req, res) => {
     logger.logEnter('POST /api/webhooks/postback');
-    const secret = process.env.POSTBACK_SECRET;
+    const db = ensureDbLoaded();
+    const secret = process.env.POSTBACK_SECRET || db.settings.postbackToken;
     if (!secret) {
       return res.status(503).json({ error: 'Postback webhook not configured.' });
     }
@@ -617,57 +916,34 @@ function registerCashbackRoutes(app) {
       return res.status(401).json({ error: 'Invalid postback signature.' });
     }
 
-    const { orderSn, clickId, grossCommission, status, platform, productName, orderAmount } =
-      req.body || {};
+    const {
+      orderSn,
+      clickId,
+      sub1,
+      sub_id,
+      grossCommission,
+      pub_commission,
+      status,
+      platform,
+      productName,
+      orderAmount,
+      billing
+    } = req.body || {};
     if (!orderSn) return res.status(400).json({ error: 'Missing orderSn' });
 
-    const db = ensureDbLoaded();
-    const click = clickId ? db.clicks.find((c) => c.clickId === clickId) : null;
-    const matchedUser = click?.userId ? db.users.find((u) => u.id === click.userId) : null;
-
-    const split = calculateCommissionSplit(
-      grossCommission,
-      db.settings.cashbackPercent,
-      db.settings.taxDeductPercent
-    );
-
-    const cleanSn = String(orderSn).trim().toUpperCase();
-    const existing = db.orders.find((o) => o.orderSn.toUpperCase() === cleanSn);
-    if (existing) {
-      existing.grossCommission = split.grossCommission;
-      existing.taxAmount = split.taxAmount;
-      existing.netCommission = split.netCommission;
-      existing.totalCommission = split.netCommission;
-      existing.userCashbackAmount = split.userCashbackAmount;
-      existing.adminShareAmount = split.adminShareAmount;
-      if (status) existing.status = status;
-      existing.updatedAt = new Date().toISOString();
-    } else {
-      db.orders.unshift({
-        id: `ord_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`,
-        orderSn: cleanSn,
-        platform: platform === 'tiktok' ? 'tiktok' : 'shopee',
-        clickId: clickId || null,
-        userCode: matchedUser ? matchedUser.code : 'GUEST',
-        userId: matchedUser ? matchedUser.id : null,
-        productName: productName || `Đơn hàng #${cleanSn}`,
-        orderAmount: Number(orderAmount || 0),
-        grossCommission: split.grossCommission,
-        taxAmount: split.taxAmount,
-        netCommission: split.netCommission,
-        totalCommission: split.netCommission,
-        cashbackRate: split.cashbackRate,
-        userCashbackAmount: split.userCashbackAmount,
-        adminShareAmount: split.adminShareAmount,
-        status: status || 'pending',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      });
-    }
+    const order = upsertNetworkOrder(db, {
+      orderSn,
+      rawSubId: clickId || sub1 || sub_id || '',
+      grossCommission: grossCommission ?? pub_commission ?? 0,
+      orderAmount: orderAmount ?? billing ?? 0,
+      status: normalizeNetworkStatus(status),
+      platform,
+      productName
+    });
 
     recalculateAllWallets();
     saveDb(db);
-    return res.json({ status: 'ok', orderSn: cleanSn });
+    return res.json({ status: 'ok', orderSn: order?.orderSn });
   });
 
   // ================= ADMIN ENDPOINTS =================
@@ -684,6 +960,7 @@ function registerCashbackRoutes(app) {
     logger.logEnter('GET /api/admin/dashboard');
     if (!requireAdmin(req, res)) return;
 
+    triggerLazyAutoSyncIfNeeded();
     const db = ensureDbLoaded();
     recalculateAllWallets();
 
@@ -701,12 +978,21 @@ function registerCashbackRoutes(app) {
       }
     }
 
+    const proto = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+    const host = req.headers['x-forwarded-host'] || req.headers.host || 'hoantienshop.vercel.app';
+    const postbackToken = process.env.POSTBACK_SECRET || db.settings.postbackToken;
+    const postbackUrlTemplate = `${proto}://${host}/api/webhooks/accesstrade?token=${encodeURIComponent(
+      postbackToken
+    )}&order_id={order_id}&sub1={sub1}&pub_commission={pub_commission}&billing={billing}&status={status}&merchant={merchant}`;
+
     // Mask secrets before returning to client
     const safeSettings = {
       ...db.settings,
       shopeeAppSecret: maskSecret(db.settings.shopeeAppSecret),
       tiktokAppSecret: maskSecret(db.settings.tiktokAppSecret),
-      tiktokAccessToken: maskSecret(db.settings.tiktokAccessToken)
+      tiktokAccessToken: maskSecret(db.settings.tiktokAccessToken),
+      accesstradeApiKey: maskSecret(db.settings.accesstradeApiKey),
+      postbackUrlTemplate
     };
 
     const withdrawalsWithQr = db.withdrawals.map((w) => ({
@@ -743,7 +1029,7 @@ function registerCashbackRoutes(app) {
     logger.logEnter('POST /api/admin/sync-shopee');
     if (!requireAdmin(req, res)) return;
     try {
-      const out = await runShopeeAutoSync();
+      const out = await runAutoSyncAll({ requireAtLeastOne: true });
       return res.json(out);
     } catch (err) {
       return res.status(400).json({ error: err.message });
@@ -780,7 +1066,12 @@ function registerCashbackRoutes(app) {
     }
 
     // Only update secret fields if not masked placeholder
-    const secretKeys = ['shopeeAppSecret', 'tiktokAppSecret', 'tiktokAccessToken'];
+    const secretKeys = [
+      'shopeeAppSecret',
+      'tiktokAppSecret',
+      'tiktokAccessToken',
+      'accesstradeApiKey'
+    ];
     for (const sKey of secretKeys) {
       if (body[sKey] && body[sKey] !== '********') {
         db.settings[sKey] = String(body[sKey]).trim();
@@ -909,56 +1200,15 @@ function registerCashbackRoutes(app) {
       const orderSn = String(r.orderSn || '').trim().toUpperCase();
       if (!orderSn) continue;
 
-      const split = calculateCommissionSplit(
-        r.totalCommission,
-        db.settings.cashbackPercent,
-        db.settings.taxDeductPercent
-      );
-
-      const rawSubId = String(r.userCode || '').trim();
-      const matchedClick = db.clicks.find((c) => c.clickId === rawSubId);
-      const matchedUser = matchedClick?.userId
-        ? db.users.find((u) => u.id === matchedClick.userId)
-        : db.users.find(
-            (u) => u.code.toUpperCase() === rawSubId.toUpperCase() || u.phone === rawSubId
-          );
-
-      const existing = db.orders.find((o) => o.orderSn.toUpperCase() === orderSn);
-      if (existing) {
-        existing.grossCommission = split.grossCommission;
-        existing.taxAmount = split.taxAmount;
-        existing.netCommission = split.netCommission;
-        existing.totalCommission = split.netCommission;
-        existing.userCashbackAmount = split.userCashbackAmount;
-        existing.adminShareAmount = split.adminShareAmount;
-        if (r.status) existing.status = r.status;
-        if (matchedUser) {
-          existing.userId = matchedUser.id;
-          existing.userCode = matchedUser.code;
-        }
-        existing.updatedAt = new Date().toISOString();
-      } else {
-        db.orders.unshift({
-          id: `ord_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`,
-          orderSn,
-          platform: r.platform === 'tiktok' ? 'tiktok' : 'shopee',
-          clickId: matchedClick ? matchedClick.clickId : null,
-          userCode: matchedUser ? matchedUser.code : rawSubId || 'GUEST',
-          userId: matchedUser ? matchedUser.id : null,
-          productName: r.productName || `Đơn hàng #${orderSn}`,
-          orderAmount: Number(r.orderAmount || 0),
-          grossCommission: split.grossCommission,
-          taxAmount: split.taxAmount,
-          netCommission: split.netCommission,
-          totalCommission: split.netCommission,
-          cashbackRate: split.cashbackRate,
-          userCashbackAmount: split.userCashbackAmount,
-          adminShareAmount: split.adminShareAmount,
-          status: r.status || 'pending',
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        });
-      }
+      upsertNetworkOrder(db, {
+        orderSn,
+        rawSubId: r.userCode || r.sub1 || '',
+        grossCommission: r.totalCommission,
+        orderAmount: r.orderAmount,
+        status: normalizeNetworkStatus(r.status),
+        platform: r.platform,
+        productName: r.productName
+      });
       importedCount++;
     }
 
@@ -987,6 +1237,14 @@ function registerCashbackRoutes(app) {
     logger.logLeave('POST /api/admin/withdrawals/update', { id, status });
     return res.json({ withdrawal: wd });
   });
+
+  // Periodic background auto-sync every 15 minutes on persistent server
+  if (!process.env.VERCEL) {
+    const syncTimer = setInterval(() => {
+      triggerLazyAutoSyncIfNeeded();
+    }, 15 * 60 * 1000);
+    if (typeof syncTimer.unref === 'function') syncTimer.unref();
+  }
 }
 
 module.exports = {

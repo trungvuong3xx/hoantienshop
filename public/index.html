@@ -409,7 +409,7 @@
           <p class="panel-sub" id="admDbStatusText">Đang kiểm tra trạng thái lưu trữ...</p>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <button type="button" class="btn btn-primary btn-sm" id="syncShopeeNowBtn">🔄 Đồng bộ đơn từ Shopee Open API</button>
+          <button type="button" class="btn btn-primary btn-sm" id="syncShopeeNowBtn">⚡ Đồng bộ đơn tự động (Shopee + AccessTrade)</button>
           <button type="button" class="btn btn-outline btn-sm" id="refreshAdminBtn">Làm mới</button>
         </div>
       </div>
@@ -476,6 +476,20 @@
               <div class="form-group">
                 <label>Mẫu DeepLink TikTok</label>
                 <input type="text" id="admTiktokDeepLink" placeholder="URL DeepLink..." />
+              </div>
+            </div>
+
+            <div class="two-inputs">
+              <div class="form-group">
+                <label>AccessTrade API Key (Tự động kéo đơn TikTok/Shopee)</label>
+                <input type="password" id="admAccesstradeApiKey" placeholder="******** (Lấy tại AccessTrade → Thông tin tài khoản → API Key)" />
+              </div>
+              <div class="form-group">
+                <label>Link Postback AccessTrade Tự Động 24/7 (Copy dán vào AccessTrade → Postback)</label>
+                <div style="display:flex;gap:6px;">
+                  <input type="text" id="admPostbackUrl" readonly placeholder="Đang tải URL Postback..." />
+                  <button type="button" class="btn btn-outline btn-sm" id="copyPostbackUrlBtn" style="white-space:nowrap;">📋 Copy</button>
+                </div>
               </div>
             </div>
 
@@ -566,7 +580,7 @@
             <div style="display:flex;gap:10px;flex-wrap:wrap;">
               <button type="button" class="btn btn-success" id="admSaveOrderBtn">Lưu Đơn Hàng</button>
               <label class="btn btn-outline" style="cursor:pointer;">
-                Nhập CSV Báo Cáo Shopee
+                📂 Nhập CSV Báo Cáo (Shopee / AccessTrade)
                 <input type="file" id="admCsvInput" accept=".csv" style="display:none;" />
               </label>
             </div>

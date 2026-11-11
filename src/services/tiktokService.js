@@ -196,8 +196,45 @@ async function convertTikTokLink(cleanInfo, config = {}) {
   };
 }
 
+/**
+ * Fetch conversion orders from AccessTrade Publisher API v1 (/v1/orders).
+ */
+async function fetchAccessTradeOrders(apiKey, days = 30) {
+  logger.logEnter('fetchAccessTradeOrders', { days });
+  const cleanKey = String(apiKey || '').trim();
+  if (!cleanKey) {
+    throw new Error('Chưa cấu hình AccessTrade API Key để đồng bộ đơn tự động.');
+  }
+
+  const now = new Date();
+  const since = new Date(now.getTime() - Number(days || 30) * 24 * 60 * 60 * 1000);
+  const url = new URL('https://api.accesstrade.vn/v1/orders');
+  url.searchParams.set('since', since.toISOString());
+  url.searchParams.set('until', now.toISOString());
+  url.searchParams.set('limit', '100');
+
+  const response = await fetch(url.toString(), {
+    method: 'GET',
+    headers: {
+      Authorization: `Token ${cleanKey}`,
+      Accept: 'application/json'
+    },
+    signal: AbortSignal.timeout(8000)
+  });
+
+  if (!response.ok) {
+    throw new Error(`AccessTrade API trả về mã lỗi HTTP ${response.status}.`);
+  }
+
+  const data = await response.json();
+  const rows = Array.isArray(data?.data) ? data.data : [];
+  logger.logLeave('fetchAccessTradeOrders', { count: rows.length });
+  return rows;
+}
+
 module.exports = {
   convertTikTokLink,
   generateTikTokOpenApiLink,
-  buildTikTokDeepLink
+  buildTikTokDeepLink,
+  fetchAccessTradeOrders
 };

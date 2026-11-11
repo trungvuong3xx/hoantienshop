@@ -351,14 +351,13 @@ async function handleGetCashbackLink() {
             ? `<span>Giá bán: <strong>${fmtVnd(item.price)}</strong></span>`
             : '';
 
+        const cbPct = Number(item.cashbackPercent || 70);
         const estCashbackHtml =
           item.estimatedCashback > 0
             ? `<span>Tiền hoàn dự kiến: <strong style="color:#059669;">+${fmtVnd(
                 item.estimatedCashback
               )}</strong></span>`
-            : `<span>Mức chia sẻ: <strong style="color:#059669;">Hoàn ${
-                item.cashbackPercent || 70
-              }% hoa hồng sàn</strong></span>`;
+            : `<span>Hoàn tiền: <strong style="color:#059669;">Hoàn ${cbPct}% hoa hồng sàn (~3.150đ – 45.000đ+/đơn, tự động cộng ví khi lên đơn)</strong></span>`;
 
         return `
         <div class="cashback-product-card">
@@ -552,13 +551,13 @@ document.getElementById('submitOrderClaimBtn').addEventListener('click', async (
   const orderSn = document.getElementById('claimOrderSn').value.trim();
   const productName = document.getElementById('claimProductName').value.trim();
   try {
-    await apiFetch('/api/user/submit-order', {
+    const res = await apiFetch('/api/user/submit-order', {
       method: 'POST',
       body: JSON.stringify({ platform, orderSn, productName })
     });
     document.getElementById('claimOrderSn').value = '';
     document.getElementById('claimProductName').value = '';
-    showToast('Đã lưu mã đơn hàng thành công!');
+    showToast(res.message || 'Đã lưu mã đơn hàng thành công!');
     loadUserDashboard();
   } catch (err) {
     showToast(err.message);
@@ -642,6 +641,10 @@ async function loadAdminDashboard() {
     document.getElementById('admShopeeAppSecret').value = s.shopeeAppSecret || '';
     document.getElementById('admTiktokMode').value = s.tiktokMode || 'deeplink';
     document.getElementById('admTiktokDeepLink').value = s.tiktokDeepLinkTemplate || '';
+    const atKeyEl = document.getElementById('admAccesstradeApiKey');
+    if (atKeyEl) atKeyEl.value = s.accesstradeApiKey || '';
+    const pbUrlEl = document.getElementById('admPostbackUrl');
+    if (pbUrlEl) pbUrlEl.value = s.postbackUrlTemplate || '';
     document.getElementById('admTaxDeductPercent').value = s.taxDeductPercent ?? 10;
     document.getElementById('admCashbackPercent').value = s.cashbackPercent || 70;
     document.getElementById('admMinWithdraw').value = s.minWithdrawAmount || 50000;
@@ -742,15 +745,26 @@ document.getElementById('syncShopeeNowBtn').addEventListener('click', async () =
   btn.textContent = 'Đang đồng bộ...';
   try {
     const res = await apiFetch('/api/admin/sync-shopee', { method: 'POST', body: '{}' });
-    showToast(`Đã đồng bộ tự động ${res.syncedCount || 0} đơn hàng từ Shopee Open API!`);
+    const warn = res.errors && res.errors.length ? ` (${res.errors.join(' | ')})` : '';
+    showToast(`Đã đồng bộ tự động ${res.syncedCount || 0} đơn hàng!${warn}`);
     loadAdminDashboard();
   } catch (err) {
     showToast(err.message);
   } finally {
     btn.disabled = false;
-    btn.textContent = '🔄 Đồng bộ đơn từ Shopee Open API';
+    btn.textContent = '⚡ Đồng bộ đơn tự động (Shopee + AccessTrade)';
   }
 });
+
+const copyPostbackUrlBtn = document.getElementById('copyPostbackUrlBtn');
+if (copyPostbackUrlBtn) {
+  copyPostbackUrlBtn.addEventListener('click', async () => {
+    const val = document.getElementById('admPostbackUrl')?.value || '';
+    if (!val) return;
+    await navigator.clipboard.writeText(val);
+    showToast('Đã sao chép Link Postback AccessTrade!');
+  });
+}
 
 document.getElementById('saveAdminSettingsBtn').addEventListener('click', async () => {
   try {
@@ -763,6 +777,7 @@ document.getElementById('saveAdminSettingsBtn').addEventListener('click', async 
         shopeeAppSecret: document.getElementById('admShopeeAppSecret').value.trim(),
         tiktokMode: document.getElementById('admTiktokMode').value,
         tiktokDeepLinkTemplate: document.getElementById('admTiktokDeepLink').value.trim(),
+        accesstradeApiKey: document.getElementById('admAccesstradeApiKey')?.value.trim() || '',
         taxDeductPercent: Number(document.getElementById('admTaxDeductPercent').value ?? 10),
         cashbackPercent: Number(document.getElementById('admCashbackPercent').value || 70),
         minWithdrawAmount: Number(document.getElementById('admMinWithdraw').value || 50000),
@@ -845,6 +860,25 @@ document.getElementById('view-admin').addEventListener('click', async (e) => {
   }
 });
 
+function splitCsvLine(line) {
+  const result = [];
+  let current = '';
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      inQuotes = !inQuotes;
+    } else if (ch === ',' && !inQuotes) {
+      result.push(current.trim());
+      current = '';
+    } else {
+      current += ch;
+    }
+  }
+  result.push(current.trim());
+  return result;
+}
+
 document.getElementById('admCsvInput').addEventListener('change', async (e) => {
   const file = e.target.files[0];
   if (!file) return;
@@ -857,11 +891,11 @@ document.getElementById('admCsvInput').addEventListener('change', async (e) => {
       return;
     }
 
-    const headers = lines[0].split(',').map((h) => h.replace(/^"|"$/g, '').trim().toLowerCase());
+    const headers = splitCsvLine(lines[0]).map((h) => h.replace(/^\uFEFF/, '').toLowerCase());
     const rows = [];
 
     for (let i = 1; i < lines.length; i++) {
-      const cols = lines[i].split(',').map((c) => c.replace(/^"|"$/g, '').trim());
+      const cols = splitCsvLine(lines[i]);
       if (cols.length < 2) continue;
 
       const rowObj = {};
@@ -870,34 +904,81 @@ document.getElementById('admCsvInput').addEventListener('change', async (e) => {
       });
 
       const orderSn =
-        rowObj['mã đơn hàng'] || rowObj['order id'] || rowObj['ordersn'] || cols[0];
+        rowObj['mã đơn hàng'] ||
+        rowObj['order id'] ||
+        rowObj['order_id'] ||
+        rowObj['conversion_id'] ||
+        rowObj['transaction_id'] ||
+        rowObj['ordersn'] ||
+        cols[0];
+
       const subId1 =
-        rowObj['sub_id1'] || rowObj['sub id 1'] || rowObj['sub_id'] || 'ADMIN';
+        rowObj['sub_id1'] ||
+        rowObj['sub id 1'] ||
+        rowObj['sub_id'] ||
+        rowObj['sub1'] ||
+        rowObj['utm_source'] ||
+        'GUEST';
+
       const commRaw =
         rowObj['tổng hoa hồng đơn hàng(₫)'] ||
         rowObj['hoa hồng ròng'] ||
         rowObj['total commission'] ||
         rowObj['net commission'] ||
+        rowObj['pub_commission'] ||
+        rowObj['hoa hồng'] ||
+        rowObj['reward'] ||
         '0';
+
+      const amountRaw =
+        rowObj['giá trị đơn hàng(₫)'] ||
+        rowObj['billing'] ||
+        rowObj['total_amount'] ||
+        rowObj['order amount'] ||
+        '0';
+
       const statusRaw = (
         rowObj['trạng thái đơn hàng'] ||
         rowObj['order status'] ||
+        rowObj['status'] ||
+        rowObj['trạng thái'] ||
+        ''
+      ).toLowerCase();
+
+      const merchantRaw = (
+        rowObj['merchant'] ||
+        rowObj['chiến dịch'] ||
+        rowObj['platform'] ||
         ''
       ).toLowerCase();
 
       const totalCommission = Number(String(commRaw).replace(/[^\d.]/g, '')) || 0;
+      const orderAmount = Number(String(amountRaw).replace(/[^\d.]/g, '')) || 0;
       const status =
-        statusRaw.includes('hoàn thành') || statusRaw.includes('completed')
+        statusRaw === '1' ||
+        statusRaw.includes('hoàn thành') ||
+        statusRaw.includes('completed') ||
+        statusRaw.includes('approved') ||
+        statusRaw.includes('đã duyệt')
           ? 'approved'
-          : statusRaw.includes('huỷ') || statusRaw.includes('cancel')
+          : statusRaw === '2' ||
+            statusRaw === '-1' ||
+            statusRaw.includes('huỷ') ||
+            statusRaw.includes('hủy') ||
+            statusRaw.includes('cancel') ||
+            statusRaw.includes('reject')
           ? 'cancelled'
           : 'pending';
+
+      const platform = merchantRaw.includes('tiktok') ? 'tiktok' : 'shopee';
 
       if (orderSn) {
         rows.push({
           orderSn,
-          userCode: subId1 || 'ADMIN',
+          userCode: subId1 || 'GUEST',
           totalCommission,
+          orderAmount,
+          platform,
           status
         });
       }
@@ -907,7 +988,7 @@ document.getElementById('admCsvInput').addEventListener('change', async (e) => {
       method: 'POST',
       body: JSON.stringify({ rows })
     });
-    showToast(`Đã nhập thành công ${res.importedCount} đơn hàng!`);
+    showToast(`Đã nhập & đối soát tự động ${res.importedCount} đơn hàng!`);
     loadAdminDashboard();
   } catch (err) {
     showToast(`Lỗi đọc file CSV: ${err.message}`);

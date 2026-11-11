@@ -121,6 +121,15 @@ function calculateCommissionSplit(
 
 // ================= INITIAL DATA & SETTINGS FROM ENV =================
 
+function getDefaultPostbackToken() {
+  if (process.env.POSTBACK_SECRET) return process.env.POSTBACK_SECRET.trim();
+  return crypto
+    .createHmac('sha256', process.env.AUTH_SECRET || 'hoantienshop-default-postback-seed')
+    .update('accesstrade-postback-token-v1')
+    .digest('hex')
+    .slice(0, 32);
+}
+
 function getDefaultSettings() {
   return {
     siteName: process.env.SITE_NAME || 'Hoàn Tiền Shop',
@@ -135,6 +144,9 @@ function getDefaultSettings() {
     tiktokDeepLinkTemplate:
       process.env.TIKTOK_DEEPLINK_TEMPLATE ||
       'https://go.isclix.com/deep_link/v6/7110811489339796158/6648523843406889655?sub4=oneatweb',
+    accesstradeApiKey: process.env.ACCESSTRADE_API_KEY || '',
+    postbackToken: getDefaultPostbackToken(),
+    lastAutoSyncAt: null,
     shortenerProvider: process.env.SHORTENER_PROVIDER || 'none',
     cashbackPercent: Number(process.env.CASHBACK_PERCENT || 70),
     taxDeductPercent: Number(process.env.TAX_DEDUCT_PERCENT ?? 10),
@@ -211,6 +223,12 @@ function ensureDbLoaded() {
     }
     if (memoryCache.settings.shopeeAffiliateId === '17388899900') {
       memoryCache.settings.shopeeAffiliateId = envSettings.shopeeAffiliateId;
+    }
+    if (process.env.ACCESSTRADE_API_KEY) {
+      memoryCache.settings.accesstradeApiKey = envSettings.accesstradeApiKey;
+    }
+    if (!memoryCache.settings.postbackToken) {
+      memoryCache.settings.postbackToken = envSettings.postbackToken;
     }
     return memoryCache;
   }
