@@ -517,7 +517,7 @@ function registerCashbackRoutes(app) {
 
       const effectiveConfig = {
         shopeeMode: process.env.SHOPEE_MODE || s.shopeeMode || 'an_redir',
-        shopeeAffiliateId: process.env.SHOPEE_AFFILIATE_ID || s.shopeeAffiliateId || '17388899900',
+        shopeeAffiliateId: process.env.SHOPEE_AFFILIATE_ID || s.shopeeAffiliateId || '17346310715',
         shopeeAppId: process.env.SHOPEE_APP_ID || s.shopeeAppId || '',
         shopeeAppSecret: process.env.SHOPEE_APP_SECRET || s.shopeeAppSecret || '',
         tiktokMode: process.env.TIKTOK_MODE || s.tiktokMode || 'clean_extract',

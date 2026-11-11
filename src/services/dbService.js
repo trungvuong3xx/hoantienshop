@@ -125,7 +125,7 @@ function getDefaultSettings() {
   return {
     siteName: process.env.SITE_NAME || 'Hoàn Tiền Shop',
     shopeeMode: process.env.SHOPEE_MODE || 'an_redir',
-    shopeeAffiliateId: process.env.SHOPEE_AFFILIATE_ID || '17388899900',
+    shopeeAffiliateId: process.env.SHOPEE_AFFILIATE_ID || '17346310715',
     shopeeAppId: process.env.SHOPEE_APP_ID || '',
     shopeeAppSecret: process.env.SHOPEE_APP_SECRET || '',
     tiktokMode: process.env.TIKTOK_MODE || 'clean_extract',
