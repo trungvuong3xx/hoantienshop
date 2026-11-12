@@ -71,6 +71,35 @@ app.get('/api/health', (req, res) => {
   logger.logLeave('GET /api/health', { status: 'ok' });
 });
 
+app.get('/api/debug-og', async (req, res) => {
+  const shopId = req.query.shopId || '968599922';
+  const itemId = req.query.itemId || '15696940827';
+  const targetUrl = `https://shopee.vn/product/${shopId}/${itemId}`;
+  try {
+    const r = await fetch(targetUrl, {
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+      },
+      signal: AbortSignal.timeout(6000)
+    });
+    const text = await r.text();
+    const tm = text.match(/property=["']og:title["']\s+content=["']([^"']+)["']/i);
+    const im = text.match(/property=["']og:image["']\s+content=["']([^"']+)["']/i);
+    res.json({
+      status: r.status,
+      headers: Object.fromEntries(r.headers.entries()),
+      len: text.length,
+      title: tm?.[1],
+      image: im?.[1],
+      snippet: text.slice(0, 500)
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message, stack: err.stack });
+  }
+});
+
 registerCashbackRoutes(app);
 
 app.get('*', (req, res) => {
