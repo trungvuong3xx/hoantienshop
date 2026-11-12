@@ -71,43 +71,6 @@ app.get('/api/health', (req, res) => {
   logger.logLeave('GET /api/health', { status: 'ok' });
 });
 
-app.get('/api/debug-og', async (req, res) => {
-  const shopId = req.query.shopId || '968599922';
-  const itemId = req.query.itemId || '15696940827';
-  const targetUrl = `https://shopee.vn/product/${shopId}/${itemId}`;
-  const ua = req.query.ua || 'facebook';
-
-  let userAgent = 'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.html)';
-  if (ua === 'twitter') userAgent = 'Twitterbot/1.0';
-  if (ua === 'google') userAgent = 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)';
-  if (ua === 'zalo') userAgent = 'Mozilla/5.0 (compatible; ZaloBot)';
-  if (ua === 'iphone') userAgent = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1';
-
-  try {
-    const r = await fetch(targetUrl, {
-      headers: {
-        'User-Agent': userAgent,
-        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7'
-      },
-      signal: AbortSignal.timeout(6000)
-    });
-    const text = await r.text();
-    const tm = text.match(/property=["']og:title["']\s+content=["']([^"']+)["']/i) || text.match(/content=["']([^"']+)["']\s+property=["']og:title["']/i);
-    const im = text.match(/property=["']og:image["']\s+content=["']([^"']+)["']/i) || text.match(/content=["']([^"']+)["']\s+property=["']og:image["']/i);
-    res.json({
-      ua,
-      status: r.status,
-      len: text.length,
-      title: tm?.[1],
-      image: im?.[1],
-      hasOg: text.includes('og:title')
-    });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
 registerCashbackRoutes(app);
 
 app.get('*', (req, res) => {
