@@ -92,6 +92,13 @@ async function callShopeeGraphql(query, appId, appSecret) {
   });
 
   const data = await response.json();
+  console.log('[Shopee GraphQL raw]', response.status, JSON.stringify({
+    errors: data.errors,
+    dataKeys: data.data ? Object.keys(data.data) : null,
+    nodesCount: data?.data?.productOfferV2?.nodes?.length,
+    sample: data?.data?.productOfferV2?.nodes?.[0]
+  }));
+
   if (data.errors && data.errors.length > 0) {
     const errMsg = data.errors.map((e) => e.message).join('; ');
     throw new Error(`Shopee Open API: ${errMsg}`);
@@ -133,6 +140,11 @@ async function generateShopeeOpenApiLink(cleanUrl, appId, appSecret, subIdArr = 
 async function fetchShopeeProductOffer(itemId, appId, appSecret, shopId = null) {
   logger.logEnter('fetchShopeeProductOffer', { itemId, shopId: shopId || undefined });
   if (!itemId || !appId || !appSecret) {
+    console.warn('[productOfferV2] Bỏ qua: Chưa cấu hình SHOPEE_APP_ID hoặc SHOPEE_APP_SECRET!', {
+      hasItemId: Boolean(itemId),
+      hasAppId: Boolean(appId),
+      hasAppSecret: Boolean(appSecret)
+    });
     logger.logLeave('fetchShopeeProductOffer', { status: 'skipped_no_credentials' });
     return null;
   }
@@ -143,40 +155,60 @@ async function fetchShopeeProductOffer(itemId, appId, appSecret, shopId = null) 
     return cached;
   }
 
-  try {
-    const shopFilter = shopId && Number(shopId) > 0 ? `, shopId: ${Number(shopId)}` : '';
-    const query = `{ productOfferV2(itemId: ${Number(
-      itemId
-    )}${shopFilter}, limit: 1) { nodes { itemId productName imageUrl price priceMin priceMax commissionRate sellerCommissionRate shopeeCommissionRate shopName ratingStar sales } } }`;
-    const data = await callShopeeGraphql(query, appId, appSecret);
-    const node = data?.productOfferV2?.nodes?.[0];
-    if (node) {
-      const rawPrice = Number(node.priceMin || node.price || node.priceMax || 0);
-      const rawCommRate = Number(node.commissionRate || 0);
-      const meta = {
-        itemId: String(node.itemId || itemId),
-        productName: node.productName || '',
-        imageUrl: node.imageUrl || '',
-        price: rawPrice,
-        priceMin: Number(node.priceMin || rawPrice),
-        priceMax: Number(node.priceMax || rawPrice),
-        commissionRate: rawCommRate * 100, // percentage e.g. 9.1
-        sellerCommissionRate: Number(node.sellerCommissionRate || 0) * 100,
-        shopeeCommissionRate: Number(node.shopeeCommissionRate || 0) * 100,
-        shopName: node.shopName || '',
-        ratingStar: Number(node.ratingStar || 5),
-        sales: Number(node.sales || 0)
-      };
-      setCached(productMetaCache, cacheKey, meta);
-      logger.logLeave('fetchShopeeProductOffer', { status: 'found', productName: meta.productName.slice(0, 30) });
-      return meta;
-    }
-  } catch (err) {
-    logger.warning('fetchShopeeProductOffer', 'Could not fetch productOfferV2 metadata', {
-      itemId,
-      error: err.message
-    });
+  // Safe minimal fields query to prevent schema validation errors on optional fields
+  const safeFields = 'itemId productName imageUrl price priceMin priceMax commissionRate';
+  const tryQueries = [];
+  if (shopId && Number(shopId) > 0) {
+    tryQueries.push(
+      `{ productOfferV2(itemId: ${Number(itemId)}, shopId: ${Number(shopId)}, limit: 1) { nodes { ${safeFields} } } }`
+    );
   }
+  tryQueries.push(
+    `{ productOfferV2(itemId: ${Number(itemId)}, limit: 1) { nodes { ${safeFields} } } }`
+  );
+
+  for (const query of tryQueries) {
+    try {
+      const data = await callShopeeGraphql(query, appId, appSecret);
+      const node = data?.productOfferV2?.nodes?.[0];
+      if (node) {
+        const rawPrice = Number(node.priceMin || node.price || node.priceMax || 0);
+        const rawCommRate = Number(node.commissionRate || 0);
+        // Normalize commissionRate: handle both decimal (0.0912 -> 9.12%) and already percentage (9.12)
+        const commPercentage = rawCommRate > 0 && rawCommRate < 1 ? rawCommRate * 100 : rawCommRate;
+
+        const meta = {
+          itemId: String(node.itemId || itemId),
+          productName: node.productName || '',
+          imageUrl: node.imageUrl || '',
+          price: rawPrice,
+          priceMin: Number(node.priceMin || rawPrice),
+          priceMax: Number(node.priceMax || rawPrice),
+          commissionRate: commPercentage,
+          shopName: node.shopName || '',
+          sales: Number(node.sales || 0)
+        };
+
+        // Only cache when we actually have a valid product name or image
+        if (meta.productName || meta.imageUrl) {
+          setCached(productMetaCache, cacheKey, meta);
+        }
+        logger.logLeave('fetchShopeeProductOffer', {
+          status: 'found',
+          productName: meta.productName.slice(0, 30),
+          commissionRate: commPercentage
+        });
+        return meta;
+      }
+    } catch (err) {
+      console.error('[productOfferV2 Error]', err.message);
+      logger.warning('fetchShopeeProductOffer', 'GraphQL query failed', {
+        itemId,
+        error: err.message
+      });
+    }
+  }
+
   logger.logLeave('fetchShopeeProductOffer', { status: 'not_found' });
   return null;
 }

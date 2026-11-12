@@ -907,6 +907,54 @@ function registerCashbackRoutes(app) {
     }
   });
 
+  // Diagnostic route for testing Shopee productOfferV2 directly
+  app.get('/api/test-shopee-offer', async (req, res) => {
+    logger.logEnter('GET /api/test-shopee-offer');
+    const itemId = req.query.itemId || '15696940827';
+    const shopId = req.query.shopId || '968599922';
+
+    const db = ensureDbLoaded();
+    const s = db.settings;
+    const appId = s.shopeeAppId || process.env.SHOPEE_APP_ID || '';
+    const appSecret = s.shopeeAppSecret || process.env.SHOPEE_APP_SECRET || '';
+
+    const hasAppId = Boolean(appId);
+    const hasAppSecret = Boolean(appSecret);
+
+    if (!hasAppId || !hasAppSecret) {
+      logger.logLeave('GET /api/test-shopee-offer', { status: 'no_credentials' });
+      return res.json({
+        ok: false,
+        status: 'no_credentials',
+        message:
+          'Chưa cấu hình SHOPEE_APP_ID hoặc SHOPEE_APP_SECRET. Hãy nhập trong Cài đặt Admin hoặc Vercel Environment Variables.',
+        hasAppId,
+        hasAppSecret,
+        testedItem: { itemId, shopId }
+      });
+    }
+
+    try {
+      const meta = await fetchShopeeProductOffer(itemId, appId, appSecret, shopId);
+      logger.logLeave('GET /api/test-shopee-offer', { status: meta ? 'found' : 'not_found' });
+      return res.json({
+        ok: Boolean(meta),
+        status: meta ? 'found' : 'not_found',
+        hasAppId,
+        hasAppSecret,
+        meta,
+        testedItem: { itemId, shopId }
+      });
+    } catch (err) {
+      logger.error('GET /api/test-shopee-offer', 'Test offer error', { error: err.message });
+      return res.status(500).json({
+        ok: false,
+        error: err.message,
+        testedItem: { itemId, shopId }
+      });
+    }
+  });
+
   // 8. Convert Link (Generates opaque random click_id -> maps to userId in db.clicks)
   app.post('/api/convert', convertLimiter, async (req, res) => {
     logger.logEnter('POST /api/convert');
