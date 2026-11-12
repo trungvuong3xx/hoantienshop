@@ -5,6 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="referrer" content="no-referrer" />
   <title>Hoàn Tiền Shop — Hoàn Tiền Mua Sắm Shopee & TikTok Shop</title>
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <meta name="theme-color" content="#EE4D2D" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="HoànTiềnShop" />
+  <link rel="apple-touch-icon" href="/icon.svg" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
@@ -765,6 +772,42 @@
       <div style="padding:20px;">
         <img id="vietQrModalImg" src="" alt="VietQR" style="max-width:260px;width:100%;border-radius:12px;border:1px solid #e2e8f0;" />
         <p id="vietQrModalInfo" style="margin-top:12px;font-size:13.5px;font-weight:600;color:#0f172a;"></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- PWA Install Floating Banner (Tải/Ghim ứng dụng) -->
+  <div id="pwaInstallBanner" class="pwa-install-banner hidden" role="dialog" aria-label="Cài đặt ứng dụng">
+    <div class="pwa-banner-card">
+      <div class="pwa-banner-icon">
+        <img src="/icon.svg" alt="App Icon" class="pwa-app-icon" />
+      </div>
+      <div class="pwa-banner-body">
+        <div class="pwa-banner-title">Cài đặt ứng dụng</div>
+        <div class="pwa-banner-desc" id="pwaBannerDesc">Thêm Hoàn Tiền Shop ra màn hình chính để truy cập nhanh.</div>
+        <div class="pwa-banner-actions">
+          <button type="button" class="btn btn-pwa-install" id="pwaInstallBtn">Cài ngay</button>
+          <button type="button" class="btn btn-pwa-dismiss" id="pwaDismissBtn">Đóng</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PWA Install Guide Modal for iOS & Browsers without direct prompt -->
+  <div id="pwaGuideModal" class="modal-backdrop hidden">
+    <div class="modal-box pwa-guide-box">
+      <div class="modal-head">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="font-size:22px;">📲</span>
+          <h3>Ghim App Ra Màn Hình Chính</h3>
+        </div>
+        <button type="button" class="close-btn" id="closePwaGuideBtn">✕</button>
+      </div>
+      <div class="pwa-guide-content" id="pwaGuideContent">
+        <!-- Dynamic guide steps for iOS or Android/Desktop -->
+      </div>
+      <div style="padding:14px 20px;text-align:right;background:#f8fafc;border-top:1px solid #e2e8f0;border-bottom-left-radius:var(--radius-xl);border-bottom-right-radius:var(--radius-xl);">
+        <button type="button" class="btn btn-primary" id="ackPwaGuideBtn">Đã Hiểu</button>
       </div>
     </div>
   </div>

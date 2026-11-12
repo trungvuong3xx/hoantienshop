@@ -1156,3 +1156,159 @@ syncAuthUi();
 if (authToken) {
   loadUserDashboard();
 }
+
+// ==================== PWA INSTALL & HOME SCREEN CONTROLLER ====================
+let deferredInstallPrompt = null;
+const pwaInstallBanner = document.getElementById('pwaInstallBanner');
+const pwaBannerDesc = document.getElementById('pwaBannerDesc');
+const pwaInstallBtn = document.getElementById('pwaInstallBtn');
+const pwaDismissBtn = document.getElementById('pwaDismissBtn');
+const pwaGuideModal = document.getElementById('pwaGuideModal');
+const pwaGuideContent = document.getElementById('pwaGuideContent');
+const closePwaGuideBtn = document.getElementById('closePwaGuideBtn');
+const ackPwaGuideBtn = document.getElementById('ackPwaGuideBtn');
+
+// Register Service Worker if supported
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  });
+}
+
+function isPwaStandalone() {
+  return (
+    window.matchMedia('(display-mode: standalone)').matches ||
+    window.navigator.standalone === true ||
+    document.referrer.includes('android-app://')
+  );
+}
+
+function isIosDevice() {
+  return /iphone|ipad|ipod/i.test(navigator.userAgent || '') && !window.MSStream;
+}
+
+function showPwaBanner() {
+  if (isPwaStandalone()) return;
+  const dismissedTime = localStorage.getItem('hts_pwa_dismissed');
+  if (dismissedTime && Date.now() - Number(dismissedTime) < 2 * 86400 * 1000) {
+    return;
+  }
+  if (!pwaInstallBanner) return;
+
+  if (isIosDevice()) {
+    pwaBannerDesc.textContent = 'Thêm Hoàn Tiền Shop ra màn hình chính iPhone để mở nhanh như App.';
+  } else {
+    pwaBannerDesc.textContent = 'Thêm Hoàn Tiền Shop ra màn hình chính để truy cập nhanh.';
+  }
+
+  pwaInstallBanner.classList.remove('hidden');
+}
+
+function hidePwaBanner() {
+  if (pwaInstallBanner) {
+    pwaInstallBanner.classList.add('hidden');
+  }
+}
+
+function openPwaGuideModal(type = 'ios') {
+  if (!pwaGuideModal || !pwaGuideContent) return;
+
+  if (type === 'ios') {
+    pwaGuideContent.innerHTML = `
+      <div class="pwa-step-item">
+        <div class="pwa-step-num">1</div>
+        <div class="pwa-step-text">
+          Trên trình duyệt Safari của iPhone, nhấn nút <strong>Chia sẻ</strong> (biểu tượng hình vuông có mũi tên hướng lên <span class="pwa-guide-highlight">⬆️</span> ở thanh dưới cùng).
+        </div>
+      </div>
+      <div class="pwa-step-item">
+        <div class="pwa-step-num">2</div>
+        <div class="pwa-step-text">
+          Cuộn xuống dưới và chọn dòng <span class="pwa-guide-highlight">➕ Thêm vào MH chính</span> (Add to Home Screen).
+        </div>
+      </div>
+      <div class="pwa-step-item">
+        <div class="pwa-step-num">3</div>
+        <div class="pwa-step-text">
+          Nhấn nút <strong>Thêm</strong> (Add) ở góc trên bên phải màn hình. Biểu tượng ứng dụng <strong>Hoàn Tiền Shop</strong> sẽ xuất hiện ngay trên màn hình chính của bạn!
+        </div>
+      </div>
+    `;
+  } else {
+    pwaGuideContent.innerHTML = `
+      <div class="pwa-step-item">
+        <div class="pwa-step-num">1</div>
+        <div class="pwa-step-text">
+          Nhấn vào biểu tượng <strong>Menu 3 chấm (⋮)</strong> ở góc trên bên phải trình duyệt Chrome / Cốc Cốc / Samsung Internet.
+        </div>
+      </div>
+      <div class="pwa-step-item">
+        <div class="pwa-step-num">2</div>
+        <div class="pwa-step-text">
+          Chọn mục <span class="pwa-guide-highlight">📲 Cài đặt ứng dụng</span> hoặc <strong>Thêm vào màn hình chính</strong>.
+        </div>
+      </div>
+      <div class="pwa-step-item">
+        <div class="pwa-step-num">3</div>
+        <div class="pwa-step-text">
+          Nhấn <strong>Cài đặt</strong> để hoàn tất. Bạn có thể mở Hoàn Tiền Shop trực tiếp từ màn hình điện thoại bất cứ lúc nào!
+        </div>
+      </div>
+    `;
+  }
+
+  pwaGuideModal.classList.remove('hidden');
+}
+
+function closePwaGuideModal() {
+  if (pwaGuideModal) {
+    pwaGuideModal.classList.add('hidden');
+  }
+}
+
+// Listen for browser install prompt (Chrome / Edge / Samsung Internet / Android)
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  showPwaBanner();
+});
+
+// User installs app
+if (pwaInstallBtn) {
+  pwaInstallBtn.addEventListener('click', async () => {
+    if (deferredInstallPrompt) {
+      try {
+        deferredInstallPrompt.prompt();
+        const choice = await deferredInstallPrompt.userChoice;
+        if (choice && choice.outcome === 'accepted') {
+          hidePwaBanner();
+          showToast('Đang cài đặt Hoàn Tiền Shop ra màn hình chính...');
+        }
+      } catch (err) {
+        openPwaGuideModal(isIosDevice() ? 'ios' : 'android');
+      } finally {
+        deferredInstallPrompt = null;
+      }
+    } else if (isIosDevice()) {
+      openPwaGuideModal('ios');
+    } else {
+      openPwaGuideModal('android');
+    }
+  });
+}
+
+// User dismisses banner
+if (pwaDismissBtn) {
+  pwaDismissBtn.addEventListener('click', () => {
+    localStorage.setItem('hts_pwa_dismissed', String(Date.now()));
+    hidePwaBanner();
+  });
+}
+
+if (closePwaGuideBtn) closePwaGuideBtn.addEventListener('click', closePwaGuideModal);
+if (ackPwaGuideBtn) ackPwaGuideBtn.addEventListener('click', closePwaGuideModal);
+
+// Auto-trigger banner after initial page load (if not installed & not dismissed)
+setTimeout(() => {
+  showPwaBanner();
+}, 1500);

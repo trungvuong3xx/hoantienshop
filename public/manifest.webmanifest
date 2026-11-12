@@ -1,0 +1,20 @@
+{
+  "name": "Hoàn Tiền Shop - Hoàn Tiền Shopee & TikTok Shop",
+  "short_name": "Hoàn Tiền",
+  "description": "Tạo link hoàn tiền mua sắm Shopee và TikTok Shop, tích lũy số dư và rút tiền về ngân hàng.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#EE4D2D",
+  "orientation": "portrait",
+  "lang": "vi",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
