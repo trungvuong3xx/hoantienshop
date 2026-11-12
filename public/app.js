@@ -14,7 +14,7 @@ try {
 let authToken = currentUser ? 'httponly_cookie_session' : '';
 
 let publicConfig = {
-  siteName: 'HoànTiềnShop',
+  siteName: 'Hoàn Tiền Sàn',
   cashbackPercent: 70,
   taxDeductPercent: 10,
   minWithdrawAmount: 50000
@@ -356,9 +356,18 @@ async function handleGetCashbackLink() {
         const isShopee = item.platform === 'shopee';
         const isTikTok = item.platform === 'tiktok';
         const platLabel = isShopee
-          ? '🟠 Shopee'
+          ? `<span class="plat-badge-inline shopee">
+              <svg class="plat-svg-icon" viewBox="0 0 24 24" width="15" height="15" fill="currentColor">
+                <path d="M19 7h-3V6a4 4 0 0 0-8 0v1H5a1 1 0 0 0-1 1v11a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3V8a1 1 0 0 0-1-1zm-9-1a2 2 0 0 1 4 0v1h-4V6zm8 13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V9h2v1.5a1 1 0 0 0 2 0V9h4v1.5a1 1 0 0 0 2 0V9h2v10z"/>
+                <path d="M13.5 13.5c-.3-.2-.7-.3-1.1-.4-.6-.2-.9-.3-.9-.6 0-.3.3-.5.7-.5.5 0 .9.2 1.2.4a.5.5 0 1 0 .6-.8c-.5-.3-1.1-.6-1.8-.6-1 0-1.7.6-1.7 1.5 0 .6.4 1.1 1.2 1.3.6.2.8.3.8.6 0 .3-.3.5-.8.5-.6 0-1.1-.3-1.4-.6a.5.5 0 1 0-.7.7c.5.5 1.2.8 2.1.8 1.1 0 1.8-.6 1.8-1.5 0-.7-.4-1.1-1.1-1.3z"/>
+              </svg> Shopee
+            </span>`
           : isTikTok
-          ? '⚫ TikTok Shop'
+          ? `<span class="plat-badge-inline tiktok">
+              <svg class="plat-svg-icon" viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+                <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.34 0 .67.06.98.17V8.89a6.45 6.45 0 0 0-.98-.07A6.33 6.33 0 0 0 3 15.16 6.33 6.33 0 0 0 9.34 21.5a6.33 6.33 0 0 0 6.33-6.34V8.47a8.28 8.28 0 0 0 4.81 1.53V6.69h-.89z"/>
+              </svg> TikTok Shop
+            </span>`
           : '🔗 Liên kết';
 
         const safeThumbUrl = safeHttpsUrl(item.imageUrl);
@@ -1196,9 +1205,9 @@ function showPwaBanner() {
   if (!pwaInstallBanner) return;
 
   if (isIosDevice()) {
-    pwaBannerDesc.textContent = 'Thêm Hoàn Tiền Shop ra màn hình chính iPhone để mở nhanh như App.';
+    pwaBannerDesc.textContent = 'Thêm Hoàn Tiền Sàn ra màn hình chính iPhone để mở nhanh như App.';
   } else {
-    pwaBannerDesc.textContent = 'Thêm Hoàn Tiền Shop ra màn hình chính để truy cập nhanh.';
+    pwaBannerDesc.textContent = 'Thêm Hoàn Tiền Sàn ra màn hình chính để truy cập nhanh.';
   }
 
   pwaInstallBanner.classList.remove('hidden');
@@ -1230,7 +1239,7 @@ function openPwaGuideModal(type = 'ios') {
       <div class="pwa-step-item">
         <div class="pwa-step-num">3</div>
         <div class="pwa-step-text">
-          Nhấn nút <strong>Thêm</strong> (Add) ở góc trên bên phải màn hình. Biểu tượng ứng dụng <strong>Hoàn Tiền Shop</strong> sẽ xuất hiện ngay trên màn hình chính của bạn!
+          Nhấn nút <strong>Thêm</strong> (Add) ở góc trên bên phải màn hình. Biểu tượng ứng dụng <strong>Hoàn Tiền Sàn</strong> sẽ xuất hiện ngay trên màn hình chính của bạn!
         </div>
       </div>
     `;
@@ -1251,7 +1260,7 @@ function openPwaGuideModal(type = 'ios') {
       <div class="pwa-step-item">
         <div class="pwa-step-num">3</div>
         <div class="pwa-step-text">
-          Nhấn <strong>Cài đặt</strong> để hoàn tất. Bạn có thể mở Hoàn Tiền Shop trực tiếp từ màn hình điện thoại bất cứ lúc nào!
+          Nhấn <strong>Cài đặt</strong> để hoàn tất. Bạn có thể mở Hoàn Tiền Sàn trực tiếp từ màn hình điện thoại bất cứ lúc nào!
         </div>
       </div>
     `;
@@ -1282,7 +1291,7 @@ if (pwaInstallBtn) {
         const choice = await deferredInstallPrompt.userChoice;
         if (choice && choice.outcome === 'accepted') {
           hidePwaBanner();
-          showToast('Đang cài đặt Hoàn Tiền Shop ra màn hình chính...');
+          showToast('Đang cài đặt Hoàn Tiền Sàn ra màn hình chính...');
         }
       } catch (err) {
         openPwaGuideModal(isIosDevice() ? 'ios' : 'android');

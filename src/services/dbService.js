@@ -8,6 +8,7 @@ const IS_VERCEL = Boolean(process.env.VERCEL);
 const LOCAL_DB_PATH = IS_VERCEL
   ? path.join('/tmp', 'hoantienshop_db_v2.json')
   : path.join(__dirname, '..', '..', 'data', 'db.json');
+const SEED_DB_PATH = path.join(__dirname, '..', 'data', 'seedDb.json');
 
 const DATABASE_URL = process.env.DATABASE_URL || process.env.POSTGRES_URL || '';
 let pgPool = null;
@@ -132,7 +133,7 @@ function getDefaultPostbackToken() {
 
 function getDefaultSettings() {
   return {
-    siteName: process.env.SITE_NAME || 'Hoàn Tiền Shop',
+    siteName: process.env.SITE_NAME || 'Hoàn Tiền Sàn',
     shopeeMode: process.env.SHOPEE_MODE || 'an_redir',
     shopeeAffiliateId: process.env.SHOPEE_AFFILIATE_ID || '17346310715',
     shopeeAppId: process.env.SHOPEE_APP_ID || '',
@@ -234,8 +235,15 @@ function ensureDbLoaded() {
   }
 
   try {
+    let sourcePath = null;
     if (fs.existsSync(LOCAL_DB_PATH)) {
-      const raw = fs.readFileSync(LOCAL_DB_PATH, 'utf8');
+      sourcePath = LOCAL_DB_PATH;
+    } else if (fs.existsSync(SEED_DB_PATH)) {
+      sourcePath = SEED_DB_PATH;
+    }
+
+    if (sourcePath) {
+      const raw = fs.readFileSync(sourcePath, 'utf8');
       const parsed = JSON.parse(raw);
       const initial = getInitialData();
       memoryCache = {
@@ -246,6 +254,9 @@ function ensureDbLoaded() {
         ledger: Array.isArray(parsed.ledger) ? parsed.ledger : [],
         withdrawals: Array.isArray(parsed.withdrawals) ? parsed.withdrawals : []
       };
+      if (sourcePath === SEED_DB_PATH) {
+        saveDb(memoryCache);
+      }
       return ensureDbLoaded();
     }
   } catch (err) {

@@ -236,13 +236,59 @@ body {
 }
 
 .plat-pill {
-  font-size: 12.5px;
-  font-weight: 600;
-  padding: 4px 12px;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 5px 14px;
   border-radius: 999px;
   background: #fff;
   color: var(--text-main);
   border: 1px solid var(--border);
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  transition: all 0.15s ease;
+}
+
+.plat-pill.shopee {
+  color: #ee4d2d;
+  background: #fff5f2;
+  border-color: #ffccbc;
+}
+
+.plat-pill.tiktok {
+  color: #0f172a;
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+.plat-svg-icon {
+  display: inline-block;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+
+.plat-badge-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12.5px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+}
+
+.plat-badge-inline.shopee {
+  color: #ee4d2d;
+  background: #fff5f2;
+  border-color: #fed7aa;
+}
+
+.plat-badge-inline.tiktok {
+  color: #0f172a;
+  background: #f1f5f9;
+  border-color: #cbd5e1;
 }
 
 /* Search Bar */

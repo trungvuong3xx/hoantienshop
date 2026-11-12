@@ -445,7 +445,7 @@ function registerCashbackRoutes(app) {
     const db = ensureDbLoaded();
     const s = db.settings;
     res.json({
-      siteName: s.siteName || 'Hoàn Tiền Shop',
+      siteName: s.siteName || 'Hoàn Tiền Sàn',
       cashbackPercent: Number(s.cashbackPercent || 70),
       taxDeductPercent: Number(s.taxDeductPercent ?? 10),
       referralBonusPercent: Number(s.referralBonusPercent ?? 5),
