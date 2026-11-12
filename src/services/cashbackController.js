@@ -19,9 +19,16 @@ const {
   getDatabaseStatus
 } = require('./dbService');
 const { convertTextLinks } = require('./converterService');
-const { fetchShopeeConversionReport } = require('./shopeeService');
+const { fetchShopeeConversionReport, fetchShopeeProductOffer } = require('./shopeeService');
 const { fetchAccessTradeOrders } = require('./tiktokService');
-const { isAllowedHost } = require('./urlResolver');
+const {
+  isAllowedHost,
+  safeResolve,
+  detectPlatform,
+  cleanShopeeUrl,
+  cleanTikTokUrl,
+  extractUrlsFromText
+} = require('./urlResolver');
 const {
   getClientIp,
   createRateLimiter,
@@ -760,6 +767,121 @@ function registerCashbackRoutes(app) {
         error: err.message
       });
       return res.status(400).json({ error: err.message });
+    }
+  });
+
+  // 7.5. Instant Product Preview (Safe Resolve + GraphQL productOfferV2 metadata + Cashback estimate)
+  const previewLimiter = createRateLimiter(60, 60000);
+  app.post('/api/preview', previewLimiter, async (req, res) => {
+    logger.logEnter('POST /api/preview');
+    try {
+      const { url } = req.body || {};
+      if (!url || typeof url !== 'string' || !url.trim() || url.length > 2000) {
+        return res.status(400).json({ found: false, error: 'Vui lòng cung cấp link sản phẩm hợp lệ.' });
+      }
+
+      const extracted = extractUrlsFromText(url);
+      const targetUrl = extracted[0] || url.trim();
+
+      // SSRF & Domain Whitelist resolution
+      let resolvedUrl = targetUrl;
+      let htmlSnippet = '';
+      try {
+        const resolved = await safeResolve(targetUrl, 4);
+        resolvedUrl = resolved.resolvedUrl;
+        htmlSnippet = resolved.htmlSnippet;
+      } catch (err) {
+        logger.warning('POST /api/preview', 'Resolve error', { error: err.message });
+        return res.status(400).json({ found: false, error: err.message });
+      }
+
+      const platform = detectPlatform(resolvedUrl);
+      if (platform !== 'shopee' && platform !== 'tiktok') {
+        return res.status(400).json({
+          found: false,
+          error: 'Chỉ hỗ trợ xem trước sản phẩm Shopee và TikTok Shop.'
+        });
+      }
+
+      const db = ensureDbLoaded();
+      const s = db.settings;
+      const cbPct = Number(s.cashbackPercent || 70);
+      const taxRate = Number(s.taxDeductPercent ?? 10);
+
+      if (platform === 'shopee') {
+        const cleanInfo = cleanShopeeUrl(resolvedUrl, htmlSnippet);
+        const appId = s.shopeeAppId || process.env.SHOPEE_APP_ID || '';
+        const appSecret = s.shopeeAppSecret || process.env.SHOPEE_APP_SECRET || '';
+
+        let productMeta = null;
+        if (cleanInfo.itemId && appId && appSecret) {
+          productMeta = await fetchShopeeProductOffer(
+            cleanInfo.itemId,
+            appId,
+            appSecret,
+            cleanInfo.shopId
+          );
+        }
+
+        if (productMeta) {
+          const price = Number(productMeta.price || productMeta.priceMin || 0);
+          const commRate = Number(productMeta.commissionRate || 0);
+          const grossCommission = (price * commRate) / 100;
+          const split = calculateCommissionSplit(grossCommission, cbPct, taxRate);
+
+          logger.logLeave('POST /api/preview', { platform: 'shopee', hasOffer: true });
+          return res.json({
+            found: true,
+            platform: 'shopee',
+            hasOffer: true,
+            productName: productMeta.productName || cleanInfo.titleHint,
+            imageUrl: productMeta.imageUrl || '',
+            price,
+            priceMin: productMeta.priceMin || price,
+            priceMax: productMeta.priceMax || price,
+            commissionRate: commRate,
+            estimatedCashback: split.userCashbackAmount,
+            shopName: productMeta.shopName || '',
+            ratingStar: productMeta.ratingStar || 5,
+            sales: productMeta.sales || 0,
+            cleanUrl: cleanInfo.cleanUrl
+          });
+        }
+
+        logger.logLeave('POST /api/preview', { platform: 'shopee', hasOffer: false });
+        return res.json({
+          found: true,
+          platform: 'shopee',
+          hasOffer: false,
+          productName: cleanInfo.titleHint || 'Sản phẩm Shopee',
+          imageUrl: '',
+          price: 0,
+          estimatedCashback: 0,
+          cashbackPercent: cbPct,
+          note: `Hoàn ${cbPct}% hoa hồng sàn (tự động cộng ví khi hoàn tất đơn hàng)`,
+          cleanUrl: cleanInfo.cleanUrl
+        });
+      }
+
+      if (platform === 'tiktok') {
+        const cleanInfo = cleanTikTokUrl(resolvedUrl, htmlSnippet);
+        logger.logLeave('POST /api/preview', { platform: 'tiktok' });
+        return res.json({
+          found: true,
+          platform: 'tiktok',
+          hasOffer: Boolean(cleanInfo.imageUrl),
+          productName: cleanInfo.titleHint || 'Sản phẩm TikTok Shop',
+          imageUrl: cleanInfo.imageUrl || '',
+          price: 0,
+          estimatedCashback: 0,
+          cashbackPercent: cbPct,
+          note: `Hoàn ${cbPct}% hoa hồng sàn (tự động cộng ví khi hoàn tất đơn hàng)`,
+          cleanUrl: cleanInfo.cleanUrl
+        });
+      }
+    } catch (err) {
+      logger.error('POST /api/preview', 'Preview error', { error: err.message });
+      return res.status(500).json({ found: false, error: err.message });
     }
   });
 

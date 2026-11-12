@@ -285,9 +285,22 @@ const getCashbackLinkBtn = document.getElementById('getCashbackLinkBtn');
 const clearInputBtn = document.getElementById('clearInputBtn');
 const conversionResultSection = document.getElementById('conversionResultSection');
 const resultCardsList = document.getElementById('resultCardsList');
+const instantPreviewArea = document.getElementById('instantPreviewArea');
+const instantPreviewCard = document.getElementById('instantPreviewCard');
+
+let previewDebounceTimer = null;
 
 productUrlInput.addEventListener('input', () => {
-  clearInputBtn.classList.toggle('hidden', !productUrlInput.value);
+  const val = productUrlInput.value.trim();
+  clearInputBtn.classList.toggle('hidden', !val);
+  if (val.startsWith('http://') || val.startsWith('https://')) {
+    clearTimeout(previewDebounceTimer);
+    previewDebounceTimer = setTimeout(() => {
+      fetchInstantPreview(val);
+    }, 450);
+  } else {
+    if (instantPreviewArea) instantPreviewArea.classList.add('hidden');
+  }
 });
 
 productUrlInput.addEventListener('keydown', (e) => {
@@ -303,7 +316,7 @@ document.getElementById('pasteBtn').addEventListener('click', async () => {
     if (text) {
       productUrlInput.value = text;
       clearInputBtn.classList.remove('hidden');
-      handleGetCashbackLink();
+      fetchInstantPreview(text);
     }
   } catch {
     productUrlInput.focus();
@@ -314,9 +327,118 @@ document.getElementById('pasteBtn').addEventListener('click', async () => {
 clearInputBtn.addEventListener('click', () => {
   productUrlInput.value = '';
   clearInputBtn.classList.add('hidden');
+  if (instantPreviewArea) instantPreviewArea.classList.add('hidden');
   conversionResultSection.classList.add('hidden');
   productUrlInput.focus();
 });
+
+async function fetchInstantPreview(rawText) {
+  if (!instantPreviewArea || !instantPreviewCard || !rawText) return;
+  const match = rawText.match(/https?:\/\/[^\s<>"')\]}]+/i);
+  if (!match) return;
+
+  const url = match[0];
+  instantPreviewArea.classList.remove('hidden');
+  instantPreviewCard.classList.add('loading');
+  instantPreviewCard.innerHTML = `
+    <div style="display:flex;align-items:center;gap:10px;color:#64748b;font-size:13.5px;padding:8px 4px;">
+      <span style="display:inline-block;animation:spin 1s linear infinite;font-size:18px;">⏳</span>
+      <span>Đang tra cứu thông tin sản phẩm và tính toán mức hoàn tiền...</span>
+    </div>
+  `;
+
+  try {
+    const res = await apiFetch('/api/preview', {
+      method: 'POST',
+      body: JSON.stringify({ url })
+    });
+
+    if (!res || !res.found) {
+      instantPreviewArea.classList.add('hidden');
+      return;
+    }
+
+    renderInstantPreviewCard(res);
+  } catch (err) {
+    // If preview fails, keep it hidden gracefully
+    instantPreviewArea.classList.add('hidden');
+  } finally {
+    instantPreviewCard.classList.remove('loading');
+  }
+}
+
+function renderInstantPreviewCard(data) {
+  if (!instantPreviewCard) return;
+
+  const isShopee = data.platform === 'shopee';
+  const isTikTok = data.platform === 'tiktok';
+
+  const platLabel = isShopee
+    ? `<span class="plat-badge-inline shopee">
+        <svg class="plat-svg-icon" viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+          <path d="M19 7h-3V6a4 4 0 0 0-8 0v1H5a1 1 0 0 0-1 1v11a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3V8a1 1 0 0 0-1-1zm-9-1a2 2 0 0 1 4 0v1h-4V6zm8 13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V9h2v1.5a1 1 0 0 0 2 0V9h4v1.5a1 1 0 0 0 2 0V9h2v10z"/>
+          <path d="M13.5 13.5c-.3-.2-.7-.3-1.1-.4-.6-.2-.9-.3-.9-.6 0-.3.3-.5.7-.5.5 0 .9.2 1.2.4a.5.5 0 1 0 .6-.8c-.5-.3-1.1-.6-1.8-.6-1 0-1.7.6-1.7 1.5 0 .6.4 1.1 1.2 1.3.6.2.8.3.8.6 0 .3-.3.5-.8.5-.6 0-1.1-.3-1.4-.6a.5.5 0 1 0-.7.7c.5.5 1.2.8 2.1.8 1.1 0 1.8-.6 1.8-1.5 0-.7-.4-1.1-1.1-1.3z"/>
+        </svg> Shopee
+      </span>`
+    : isTikTok
+    ? `<span class="plat-badge-inline tiktok">
+        <svg class="plat-svg-icon" viewBox="0 0 24 24" width="13" height="13" fill="currentColor">
+          <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.34 0 .67.06.98.17V8.89a6.45 6.45 0 0 0-.98-.07A6.33 6.33 0 0 0 3 15.16 6.33 6.33 0 0 0 9.34 21.5a6.33 6.33 0 0 0 6.33-6.34V8.47a8.28 8.28 0 0 0 4.81 1.53V6.69h-.89z"/>
+        </svg> TikTok Shop
+      </span>`
+    : '🔗 Liên kết';
+
+  const safeThumb = safeHttpsUrl(data.imageUrl);
+  const thumbHtml = safeThumb
+    ? `<img src="${safeThumb}" alt="Sản phẩm" referrerpolicy="no-referrer" />`
+    : `<div style="font-size:28px;">🛍️</div>`;
+
+  const priceHtml = data.price > 0
+    ? `<span class="ip-price">Giá: <strong>${fmtVnd(data.price)}</strong></span>`
+    : '';
+
+  const cashbackHtml = data.estimatedCashback > 0
+    ? `<span class="ip-cashback">Ước tính hoàn: ~${fmtVnd(data.estimatedCashback)}</span>`
+    : `<span class="ip-cashback">Ước tính: Hoàn ${data.cashbackPercent || 70}% hoa hồng sàn</span>`;
+
+  const authNotice = !authToken
+    ? `<div class="ip-guest-hint">Đăng nhập để đơn được ghi nhận tự động vào ví của bạn.</div>`
+    : `<div class="ip-guest-hint"><strong>Sẵn sàng nhận hoàn tiền:</strong> Bấm nút để lấy link mua hàng!</div>`;
+
+  instantPreviewCard.innerHTML = `
+    <div class="ip-top-row">
+      <div class="ip-badge-group">
+        <span class="ip-badge-cashback">🟢 Có tiền hoàn</span>
+        ${platLabel}
+      </div>
+    </div>
+
+    <div class="ip-product-row">
+      <div class="ip-thumb">${thumbHtml}</div>
+      <div class="ip-details">
+        <div class="ip-title">${escapeHtml(data.productName || 'Sản phẩm chính hãng')}</div>
+        <div class="ip-numbers">
+          ${priceHtml}
+          ${cashbackHtml}
+        </div>
+      </div>
+    </div>
+
+    <div class="ip-footer-row">
+      ${authNotice}
+      <button type="button" class="btn btn-primary btn-sm" id="btnTriggerConvertFromPreview">
+        Tạo Link Hoàn Tiền Ngay
+      </button>
+    </div>
+  `;
+
+  const convertBtn = document.getElementById('btnTriggerConvertFromPreview');
+  if (convertBtn) {
+    convertBtn.addEventListener('click', () => {
+      handleGetCashbackLink();
+    });
+  }
+}
 
 async function handleGetCashbackLink() {
   const text = productUrlInput.value.trim();
