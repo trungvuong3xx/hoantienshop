@@ -613,6 +613,7 @@ document.getElementById('submitWithdrawBtn').addEventListener('click', async () 
 });
 
 // ================= ADMIN DASHBOARD =================
+let latestAdminUsers = [];
 const admOrdCommission = document.getElementById('admOrdCommission');
 const admOrdPreview70 = document.getElementById('admOrdPreview70');
 
@@ -737,8 +738,6 @@ async function loadAdminDashboard() {
         })
         .join('');
     }
-
-let latestAdminUsers = [];
 
     const usrTbody = document.getElementById('admUsersTableBody');
     latestAdminUsers = data.users || [];
