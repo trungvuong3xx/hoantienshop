@@ -738,18 +738,37 @@ async function loadAdminDashboard() {
         .join('');
     }
 
+let latestAdminUsers = [];
+
     const usrTbody = document.getElementById('admUsersTableBody');
-    usrTbody.innerHTML = (data.users || [])
-      .map(
-        (u) => `
+    latestAdminUsers = data.users || [];
+    usrTbody.innerHTML = latestAdminUsers
+      .map((u) => {
+        const isLocked = Boolean(u.accountLocked);
+        const statusHtml = isLocked
+          ? '<span class="status-badge st-cancelled">🔒 Đã khóa</span>'
+          : '<span class="status-badge st-approved">🟢 Hoạt động</span>';
+        const isSuperAdmin = u.role === 'admin';
+
+        return `
       <tr>
-        <td>${escapeHtml(u.code)}</td>
+        <td><strong>${escapeHtml(u.code)}</strong></td>
         <td>${escapeHtml(u.name)} (${escapeHtml(u.phone)})</td>
         <td><strong style="color:#059669;">${fmtVnd(u.balanceAvailable)}</strong></td>
         <td>${fmtVnd(u.balancePending)}</td>
+        <td>${statusHtml}</td>
+        <td>
+          ${
+            isSuperAdmin
+              ? '<span style="font-size:12px;color:#64748b;font-weight:600;">👑 Admin tối cao</span>'
+              : `<button type="button" class="btn btn-outline btn-sm" data-manage-user="${escapeHtml(
+                  u.id
+                )}">⚙️ Quản lý</button>`
+          }
+        </td>
       </tr>
-    `
-      )
+    `;
+      })
       .join('');
   } catch (err) {
     showToast(err.message);
@@ -876,6 +895,122 @@ document.getElementById('view-admin').addEventListener('click', async (e) => {
     } catch (err) {
       showToast(err.message);
     }
+    return;
+  }
+
+  const manageUserBtn = e.target.closest('[data-manage-user]');
+  if (manageUserBtn) {
+    const uid = manageUserBtn.getAttribute('data-manage-user');
+    const targetUser = latestAdminUsers.find((u) => u.id === uid);
+    if (targetUser) {
+      openUserManageModal(targetUser);
+    }
+  }
+});
+
+// Admin User Management Modal Functions
+const userManageModal = document.getElementById('userManageModal');
+let currentManagingUser = null;
+
+function openUserManageModal(user) {
+  currentManagingUser = user;
+  document.getElementById('manageUserId').value = user.id;
+  document.getElementById('manageUserCode').textContent = user.code;
+  document.getElementById('manageUserName').textContent = user.name || 'Chưa cập nhật';
+  document.getElementById('manageUserPhone').textContent = user.phone;
+  document.getElementById('manageUserBalance').textContent = fmtVnd(user.balanceAvailable);
+  document.getElementById('manageUserStatus').innerHTML = user.accountLocked
+    ? '<span style="color:#dc2626;">🔒 Đang bị khóa (Chặn đăng nhập & rút tiền)</span>'
+    : '<span style="color:#059669;">🟢 Đang hoạt động bình thường</span>';
+
+  document.getElementById('manageNewPassword').value = '';
+  document.getElementById('manageAdjustAmount').value = '';
+  document.getElementById('manageAdjustNote').value = '';
+
+  const lockBtn = document.getElementById('btnToggleUserLock');
+  lockBtn.textContent = user.accountLocked ? '🔓 Mở Khóa Tài Khoản' : '🔒 Khóa Tài Khoản Này';
+  lockBtn.className = user.accountLocked ? 'btn btn-success btn-sm' : 'btn btn-outline btn-sm';
+
+  userManageModal.classList.remove('hidden');
+}
+
+document.getElementById('closeUserManageModalBtn').addEventListener('click', () => {
+  userManageModal.classList.add('hidden');
+});
+
+document.getElementById('btnResetUserPassword').addEventListener('click', async () => {
+  if (!currentManagingUser) return;
+  const newPassword = document.getElementById('manageNewPassword').value.trim();
+  if (newPassword.length < 6) {
+    showToast('Mật khẩu mới phải có ít nhất 6 ký tự.');
+    return;
+  }
+  try {
+    const res = await apiFetch('/api/admin/users/action', {
+      method: 'POST',
+      body: JSON.stringify({ userId: currentManagingUser.id, action: 'reset_password', newPassword })
+    });
+    showToast(res.message);
+    document.getElementById('manageNewPassword').value = '';
+    loadAdminDashboard();
+  } catch (err) {
+    showToast(err.message);
+  }
+});
+
+document.getElementById('btnAdjustUserBalance').addEventListener('click', async () => {
+  if (!currentManagingUser) return;
+  const type = document.getElementById('manageAdjustType').value;
+  const rawAmt = Number(document.getElementById('manageAdjustAmount').value || 0);
+  const note = document.getElementById('manageAdjustNote').value.trim();
+  if (!rawAmt || rawAmt <= 0) {
+    showToast('Vui lòng nhập số tiền lớn hơn 0.');
+    return;
+  }
+  const amount = type === 'minus' ? -rawAmt : rawAmt;
+  try {
+    const res = await apiFetch('/api/admin/users/action', {
+      method: 'POST',
+      body: JSON.stringify({ userId: currentManagingUser.id, action: 'adjust_balance', amount, note })
+    });
+    showToast(res.message);
+    userManageModal.classList.add('hidden');
+    loadAdminDashboard();
+  } catch (err) {
+    showToast(err.message);
+  }
+});
+
+document.getElementById('btnToggleUserLock').addEventListener('click', async () => {
+  if (!currentManagingUser) return;
+  try {
+    const res = await apiFetch('/api/admin/users/action', {
+      method: 'POST',
+      body: JSON.stringify({ userId: currentManagingUser.id, action: 'toggle_lock' })
+    });
+    showToast(res.message);
+    userManageModal.classList.add('hidden');
+    loadAdminDashboard();
+  } catch (err) {
+    showToast(err.message);
+  }
+});
+
+document.getElementById('btnDeleteUser').addEventListener('click', async () => {
+  if (!currentManagingUser) return;
+  if (!confirm(`Bạn có chắc chắn muốn xóa tài khoản ${currentManagingUser.code} (${currentManagingUser.phone}) không?`)) {
+    return;
+  }
+  try {
+    const res = await apiFetch('/api/admin/users/action', {
+      method: 'POST',
+      body: JSON.stringify({ userId: currentManagingUser.id, action: 'delete' })
+    });
+    showToast(res.message);
+    userManageModal.classList.add('hidden');
+    loadAdminDashboard();
+  } catch (err) {
+    showToast(err.message);
   }
 });
 

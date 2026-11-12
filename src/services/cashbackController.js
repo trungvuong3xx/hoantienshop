@@ -11,6 +11,7 @@ const {
   recalculateUserWallet,
   recalculateAllWallets,
   executeAtomicWithdrawal,
+  appendLedgerEntry,
   auditLedgerIntegrity,
   createToken,
   verifyToken,
@@ -1266,6 +1267,76 @@ function registerCashbackRoutes(app) {
 
     logger.logLeave('POST /api/admin/withdrawals/update', { id, status });
     return res.json({ withdrawal: wd });
+  });
+
+  // Admin User Management Action (Reset password, Lock/Unlock, Adjust balance, Delete)
+  app.post('/api/admin/users/action', (req, res) => {
+    logger.logEnter('POST /api/admin/users/action');
+    if (!requireAdmin(req, res)) return;
+
+    const { userId, action, newPassword, amount, note } = req.body || {};
+    if (!userId) return res.status(400).json({ error: 'Thiếu ID người dùng.' });
+
+    const db = ensureDbLoaded();
+    const targetUser = db.users.find((u) => u.id === userId);
+    if (!targetUser) return res.status(404).json({ error: 'Không tìm thấy người dùng.' });
+
+    if (action === 'reset_password') {
+      if (!newPassword || String(newPassword).trim().length < 6) {
+        return res.status(400).json({ error: 'Mật khẩu mới phải có ít nhất 6 ký tự.' });
+      }
+      targetUser.passwordHash = hashPassword(String(newPassword).trim());
+      targetUser.tokenVersion = Number(targetUser.tokenVersion || 1) + 1;
+      saveDb(db);
+      logger.logLeave('POST /api/admin/users/action', { action, userCode: targetUser.code });
+      return res.json({ status: 'ok', message: `Đã đổi mật khẩu cho ${targetUser.code} thành công!` });
+    }
+
+    if (action === 'toggle_lock') {
+      if (targetUser.role === 'admin') {
+        return res.status(400).json({ error: 'Không thể khóa tài khoản Quản trị viên tối cao.' });
+      }
+      targetUser.accountLocked = !targetUser.accountLocked;
+      targetUser.tokenVersion = Number(targetUser.tokenVersion || 1) + 1;
+      saveDb(db);
+      const msg = targetUser.accountLocked
+        ? `Đã khóa tài khoản ${targetUser.code} (chặn đăng nhập & rút tiền)!`
+        : `Đã mở khóa tài khoản cho ${targetUser.code}!`;
+      logger.logLeave('POST /api/admin/users/action', { action, locked: targetUser.accountLocked });
+      return res.json({ status: 'ok', accountLocked: targetUser.accountLocked, message: msg });
+    }
+
+    if (action === 'adjust_balance') {
+      const num = Math.round(Number(amount || 0));
+      if (!num) return res.status(400).json({ error: 'Vui lòng nhập số tiền điều chỉnh khác 0.' });
+      const refId = `admin_adj_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
+      appendLedgerEntry(
+        targetUser.id,
+        'admin_adjustment',
+        num,
+        refId,
+        String(note || 'Điều chỉnh từ Quản trị viên').trim().slice(0, 100)
+      );
+      recalculateUserWallet(targetUser.id);
+      saveDb(db);
+      logger.logLeave('POST /api/admin/users/action', { action, amount: num });
+      return res.json({
+        status: 'ok',
+        message: `Đã ghi nhận ${num > 0 ? '+' : ''}${num.toLocaleString('vi-VN')}đ vào Sổ cái của ${targetUser.code}!`
+      });
+    }
+
+    if (action === 'delete') {
+      if (targetUser.role === 'admin') {
+        return res.status(400).json({ error: 'Không thể xóa tài khoản Quản trị viên tối cao.' });
+      }
+      db.users = db.users.filter((u) => u.id !== userId);
+      saveDb(db);
+      logger.logLeave('POST /api/admin/users/action', { action: 'delete', userId });
+      return res.json({ status: 'ok', message: `Đã xóa tài khoản ${targetUser.code} thành công!` });
+    }
+
+    return res.status(400).json({ error: 'Thao tác không hợp lệ.' });
   });
 
   // Periodic background auto-sync every 15 minutes on persistent server

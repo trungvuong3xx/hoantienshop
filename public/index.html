@@ -624,7 +624,7 @@
         </div>
 
         <div class="panel">
-          <h3>4. Danh Sách Thành Viên</h3>
+          <h3>4. Danh Sách Thành Viên & Quản Lý</h3>
           <div class="table-responsive">
             <table class="data-table">
               <thead>
@@ -633,6 +633,8 @@
                   <th>Tên / SĐT</th>
                   <th>Khả dụng</th>
                   <th>Chờ duyệt</th>
+                  <th>Trạng thái</th>
+                  <th>Thao tác</th>
                 </tr>
               </thead>
               <tbody id="admUsersTableBody"></tbody>
@@ -642,6 +644,55 @@
       </div>
     </section>
   </main>
+
+  <!-- User Management Modal for Admin -->
+  <div id="userManageModal" class="modal-backdrop hidden">
+    <div class="modal-box" style="max-width: 500px;">
+      <div class="modal-head">
+        <h3 id="userManageModalTitle">Quản Lý Thành Viên</h3>
+        <button type="button" class="close-btn" id="closeUserManageModalBtn">✕</button>
+      </div>
+
+      <div class="modal-body-form" style="gap: 16px;">
+        <input type="hidden" id="manageUserId" />
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; font-size: 13.5px;">
+          <div>Mã khách: <strong id="manageUserCode"></strong></div>
+          <div>Họ tên: <strong id="manageUserName"></strong></div>
+          <div>SĐT: <strong id="manageUserPhone"></strong></div>
+          <div>Số dư khả dụng: <strong id="manageUserBalance" style="color: #059669;"></strong></div>
+          <div>Trạng thái: <strong id="manageUserStatus"></strong></div>
+        </div>
+
+        <div style="border-top: 1px dashed #cbd5e1; padding-top: 12px;">
+          <h4 style="margin: 0 0 8px 0; font-size: 14px;">1. Đổi / Cấp Lại Mật Khẩu</h4>
+          <div style="display: flex; gap: 8px;">
+            <input type="text" id="manageNewPassword" placeholder="Nhập mật khẩu mới (VD: 123456)..." style="flex: 1;" />
+            <button type="button" class="btn btn-primary btn-sm" id="btnResetUserPassword">Lưu Mật Khẩu</button>
+          </div>
+        </div>
+
+        <div style="border-top: 1px dashed #cbd5e1; padding-top: 12px;">
+          <h4 style="margin: 0 0 8px 0; font-size: 14px;">2. Điều Chỉnh Số Dư (Ghi Vào Sổ Cái)</h4>
+          <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+            <select id="manageAdjustType" style="width: 120px;">
+              <option value="plus">Cộng (+)</option>
+              <option value="minus">Trừ (-)</option>
+            </select>
+            <input type="number" id="manageAdjustAmount" placeholder="Số tiền (VNĐ)..." style="flex: 1;" />
+          </div>
+          <div style="display: flex; gap: 8px;">
+            <input type="text" id="manageAdjustNote" placeholder="Lý do (thưởng sự kiện, đền bù, phạt)..." style="flex: 1;" />
+            <button type="button" class="btn btn-success btn-sm" id="btnAdjustUserBalance">Ghi Sổ Cái</button>
+          </div>
+        </div>
+
+        <div style="border-top: 1px dashed #cbd5e1; padding-top: 12px; display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap;">
+          <button type="button" class="btn btn-outline btn-sm" id="btnToggleUserLock">🔒 Khóa / Mở Khóa Tài Khoản</button>
+          <button type="button" class="btn btn-ghost btn-sm" id="btnDeleteUser" style="color: #dc2626;">🗑️ Xóa Tài Khoản</button>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <!-- Footer -->
   <footer class="footer">
