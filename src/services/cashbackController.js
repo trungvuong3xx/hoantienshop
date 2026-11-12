@@ -19,7 +19,11 @@ const {
   getDatabaseStatus
 } = require('./dbService');
 const { convertTextLinks } = require('./converterService');
-const { fetchShopeeConversionReport, fetchShopeeProductOffer } = require('./shopeeService');
+const {
+  fetchShopeeConversionReport,
+  fetchShopeeProductOffer,
+  fetchShopeeOgMetadata
+} = require('./shopeeService');
 const { fetchAccessTradeOrders } = require('./tiktokService');
 const {
   isAllowedHost,
@@ -823,17 +827,34 @@ function registerCashbackRoutes(app) {
           );
         }
 
+        if (!productMeta && cleanInfo.itemId) {
+          const ogMeta = await fetchShopeeOgMetadata(cleanInfo.shopId, cleanInfo.itemId);
+          if (ogMeta) {
+            productMeta = {
+              itemId: cleanInfo.itemId,
+              productName: ogMeta.productName || cleanInfo.titleHint,
+              imageUrl: ogMeta.imageUrl || '',
+              price: 0,
+              commissionRate: 0,
+              sales: 0
+            };
+          }
+        }
+
         if (productMeta) {
           const price = Number(productMeta.price || productMeta.priceMin || 0);
           const commRate = Number(productMeta.commissionRate || 0);
           const grossCommission = (price * commRate) / 100;
           const split = calculateCommissionSplit(grossCommission, cbPct, taxRate);
 
-          logger.logLeave('POST /api/preview', { platform: 'shopee', hasOffer: true });
+          logger.logLeave('POST /api/preview', {
+            platform: 'shopee',
+            hasOffer: Boolean(productMeta.commissionRate)
+          });
           return res.json({
             found: true,
             platform: 'shopee',
-            hasOffer: true,
+            hasOffer: Boolean(productMeta.commissionRate),
             productName: productMeta.productName || cleanInfo.titleHint,
             imageUrl: productMeta.imageUrl || '',
             price,
@@ -844,6 +865,7 @@ function registerCashbackRoutes(app) {
             shopName: productMeta.shopName || '',
             ratingStar: productMeta.ratingStar || 5,
             sales: productMeta.sales || 0,
+            cashbackPercent: cbPct,
             cleanUrl: cleanInfo.cleanUrl
           });
         }

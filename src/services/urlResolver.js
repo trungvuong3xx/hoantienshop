@@ -353,6 +353,15 @@ function cleanTikTokUrl(rawUrl, htmlSnippet = '') {
     } catch {}
   }
 
+  if (!imageUrl && htmlSnippet) {
+    const im =
+      htmlSnippet.match(/property=["']og:image["']\s+content=["']([^"']+)["']/i) ||
+      htmlSnippet.match(/content=["']([^"']+)["']\s+property=["']og:image["']/i);
+    if (im && /^https:\/\//i.test(im[1])) {
+      imageUrl = im[1];
+    }
+  }
+
   if (productId) {
     const cleanUrl = `https://www.tiktok.com/view/product/${productId}`;
     logger.logLeave('cleanTikTokUrl', { cleanUrl, productId });

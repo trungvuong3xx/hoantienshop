@@ -293,6 +293,9 @@ let previewDebounceTimer = null;
 productUrlInput.addEventListener('input', () => {
   const val = productUrlInput.value.trim();
   clearInputBtn.classList.toggle('hidden', !val);
+  if (conversionResultSection) {
+    conversionResultSection.classList.add('hidden');
+  }
   if (val.startsWith('http://') || val.startsWith('https://')) {
     clearTimeout(previewDebounceTimer);
     previewDebounceTimer = setTimeout(() => {
@@ -316,6 +319,9 @@ document.getElementById('pasteBtn').addEventListener('click', async () => {
     if (text) {
       productUrlInput.value = text;
       clearInputBtn.classList.remove('hidden');
+      if (conversionResultSection) {
+        conversionResultSection.classList.add('hidden');
+      }
       fetchInstantPreview(text);
     }
   } catch {
@@ -464,6 +470,9 @@ async function handleGetCashbackLink() {
       return;
     }
 
+    if (instantPreviewArea) {
+      instantPreviewArea.classList.add('hidden');
+    }
     conversionResultSection.classList.remove('hidden');
 
     const guestNoticeHtml = !authToken
@@ -477,6 +486,7 @@ async function handleGetCashbackLink() {
       .map((item) => {
         const isShopee = item.platform === 'shopee';
         const isTikTok = item.platform === 'tiktok';
+        const openAppBtnText = isShopee ? 'Mở Shopee' : isTikTok ? 'Mở TikTok' : 'Mở Mua Hàng';
         const platLabel = isShopee
           ? `<span class="plat-badge-inline shopee">
               <svg class="plat-svg-icon" viewBox="0 0 24 24" width="15" height="15" fill="currentColor">
@@ -542,7 +552,7 @@ async function handleGetCashbackLink() {
 
               <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:4px;">
                 <a href="${safeAffUrl}" target="_blank" rel="noopener" class="btn btn-primary" style="flex:1;">
-                  Mở Mua Hàng Nhận Hoàn Tiền
+                  ${openAppBtnText}
                 </a>
                 <button type="button" class="btn btn-outline" data-copy="${safeAffUrl}">
                   Sao chép
