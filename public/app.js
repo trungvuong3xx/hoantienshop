@@ -399,13 +399,19 @@ function renderInstantPreviewCard(data) {
     ? `<img src="${safeThumb}" alt="Sản phẩm" referrerpolicy="no-referrer" />`
     : `<div style="font-size:28px;">🛍️</div>`;
 
+  const isGenericTitle =
+    !data.productName ||
+    /^Sản phẩm (Shopee|TikTok Shop)\s*#/i.test(data.productName) ||
+    data.productName === 'Sản phẩm Shopee';
+  const displayTitle = isGenericTitle ? 'Đang cập nhật thông tin sản phẩm' : data.productName;
+
   const priceHtml = data.price > 0
     ? `<span class="ip-price">Giá: <strong>${fmtVnd(data.price)}</strong></span>`
     : '';
 
   const cashbackHtml = data.estimatedCashback > 0
     ? `<span class="ip-cashback">Ước tính hoàn: ~${fmtVnd(data.estimatedCashback)}</span>`
-    : `<span class="ip-cashback">Ước tính: Hoàn ${data.cashbackPercent || 70}% hoa hồng sàn</span>`;
+    : `<span class="ip-cashback">Mức hoàn tùy đơn hàng (tự động cộng ví khi có đơn)</span>`;
 
   const authNotice = !authToken
     ? `<div class="ip-guest-hint">Đăng nhập để đơn được ghi nhận tự động vào ví của bạn.</div>`
@@ -422,7 +428,7 @@ function renderInstantPreviewCard(data) {
     <div class="ip-product-row">
       <div class="ip-thumb">${thumbHtml}</div>
       <div class="ip-details">
-        <div class="ip-title">${escapeHtml(data.productName || 'Sản phẩm chính hãng')}</div>
+        <div class="ip-title">${escapeHtml(displayTitle)}</div>
         <div class="ip-numbers">
           ${priceHtml}
           ${cashbackHtml}
@@ -515,13 +521,21 @@ async function handleGetCashbackLink() {
             ? `<span>Giá bán: <strong>${fmtVnd(item.price)}</strong></span>`
             : '';
 
+        const isGenericItemTitle =
+          !item.productName ||
+          /^Sản phẩm (Shopee|TikTok Shop)\s*#/i.test(item.productName) ||
+          item.productName === 'Sản phẩm Shopee';
+        const displayItemTitle = isGenericItemTitle
+          ? 'Đang cập nhật thông tin sản phẩm'
+          : item.productName;
+
         const cbPct = Number(item.cashbackPercent || 70);
         const estCashbackHtml =
           item.estimatedCashback > 0
             ? `<span>Tiền hoàn dự kiến: <strong style="color:#059669;">+${fmtVnd(
                 item.estimatedCashback
               )}</strong></span>`
-            : `<span>Hoàn tiền: <strong style="color:#059669;">Hoàn ${cbPct}% hoa hồng sàn (~3.150đ – 45.000đ+/đơn, tự động cộng ví khi lên đơn)</strong></span>`;
+            : `<span>Hoàn tiền: <strong style="color:#059669;">Mức hoàn tùy đơn hàng (hoàn ${cbPct}% hoa hồng sàn khi đơn thành công)</strong></span>`;
 
         return `
         <div class="cashback-product-card">
@@ -533,7 +547,7 @@ async function handleGetCashbackLink() {
           <div class="product-meta-row">
             ${thumbHtml}
             <div class="product-meta-info">
-              <h4>${escapeHtml(item.productName || 'Sản phẩm chính hãng')}</h4>
+              <h4>${escapeHtml(displayItemTitle)}</h4>
               <div class="product-meta-sub">
                 ${priceInfoHtml}
                 ${estCashbackHtml}

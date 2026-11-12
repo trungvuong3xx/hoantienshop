@@ -214,108 +214,6 @@ async function fetchShopeeProductOffer(itemId, appId, appSecret, shopId = null) 
 }
 
 /**
- * Scrapes Shopee product Open Graph metadata (title & image) by streaming HTML using Mobile Safari UA.
- * Operates without requiring Shopee Open API approval.
- */
-const ogMetadataCache = new Map();
-
-async function fetchShopeeOgMetadata(shopId, itemId) {
-  logger.logEnter('fetchShopeeOgMetadata', { shopId: shopId || undefined, itemId });
-  if (!itemId) {
-    logger.logLeave('fetchShopeeOgMetadata', { status: 'skipped_no_itemId' });
-    return null;
-  }
-  const cacheKey = `${shopId || '0'}:${itemId}`;
-  const cached = getCached(ogMetadataCache, cacheKey);
-  if (cached) {
-    logger.logLeave('fetchShopeeOgMetadata', { cached: true, itemId });
-    return cached;
-  }
-
-  const targetUrl = shopId
-    ? `https://shopee.vn/product/${shopId}/${itemId}`
-    : `https://shopee.vn/product/0/${itemId}`;
-
-  try {
-    const res = await fetch(targetUrl, {
-      method: 'GET',
-      headers: {
-        'User-Agent':
-          'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
-        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7'
-      },
-      signal: AbortSignal.timeout(5000)
-    });
-
-    if (!res.ok) {
-      logger.warning('fetchShopeeOgMetadata', 'Shopee HTTP non-200', { status: res.status });
-      return null;
-    }
-
-    const reader = res.body?.getReader();
-    if (!reader) return null;
-
-    let chunks = '';
-    let ogTitle = null;
-    let ogImage = null;
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      chunks += Buffer.from(value).toString('utf8');
-
-      if (!ogTitle) {
-        const tm =
-          chunks.match(/property=["']og:title["']\s+content=["']([^"']+)["']/i) ||
-          chunks.match(/content=["']([^"']+)["']\s+property=["']og:title["']/i);
-        if (tm && tm[1]) ogTitle = tm[1];
-      }
-      if (!ogImage) {
-        const im =
-          chunks.match(/property=["']og:image["']\s+content=["']([^"']+)["']/i) ||
-          chunks.match(/content=["']([^"']+)["']\s+property=["']og:image["']/i);
-        if (im && im[1]) ogImage = im[1];
-      }
-
-      if (ogTitle && ogImage) {
-        await reader.cancel().catch(() => {});
-        break;
-      }
-
-      if (chunks.length > 400000) {
-        await reader.cancel().catch(() => {});
-        break;
-      }
-    }
-
-    if (ogTitle || ogImage) {
-      const cleanedTitle = ogTitle
-        ? ogTitle.replace(/\s*\|\s*Shopee.*$/i, '').trim().slice(0, 160)
-        : '';
-      const result = {
-        productName: cleanedTitle,
-        imageUrl: ogImage || ''
-      };
-      setCached(ogMetadataCache, cacheKey, result);
-      logger.logLeave('fetchShopeeOgMetadata', {
-        status: 'found',
-        hasImage: Boolean(ogImage),
-        titleSnippet: cleanedTitle.slice(0, 30)
-      });
-      return result;
-    }
-  } catch (err) {
-    logger.warning('fetchShopeeOgMetadata', 'Failed to fetch OG metadata', {
-      error: err.message
-    });
-  }
-
-  logger.logLeave('fetchShopeeOgMetadata', { status: 'not_found' });
-  return null;
-}
-
-/**
  * Fetch conversion report from Shopee Open API for Cron auto-sync.
  */
 async function fetchShopeeConversionReport(appId, appSecret, limit = 50) {
@@ -398,23 +296,6 @@ async function convertShopeeLink(cleanInfo, config = {}) {
     );
   }
 
-  // Fallback: If Open API is inactive or product not found, scrape real product image & title via OG metadata
-  if (!productMeta && cleanInfo.itemId) {
-    const ogMeta = await fetchShopeeOgMetadata(cleanInfo.shopId, cleanInfo.itemId);
-    if (ogMeta) {
-      productMeta = {
-        itemId: cleanInfo.itemId,
-        productName: ogMeta.productName || cleanInfo.titleHint,
-        imageUrl: ogMeta.imageUrl || '',
-        price: 0,
-        priceMin: 0,
-        priceMax: 0,
-        commissionRate: 0,
-        sales: 0
-      };
-    }
-  }
-
   logger.logLeave('convertShopeeLink', { usedMethod });
   return {
     affiliateUrl,
@@ -430,6 +311,5 @@ module.exports = {
   buildShopeeRedirectLink,
   generateShopeeOpenApiLink,
   fetchShopeeProductOffer,
-  fetchShopeeOgMetadata,
   fetchShopeeConversionReport
 };

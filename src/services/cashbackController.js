@@ -21,8 +21,7 @@ const {
 const { convertTextLinks } = require('./converterService');
 const {
   fetchShopeeConversionReport,
-  fetchShopeeProductOffer,
-  fetchShopeeOgMetadata
+  fetchShopeeProductOffer
 } = require('./shopeeService');
 const { fetchAccessTradeOrders } = require('./tiktokService');
 const {
@@ -827,20 +826,6 @@ function registerCashbackRoutes(app) {
           );
         }
 
-        if (!productMeta && cleanInfo.itemId) {
-          const ogMeta = await fetchShopeeOgMetadata(cleanInfo.shopId, cleanInfo.itemId);
-          if (ogMeta) {
-            productMeta = {
-              itemId: cleanInfo.itemId,
-              productName: ogMeta.productName || cleanInfo.titleHint,
-              imageUrl: ogMeta.imageUrl || '',
-              price: 0,
-              commissionRate: 0,
-              sales: 0
-            };
-          }
-        }
-
         if (productMeta) {
           const price = Number(productMeta.price || productMeta.priceMin || 0);
           const commRate = Number(productMeta.commissionRate || 0);
@@ -855,7 +840,7 @@ function registerCashbackRoutes(app) {
             found: true,
             platform: 'shopee',
             hasOffer: Boolean(productMeta.commissionRate),
-            productName: productMeta.productName || cleanInfo.titleHint,
+            productName: productMeta.productName || 'Đang cập nhật thông tin sản phẩm',
             imageUrl: productMeta.imageUrl || '',
             price,
             priceMin: productMeta.priceMin || price,
@@ -871,16 +856,20 @@ function registerCashbackRoutes(app) {
         }
 
         logger.logLeave('POST /api/preview', { platform: 'shopee', hasOffer: false });
+        const safeTitle =
+          cleanInfo.titleHint && !cleanInfo.titleHint.startsWith('Sản phẩm Shopee #')
+            ? cleanInfo.titleHint
+            : 'Đang cập nhật thông tin sản phẩm';
         return res.json({
           found: true,
           platform: 'shopee',
           hasOffer: false,
-          productName: cleanInfo.titleHint || 'Sản phẩm Shopee',
+          productName: safeTitle,
           imageUrl: '',
           price: 0,
           estimatedCashback: 0,
           cashbackPercent: cbPct,
-          note: `Hoàn ${cbPct}% hoa hồng sàn (tự động cộng ví khi hoàn tất đơn hàng)`,
+          note: `Mức hoàn tùy đơn hàng (hoàn ${cbPct}% hoa hồng sàn khi đơn thành công)`,
           cleanUrl: cleanInfo.cleanUrl
         });
       }
