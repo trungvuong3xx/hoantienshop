@@ -276,7 +276,7 @@ function ensureDbLoaded() {
   return memoryCache;
 }
 
-function saveDb(data = memoryCache) {
+async function saveDb(data = memoryCache) {
   try {
     const dir = path.dirname(LOCAL_DB_PATH);
     if (!fs.existsSync(dir)) {
@@ -287,10 +287,39 @@ function saveDb(data = memoryCache) {
     logger.warning('saveDb', 'Disk write warning', { error: err.message });
   }
   if (pgPool) {
-    syncSnapshotToPostgres(data).catch((e) =>
-      logger.warning('syncSnapshotToPostgres', 'Postgres sync error', { error: e.message })
-    );
+    try {
+      await syncSnapshotToPostgres(data);
+    } catch (e) {
+      logger.warning('syncSnapshotToPostgres', 'Postgres sync error', { error: e.message });
+    }
   }
+}
+
+async function reloadStateFromPostgres() {
+  if (!pgPool) return ensureDbLoaded();
+  try {
+    const client = await pgPool.connect();
+    try {
+      const res = await client.query(`SELECT payload FROM hoantienshop_state WHERE id = 'main'`);
+      if (res.rows.length > 0 && res.rows[0].payload) {
+        const p = res.rows[0].payload;
+        const initial = getInitialData();
+        memoryCache = {
+          settings: { ...initial.settings, ...(p.settings || {}) },
+          users: Array.isArray(p.users) && p.users.length > 0 ? p.users : initial.users,
+          clicks: Array.isArray(p.clicks) ? p.clicks : [],
+          orders: Array.isArray(p.orders) ? p.orders : [],
+          ledger: Array.isArray(p.ledger) ? p.ledger : [],
+          withdrawals: Array.isArray(p.withdrawals) ? p.withdrawals : []
+        };
+      }
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    logger.warning('reloadStateFromPostgres', 'Postgres reload error', { error: err.message });
+  }
+  return ensureDbLoaded();
 }
 
 // ================= POSTGRES SCHEMA, IMMUTABLE LEDGER TRIGGER & RELATIONAL SYNC =================
@@ -978,5 +1007,6 @@ module.exports = {
   createToken,
   verifyToken,
   sanitizeUser,
-  getDatabaseStatus
+  getDatabaseStatus,
+  reloadStateFromPostgres
 };

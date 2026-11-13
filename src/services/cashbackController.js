@@ -16,7 +16,8 @@ const {
   createToken,
   verifyToken,
   sanitizeUser,
-  getDatabaseStatus
+  getDatabaseStatus,
+  reloadStateFromPostgres
 } = require('./dbService');
 const { convertTextLinks } = require('./converterService');
 const {
@@ -264,7 +265,7 @@ async function runShopeeAutoSync() {
 
   db.settings.lastAutoSyncAt = new Date().toISOString();
   recalculateAllWallets();
-  saveDb(db);
+  await saveDb(db);
   logger.logLeave('runShopeeAutoSync', { syncedCount });
   return { syncedCount };
 }
@@ -325,7 +326,7 @@ async function runAccessTradeAutoSync() {
 
   db.settings.lastAutoSyncAt = new Date().toISOString();
   recalculateAllWallets();
-  saveDb(db);
+  await saveDb(db);
   logger.logLeave('runAccessTradeAutoSync', { syncedCount });
   return { syncedCount };
 }
@@ -369,7 +370,7 @@ async function runAutoSyncAll({ requireAtLeastOne = false } = {}) {
   }
 
   db.settings.lastAutoSyncAt = new Date().toISOString();
-  saveDb(db);
+  await saveDb(db);
   const out = {
     shopeeSynced,
     accesstradeSynced,
@@ -527,7 +528,7 @@ function registerCashbackRoutes(app) {
     };
 
     db.users.push(newUser);
-    saveDb(db);
+    await saveDb(db);
 
     const token = createToken(newUser);
     setAuthCookie(res, token);
@@ -565,7 +566,7 @@ function registerCashbackRoutes(app) {
     // Automatically upgrade legacy hash to scrypt
     if (!String(user.passwordHash).startsWith('scrypt$')) {
       user.passwordHash = hashPassword(password);
-      saveDb(db);
+      await saveDb(db);
     }
 
     recalculateUserWallet(user.id);
@@ -652,7 +653,7 @@ function registerCashbackRoutes(app) {
   });
 
   // 6. User Submit Order Lookup / Tracking Request (Strictly status = 'pending', 0 commission until Affiliate Network confirms)
-  app.post('/api/user/submit-order', (req, res) => {
+  app.post('/api/user/submit-order', async (req, res) => {
     logger.logEnter('POST /api/user/submit-order');
     const user = getAuthUser(req);
     if (!user) return res.status(401).json({ error: 'Vui lòng đăng nhập để tra cứu đơn hàng.' });
@@ -675,7 +676,7 @@ function registerCashbackRoutes(app) {
         existing.userCode = user.code;
         existing.updatedAt = new Date().toISOString();
         recalculateUserWallet(user.id);
-        saveDb(db);
+        await saveDb(db);
         logger.logLeave('POST /api/user/submit-order', { orderSn: cleanSn, autoClaimed: true });
         return res.json({
           order: existing,
@@ -718,7 +719,7 @@ function registerCashbackRoutes(app) {
     };
 
     db.orders.unshift(newOrd);
-    saveDb(db);
+    await saveDb(db);
     logger.logLeave('POST /api/user/submit-order', { orderSn: cleanSn });
     return res.json({ order: newOrd });
   });
@@ -1263,10 +1264,11 @@ function registerCashbackRoutes(app) {
     return user;
   }
 
-  app.get('/api/admin/dashboard', (req, res) => {
+  app.get('/api/admin/dashboard', async (req, res) => {
     logger.logEnter('GET /api/admin/dashboard');
     if (!requireAdmin(req, res)) return;
 
+    await reloadStateFromPostgres();
     triggerLazyAutoSyncIfNeeded();
     const db = ensureDbLoaded();
     recalculateAllWallets();
@@ -1344,7 +1346,7 @@ function registerCashbackRoutes(app) {
     }
   });
 
-  app.post('/api/admin/settings', (req, res) => {
+  app.post('/api/admin/settings', async (req, res) => {
     logger.logEnter('POST /api/admin/settings');
     if (!requireAdmin(req, res)) return;
 
@@ -1399,12 +1401,12 @@ function registerCashbackRoutes(app) {
       }
     }
 
-    saveDb(db);
+    await saveDb(db);
     logger.logLeave('POST /api/admin/settings');
     return res.json({ status: 'ok' });
   });
 
-  app.post('/api/admin/orders', (req, res) => {
+  app.post('/api/admin/orders', async (req, res) => {
     logger.logEnter('POST /api/admin/orders');
     if (!requireAdmin(req, res)) return;
 
@@ -1515,14 +1517,14 @@ function registerCashbackRoutes(app) {
     }
 
     recalculateAllWallets();
-    saveDb(db);
+    await saveDb(db);
 
     logger.logLeave('POST /api/admin/orders', { orderSn: targetOrder.orderSn, status: targetOrder.status, cashback: targetOrder.userCashbackAmount });
     return res.json({ order: targetOrder });
   });
 
   // Admin Delete Order
-  app.post('/api/admin/orders/delete', (req, res) => {
+  app.post('/api/admin/orders/delete', async (req, res) => {
     logger.logEnter('POST /api/admin/orders/delete');
     if (!requireAdmin(req, res)) return;
 
@@ -1544,14 +1546,14 @@ function registerCashbackRoutes(app) {
 
     const [deletedOrder] = db.orders.splice(idx, 1);
     recalculateAllWallets();
-    saveDb(db);
+    await saveDb(db);
 
     logger.logLeave('POST /api/admin/orders/delete', { orderSn: deletedOrder.orderSn });
     return res.json({ status: 'ok', message: `Đã xóa đơn hàng #${deletedOrder.orderSn} thành công!` });
   });
 
   // Admin CSV Import (Higher payload limit 200kb only on this route)
-  app.post('/api/admin/import-orders', express.json({ limit: '200kb' }), (req, res) => {
+  app.post('/api/admin/import-orders', express.json({ limit: '200kb' }), async (req, res) => {
     logger.logEnter('POST /api/admin/import-orders');
     if (!requireAdmin(req, res)) return;
 
@@ -1580,12 +1582,12 @@ function registerCashbackRoutes(app) {
     }
 
     recalculateAllWallets();
-    saveDb(db);
+    await saveDb(db);
     logger.logLeave('POST /api/admin/import-orders', { importedCount });
     return res.json({ importedCount });
   });
 
-  app.post('/api/admin/withdrawals/update', (req, res) => {
+  app.post('/api/admin/withdrawals/update', async (req, res) => {
     logger.logEnter('POST /api/admin/withdrawals/update');
     if (!requireAdmin(req, res)) return;
 
@@ -1599,14 +1601,14 @@ function registerCashbackRoutes(app) {
     wd.status = status;
     wd.processedAt = new Date().toISOString();
     recalculateUserWallet(wd.userId);
-    saveDb(db);
+    await saveDb(db);
 
     logger.logLeave('POST /api/admin/withdrawals/update', { id, status });
     return res.json({ withdrawal: wd });
   });
 
   // Admin Delete Withdrawal
-  app.post('/api/admin/withdrawals/delete', (req, res) => {
+  app.post('/api/admin/withdrawals/delete', async (req, res) => {
     logger.logEnter('POST /api/admin/withdrawals/delete');
     if (!requireAdmin(req, res)) return;
 
@@ -1627,14 +1629,14 @@ function registerCashbackRoutes(app) {
       (e) => !e.refId.startsWith(`withdraw_debit_${id}`) && !e.refId.startsWith(`withdraw_refund_${id}`)
     );
     recalculateUserWallet(deletedWd.userId);
-    saveDb(db);
+    await saveDb(db);
 
     logger.logLeave('POST /api/admin/withdrawals/delete', { id });
     return res.json({ status: 'ok', message: `Đã xóa lệnh rút tiền #${id} thành công!` });
   });
 
   // Admin User Management Action (Reset password, Lock/Unlock, Adjust balance, Reset balance, Delete)
-  app.post('/api/admin/users/action', (req, res) => {
+  app.post('/api/admin/users/action', async (req, res) => {
     logger.logEnter('POST /api/admin/users/action');
     if (!requireAdmin(req, res)) return;
 
@@ -1658,7 +1660,7 @@ function registerCashbackRoutes(app) {
         );
       }
       recalculateUserWallet(targetUser.id);
-      saveDb(db);
+      await saveDb(db);
       logger.logLeave('POST /api/admin/users/action', { action, userCode: targetUser.code });
       return res.json({
         status: 'ok',
@@ -1672,7 +1674,7 @@ function registerCashbackRoutes(app) {
       }
       targetUser.passwordHash = hashPassword(String(newPassword).trim());
       targetUser.tokenVersion = Number(targetUser.tokenVersion || 1) + 1;
-      saveDb(db);
+      await saveDb(db);
       logger.logLeave('POST /api/admin/users/action', { action, userCode: targetUser.code });
       return res.json({ status: 'ok', message: `Đã đổi mật khẩu cho ${targetUser.code} thành công!` });
     }
@@ -1683,7 +1685,7 @@ function registerCashbackRoutes(app) {
       }
       targetUser.accountLocked = !targetUser.accountLocked;
       targetUser.tokenVersion = Number(targetUser.tokenVersion || 1) + 1;
-      saveDb(db);
+      await saveDb(db);
       const msg = targetUser.accountLocked
         ? `Đã khóa tài khoản ${targetUser.code} (chặn đăng nhập & rút tiền)!`
         : `Đã mở khóa tài khoản cho ${targetUser.code}!`;
@@ -1703,7 +1705,7 @@ function registerCashbackRoutes(app) {
         String(note || 'Điều chỉnh từ Quản trị viên').trim().slice(0, 100)
       );
       recalculateUserWallet(targetUser.id);
-      saveDb(db);
+      await saveDb(db);
       logger.logLeave('POST /api/admin/users/action', { action, amount: num });
       return res.json({
         status: 'ok',
@@ -1716,10 +1718,12 @@ function registerCashbackRoutes(app) {
         return res.status(400).json({ error: 'Không thể xóa tài khoản Quản trị viên tối cao.' });
       }
       db.users = db.users.filter((u) => u.id !== userId);
-      saveDb(db);
+      await saveDb(db);
       logger.logLeave('POST /api/admin/users/action', { action: 'delete', userId });
       return res.json({ status: 'ok', message: `Đã xóa tài khoản ${targetUser.code} thành công!` });
     }
+
+    return res.status(400).json({ error: 'Thao tác không hợp lệ.' });
 
     return res.status(400).json({ error: 'Thao tác không hợp lệ.' });
   });
