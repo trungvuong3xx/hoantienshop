@@ -10,7 +10,26 @@ const LOCAL_DB_PATH = IS_VERCEL
   : path.join(__dirname, '..', '..', 'data', 'db.json');
 const SEED_DB_PATH = path.join(__dirname, '..', 'data', 'seedDb.json');
 
-const DATABASE_URL = process.env.DATABASE_URL || process.env.POSTGRES_URL || '';
+let DATABASE_URL = process.env.DATABASE_URL || process.env.POSTGRES_URL || '';
+if (!DATABASE_URL) {
+  const envPath = path.join(__dirname, '..', '..', '.env');
+  if (fs.existsSync(envPath)) {
+    const lines = fs.readFileSync(envPath, 'utf8').split(/\r?\n/);
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
+      const eqIdx = trimmed.indexOf('=');
+      if (eqIdx !== -1) {
+        const k = trimmed.slice(0, eqIdx).trim();
+        const v = trimmed.slice(eqIdx + 1).trim();
+        if (k === 'DATABASE_URL' || k === 'POSTGRES_URL') {
+          DATABASE_URL = v;
+          break;
+        }
+      }
+    }
+  }
+}
 let pgPool = null;
 let pgSchemaReady = false;
 

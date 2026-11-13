@@ -1,7 +1,27 @@
+const fs = require('fs');
+const path = require('path');
+
+// Auto-load .env for local environments without external dependencies
+const envPath = path.join(__dirname, '.env');
+if (fs.existsSync(envPath)) {
+  const envContent = fs.readFileSync(envPath, 'utf8');
+  for (const line of envContent.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const eqIdx = trimmed.indexOf('=');
+    if (eqIdx !== -1) {
+      const k = trimmed.slice(0, eqIdx).trim();
+      const v = trimmed.slice(eqIdx + 1).trim();
+      if (!process.env[k]) {
+        process.env[k] = v;
+      }
+    }
+  }
+}
+
 const express = require('express');
 const helmet = require('helmet');
 const cors = require('cors');
-const path = require('path');
 const logger = require('./src/utils/logger');
 const { registerCashbackRoutes } = require('./src/services/cashbackController');
 
