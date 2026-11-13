@@ -21,12 +21,27 @@
   <!-- Top Navigation Header -->
   <header class="navbar">
     <div class="nav-container">
-      <a href="#home" class="brand" data-nav="home">
-        <div class="brand-icon">💸</div>
-        <div>
-          <span class="brand-name" id="navSiteName">Hoàn Tiền Sàn</span>
+      <div class="nav-top-row">
+        <a href="#home" class="brand" data-nav="home">
+          <div class="brand-icon">💸</div>
+          <div>
+            <span class="brand-name" id="navSiteName">Hoàn Tiền Sàn</span>
+          </div>
+        </a>
+
+        <div class="nav-auth" id="navAuthArea">
+          <button type="button" class="btn btn-outline" id="openLoginBtn">Đăng nhập</button>
+          <button type="button" class="btn btn-primary" id="openRegisterBtn">Đăng ký ngay</button>
         </div>
-      </a>
+
+        <div class="nav-user hidden" id="navUserArea">
+          <div class="user-chip" data-nav="wallet" title="Mở Ví hoàn tiền của bạn">
+            <span class="user-name-label" id="headerUserName">Tài khoản</span>
+            <span class="user-balance-pill" id="headerUserBalance">0đ</span>
+          </div>
+          <button type="button" class="btn btn-ghost btn-sm" id="logoutBtn">Đăng xuất</button>
+        </div>
+      </div>
 
       <nav class="nav-links">
         <button type="button" class="nav-btn active" data-nav="home">Trang chủ</button>
@@ -35,19 +50,6 @@
         <button type="button" class="nav-btn" data-nav="terms">Điều khoản & Bảo mật</button>
         <button type="button" class="nav-btn nav-admin hidden" id="navAdminBtn" data-nav="admin">Quản trị</button>
       </nav>
-
-      <div class="nav-auth" id="navAuthArea">
-        <button type="button" class="btn btn-outline" id="openLoginBtn">Đăng nhập</button>
-        <button type="button" class="btn btn-primary" id="openRegisterBtn">Đăng ký ngay</button>
-      </div>
-
-      <div class="nav-user hidden" id="navUserArea">
-        <div class="user-chip" data-nav="wallet" title="Mở Ví hoàn tiền của bạn">
-          <span class="user-name-label" id="headerUserName">Tài khoản</span>
-          <span class="user-balance-pill" id="headerUserBalance">0đ</span>
-        </div>
-        <button type="button" class="btn btn-ghost btn-sm" id="logoutBtn">Đăng xuất</button>
-      </div>
     </div>
   </header>
 
@@ -102,6 +104,24 @@
           <button type="button" class="btn btn-cta" id="getCashbackLinkBtn">
             Lấy Link Hoàn Tiền
           </button>
+        </div>
+
+        <!-- Quick 3-Step Guide (Cách dùng nhanh hiển thị ngay lập tức) -->
+        <div class="quick-guide-strip">
+          <div class="qg-item">
+            <span class="qg-num">1</span>
+            <div class="qg-text"><strong>Dán link</strong> sản phẩm</div>
+          </div>
+          <span class="qg-arrow">➔</span>
+          <div class="qg-item">
+            <span class="qg-num">2</span>
+            <div class="qg-text"><strong>Bấm mở App</strong> mua hàng</div>
+          </div>
+          <span class="qg-arrow">➔</span>
+          <div class="qg-item">
+            <span class="qg-num">3</span>
+            <div class="qg-text"><strong>Nhận hoàn</strong> tiền vào ví</div>
+          </div>
         </div>
 
         <!-- Instant Product Preview Area (Hiển thị tức thì khi dán link) -->

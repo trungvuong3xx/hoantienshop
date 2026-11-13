@@ -121,7 +121,8 @@ document.body.addEventListener('click', (e) => {
 
   const copyBtn = e.target.closest('[data-copy]');
   if (copyBtn) {
-    copyText(copyBtn.getAttribute('data-copy'));
+    const copyMsg = copyBtn.getAttribute('data-copy-msg') || 'Đã sao chép thành công!';
+    copyText(copyBtn.getAttribute('data-copy'), copyMsg);
     return;
   }
 
@@ -509,7 +510,6 @@ async function handleGetCashbackLink() {
           : '🔗 Liên kết';
 
         const safeThumbUrl = safeHttpsUrl(item.imageUrl);
-        const safeQrUrl = safeHttpsUrl(item.qrUrl);
         const safeAffUrl = safeHttpsUrl(item.affiliateUrl);
 
         const thumbHtml = safeThumbUrl
@@ -518,7 +518,7 @@ async function handleGetCashbackLink() {
 
         const priceInfoHtml =
           item.price > 0
-            ? `<span>Giá bán: <strong>${fmtVnd(item.price)}</strong></span>`
+            ? `<span class="prod-price-tag">Giá: <strong>${fmtVnd(item.price)}</strong></span>`
             : '';
 
         const isGenericItemTitle =
@@ -532,18 +532,22 @@ async function handleGetCashbackLink() {
         const cbPct = Number(item.cashbackPercent || 70);
         const estCashbackHtml =
           item.estimatedCashback > 0
-            ? `<span>Tiền hoàn dự kiến: <strong style="color:#059669;">+${fmtVnd(
-                item.estimatedCashback
-              )}</strong></span>`
-            : `<span>Hoàn tiền: <strong style="color:#059669;">Mức hoàn tùy đơn hàng (hoàn ${cbPct}% hoa hồng sàn khi đơn thành công)</strong></span>`;
+            ? `<div class="est-cashback-badge">
+                <span>Hoàn tiền:</span>
+                <strong>+${fmtVnd(item.estimatedCashback)}</strong>
+               </div>`
+            : `<div class="est-cashback-badge normal">
+                <span>Mức hoàn tùy đơn hàng (${cbPct}% hoa hồng sàn)</span>
+               </div>`;
 
         return `
         <div class="cashback-product-card">
           <div class="cp-top">
-            <span class="valid-badge">Sản phẩm hợp lệ nhận hoàn tiền</span>
+            <span class="valid-badge">✨ Đã tạo link hoàn tiền</span>
             <span style="font-size:13px;font-weight:700;color:#475569;">${platLabel}</span>
           </div>
 
+          <!-- Product Details Row -->
           <div class="product-meta-row">
             ${thumbHtml}
             <div class="product-meta-info">
@@ -555,24 +559,36 @@ async function handleGetCashbackLink() {
             </div>
           </div>
 
-          <div class="cp-body-flex">
-            <div class="qr-box" title="Quét mã QR bằng điện thoại để mua hàng nhanh chóng">
-              <img src="${safeQrUrl}" alt="QR Mua Hàng" loading="lazy" referrerpolicy="no-referrer" />
-            </div>
+          <!-- Nổi bật phần quan trọng: Nút Mua Hàng to rõ -->
+          <div class="cp-cta-block">
+            <a href="${safeAffUrl}" target="_blank" rel="noopener" class="btn btn-cta btn-open-aff">
+              🛒 ${openAppBtnText} (Mua ngay)
+            </a>
+          </div>
 
-            <div class="cp-actions-col">
-              <div style="font-size:12.5px;color:#475569;font-weight:600;">Liên kết mua hàng hoàn tiền của bạn:</div>
-              <div class="short-link-box">${safeAffUrl}</div>
-
-              <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:4px;">
-                <a href="${safeAffUrl}" target="_blank" rel="noopener" class="btn btn-primary" style="flex:1;">
-                  ${openAppBtnText}
-                </a>
-                <button type="button" class="btn btn-outline" data-copy="${safeAffUrl}">
-                  Sao chép
-                </button>
-              </div>
+          <!-- Rút gọn link aff thành 1 ô ngang duy nhất (Bỏ hoàn toàn mã QR) -->
+          <div class="cp-link-single-row">
+            <div class="aff-input-box" title="Bấm để sao chép link">
+              <span class="aff-link-icon">🔗</span>
+              <input
+                type="text"
+                class="aff-single-input"
+                value="${safeAffUrl}"
+                readonly
+                onclick="this.select()"
+                data-copy="${safeAffUrl}"
+                data-copy-msg="Đã sao chép link mua hàng hoàn tiền!"
+              />
             </div>
+            <button
+              type="button"
+              class="btn btn-copy-inline"
+              data-copy="${safeAffUrl}"
+              data-copy-msg="Đã sao chép link mua hàng hoàn tiền!"
+              title="Sao chép link mua hàng"
+            >
+              📋 Sao chép
+            </button>
           </div>
 
           ${guestNoticeHtml}
