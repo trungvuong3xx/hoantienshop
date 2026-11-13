@@ -87,13 +87,16 @@ function hashPassword(pw) {
   if (!pw || typeof pw !== 'string' || pw.length < 6) {
     throw new Error('Mật khẩu không hợp lệ, yêu cầu tối thiểu 6 ký tự.');
   }
+  if (pw.length > 128) {
+    throw new Error('Mật khẩu không được vượt quá 128 ký tự.');
+  }
   const salt = crypto.randomBytes(16);
   const hash = crypto.scryptSync(pw, salt, 64, { N: 16384, r: 8, p: 1 });
   return `scrypt$${salt.toString('hex')}$${hash.toString('hex')}`;
 }
 
 function verifyPassword(pw, stored) {
-  if (!pw || !stored || typeof stored !== 'string') return false;
+  if (!pw || !stored || typeof stored !== 'string' || pw.length > 128) return false;
   if (stored.startsWith('scrypt$')) {
     const parts = stored.split('$');
     if (parts.length !== 3) return false;
@@ -242,36 +245,34 @@ function getDefaultPostbackToken() {
   if (IS_PROD) {
     throw new Error('Cần cấu hình POSTBACK_SECRET hoặc AUTH_SECRET trên Production.');
   }
-  return 'local_dev_postback_token_secret';
+  if (process.env.ALLOW_INSECURE_DEV === '1') {
+    return 'local_dev_postback_token_secret';
+  }
+  throw new Error('Thiếu POSTBACK_SECRET! Hãy cấu hình trong .env hoặc bật ALLOW_INSECURE_DEV=1 cho local dev.');
 }
 
+let cachedDefaultSettings = null;
 function getDefaultSettings() {
+  if (cachedDefaultSettings) return { ...cachedDefaultSettings };
   const rawCb = Number(process.env.CASHBACK_PERCENT);
   const rawTax = Number(process.env.TAX_DEDUCT_PERCENT);
   const rawMinWd = Number(process.env.MIN_WITHDRAW);
 
-  return {
+  cachedDefaultSettings = {
     siteName: process.env.SITE_NAME || 'Hoàn Tiền Sàn',
     shopeeMode: process.env.SHOPEE_MODE || 'an_redir',
     shopeeAffiliateId: (process.env.SHOPEE_AFFILIATE_ID || '').trim(),
-    shopeeAppId: (process.env.SHOPEE_APP_ID || '').trim(),
-    shopeeAppSecret: (process.env.SHOPEE_APP_SECRET || '').trim(),
-    addlivetagApiKey: (process.env.ADDLIVETAG_API_KEY || '').trim(),
     tiktokMode: process.env.TIKTOK_MODE || 'deeplink',
-    tiktokAppKey: (process.env.TIKTOK_APP_KEY || '').trim(),
-    tiktokAppSecret: (process.env.TIKTOK_APP_SECRET || '').trim(),
-    tiktokAccessToken: (process.env.TIKTOK_ACCESS_TOKEN || '').trim(),
     tiktokDeepLinkTemplate: (process.env.TIKTOK_DEEPLINK_TEMPLATE || '').trim(),
-    accesstradeApiKey: (process.env.ACCESSTRADE_API_KEY || '').trim(),
-    postbackToken: getDefaultPostbackToken(),
-    lastAutoSyncAt: null,
-    shortenerProvider: process.env.SHORTENER_PROVIDER || 'none',
     cashbackPercent: Number.isFinite(rawCb) ? Math.min(100, Math.max(0, rawCb)) : 70,
     taxDeductPercent: Number.isFinite(rawTax) ? Math.min(50, Math.max(0, rawTax)) : 10,
     referralBonusPercent: 0,
     minWithdrawAmount: Number.isFinite(rawMinWd) && rawMinWd >= 0 ? rawMinWd : 50000,
-    supportZalo: process.env.SUPPORT_ZALO || ''
+    supportZalo: process.env.SUPPORT_ZALO || '',
+    lastAutoSyncAt: null,
+    shortenerProvider: process.env.SHORTENER_PROVIDER || 'none'
   };
+  return { ...cachedDefaultSettings };
 }
 
 let cachedAdminPassword = null;
@@ -280,9 +281,13 @@ function getInitialData() {
     if (process.env.ADMIN_PASSWORD) {
       cachedAdminPassword = process.env.ADMIN_PASSWORD.trim();
     } else if (IS_PROD) {
-      cachedAdminPassword = 'trungvuong1881996A@';
+      throw new Error('Bắt buộc phải cấu hình biến môi trường ADMIN_PASSWORD trên Production.');
     } else {
-      cachedAdminPassword = 'trungvuong1881996A@';
+      if (process.env.ALLOW_INSECURE_DEV === '1') {
+        cachedAdminPassword = 'devAdminPassword123!';
+      } else {
+        throw new Error('Thiếu ADMIN_PASSWORD! Hãy cấu hình trong .env hoặc bật ALLOW_INSECURE_DEV=1 cho local dev.');
+      }
     }
   }
 
@@ -326,7 +331,7 @@ function syncAdminCredentials(data) {
   const targetPhone = (process.env.ADMIN_PHONE || 'trungvuong3x').trim();
   const targetEmail = (process.env.ADMIN_EMAIL || 'trungvuong3x@hoantiensan.online').trim();
   const targetCode = (process.env.ADMIN_CODE || 'TRUNGVUONG3X').trim().toUpperCase();
-  const targetPassword = process.env.ADMIN_PASSWORD ? process.env.ADMIN_PASSWORD.trim() : 'trungvuong1881996A@';
+  const targetPassword = process.env.ADMIN_PASSWORD ? process.env.ADMIN_PASSWORD.trim() : null;
 
   let changed = false;
   if (admin.phone !== targetPhone) {
@@ -349,36 +354,38 @@ function syncAdminCredentials(data) {
   return changed;
 }
 
-function normalizeState(raw, initial = getInitialData()) {
+function normalizeState(raw, initial = null) {
+  if (!raw || typeof raw !== 'object') {
+    raw = {};
+  }
+  const defaultInit = initial || getInitialData();
   const state = {
-    settings: { ...initial.settings, ...(raw.settings || {}) },
-    users: Array.isArray(raw.users) && raw.users.length > 0 ? raw.users : initial.users,
+    settings: { ...defaultInit.settings, ...(raw.settings || {}) },
+    users: Array.isArray(raw.users) && raw.users.length > 0 ? raw.users : defaultInit.users,
     clicks: Array.isArray(raw.clicks) ? raw.clicks : [],
     orders: Array.isArray(raw.orders) ? raw.orders : [],
     ledger: Array.isArray(raw.ledger) ? raw.ledger : [],
     withdrawals: Array.isArray(raw.withdrawals) ? raw.withdrawals : []
   };
+
+  // Strip plaintext secrets from settings so they are never written to disk or Postgres
+  delete state.settings.shopeeAppSecret;
+  delete state.settings.tiktokAccessToken;
+  delete state.settings.tiktokAppSecret;
+  delete state.settings.addlivetagApiKey;
+  delete state.settings.postbackToken;
+
   syncAdminCredentials(state);
   return state;
 }
 
 function ensureDbLoaded() {
   if (memoryCache) {
-    // Sync active environment variable overrides
-    const envSettings = getDefaultSettings();
-    if (process.env.SHOPEE_AFFILIATE_ID) memoryCache.settings.shopeeAffiliateId = envSettings.shopeeAffiliateId;
-    if (process.env.SHOPEE_APP_ID) memoryCache.settings.shopeeAppId = envSettings.shopeeAppId;
-    if (process.env.SHOPEE_APP_SECRET) memoryCache.settings.shopeeAppSecret = envSettings.shopeeAppSecret;
-    if (process.env.TIKTOK_APP_KEY) memoryCache.settings.tiktokAppKey = envSettings.tiktokAppKey;
-    if (process.env.TIKTOK_APP_SECRET) memoryCache.settings.tiktokAppSecret = envSettings.tiktokAppSecret;
-    if (process.env.TIKTOK_ACCESS_TOKEN) memoryCache.settings.tiktokAccessToken = envSettings.tiktokAccessToken;
-    if (process.env.TIKTOK_MODE) memoryCache.settings.tiktokMode = envSettings.tiktokMode;
-    if (process.env.TIKTOK_DEEPLINK_TEMPLATE) memoryCache.settings.tiktokDeepLinkTemplate = envSettings.tiktokDeepLinkTemplate;
-    if (process.env.ACCESSTRADE_API_KEY) memoryCache.settings.accesstradeApiKey = envSettings.accesstradeApiKey;
-    if (process.env.ADDLIVETAG_API_KEY) memoryCache.settings.addlivetagApiKey = envSettings.addlivetagApiKey;
-    if (process.env.POSTBACK_SECRET || process.env.AUTH_SECRET) {
-      memoryCache.settings.postbackToken = envSettings.postbackToken;
-    }
+    // Sync active public environment variable overrides
+    if (process.env.SHOPEE_AFFILIATE_ID) memoryCache.settings.shopeeAffiliateId = process.env.SHOPEE_AFFILIATE_ID.trim();
+    if (process.env.TIKTOK_DEEPLINK_TEMPLATE) memoryCache.settings.tiktokDeepLinkTemplate = process.env.TIKTOK_DEEPLINK_TEMPLATE.trim();
+    if (process.env.SUPPORT_ZALO) memoryCache.settings.supportZalo = process.env.SUPPORT_ZALO.trim();
+
     const adminChanged = syncAdminCredentials(memoryCache);
     if (adminChanged) {
       saveDb(memoryCache).catch((err) => {
@@ -444,35 +451,38 @@ function ensureDbLoaded() {
 
 // ================= SERIALIZED SAVE QUEUE & ATOMIC FILE WRITES =================
 
-let saveQueueChain = Promise.resolve();
+let internalSaveQueue = Promise.resolve();
+let pendingSavePromise = null;
+let pendingSaveData = null;
 
 async function performSaveDb(data) {
+  if (!data) return;
+
   // Prune clicks buffer to prevent memory exhaustion
   if (Array.isArray(data.clicks) && data.clicks.length > 5000) {
     data.clicks = data.clicks.slice(-5000);
   }
 
   // 1. Atomic local file write
+  let tmpPath = null;
   try {
     const dir = path.dirname(LOCAL_DB_PATH);
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
-    const tmpPath = `${LOCAL_DB_PATH}.tmp.${process.pid}.${Date.now()}`;
+    tmpPath = `${LOCAL_DB_PATH}.tmp.${process.pid}.${Date.now()}`;
     fs.writeFileSync(tmpPath, JSON.stringify(data), 'utf8');
-    try {
-      fs.renameSync(tmpPath, LOCAL_DB_PATH);
-    } catch (renameErr) {
-      if (fs.existsSync(LOCAL_DB_PATH)) {
-        try {
-          fs.unlinkSync(LOCAL_DB_PATH);
-        } catch (_) {}
-      }
-      fs.renameSync(tmpPath, LOCAL_DB_PATH);
-    }
+    fs.renameSync(tmpPath, LOCAL_DB_PATH);
+    tmpPath = null;
   } catch (err) {
     logger.error('saveDb', 'Lỗi ghi đĩa local', { error: err.message });
     if (!pgPool) throw err;
+  } finally {
+    if (tmpPath && fs.existsSync(tmpPath)) {
+      try {
+        fs.unlinkSync(tmpPath);
+      } catch (_) {}
+    }
   }
 
   // 2. Postgres sync (Only if pool exists AND schema was verified ready!)
@@ -485,15 +495,53 @@ async function performSaveDb(data) {
   }
 }
 
-async function saveDb(data = memoryCache) {
+/**
+ * Robust serialized save with internal queue error isolation and batch coalescing.
+ * If a save fails, the caller receives the error, but the internal queue recovers immediately.
+ */
+function saveDb(data = memoryCache) {
   const targetData = data || memoryCache;
-  saveQueueChain = saveQueueChain
-    .then(() => performSaveDb(targetData))
-    .catch((err) => {
-      logger.error('saveDb', 'Lỗi trong hàng đợi lưu dữ liệu', { error: err.message });
-      throw err;
+  if (!targetData) {
+    return Promise.resolve();
+  }
+
+  // If a save is currently waiting in line, coalesce with it
+  if (pendingSavePromise) {
+    pendingSaveData = targetData;
+    return pendingSavePromise;
+  }
+
+  let resolveCaller;
+  let rejectCaller;
+  const callerPromise = new Promise((resolve, reject) => {
+    resolveCaller = resolve;
+    rejectCaller = reject;
+  });
+
+  pendingSavePromise = callerPromise;
+  pendingSaveData = targetData;
+
+  // Append to internal queue and ensure internal queue NEVER remains rejected
+  internalSaveQueue = internalSaveQueue
+    .then(async () => {
+      const snapshot = pendingSaveData;
+      pendingSavePromise = null;
+      pendingSaveData = null;
+      try {
+        await performSaveDb(snapshot);
+        resolveCaller();
+      } catch (err) {
+        logger.error('saveDb', 'Lỗi trong tác vụ lưu dữ liệu', { error: err.message });
+        rejectCaller(err);
+      }
+    })
+    .catch((queueErr) => {
+      // Failsafe recovery to keep queue alive
+      logger.error('saveDb', 'Lỗi bất thường trong chuỗi hàng đợi lưu', { error: queueErr.message });
+      if (rejectCaller) rejectCaller(queueErr);
     });
-  return saveQueueChain;
+
+  return callerPromise;
 }
 
 // ================= POSTGRES SCHEMA, APPEND-ONLY TRIGGER & SERIALIZATION =================
@@ -618,10 +666,18 @@ async function initPostgresIfConfigured() {
         END;
         $$ LANGUAGE plpgsql;
 
-        DROP TRIGGER IF EXISTS ledger_no_update ON ledger;
-        CREATE TRIGGER ledger_no_update
-        BEFORE UPDATE OR DELETE ON ledger
-        FOR EACH ROW EXECUTE FUNCTION ledger_immutable();
+        DO $$
+        BEGIN
+          IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'ledger_no_update') THEN
+            CREATE TRIGGER ledger_no_update
+            BEFORE UPDATE OR DELETE ON ledger
+            FOR EACH ROW EXECUTE FUNCTION ledger_immutable();
+          END IF;
+        END $$;
+
+        CREATE INDEX IF NOT EXISTS idx_ledger_user_id ON ledger(user_id);
+        CREATE INDEX IF NOT EXISTS idx_orders_user_id ON orders(user_id);
+        CREATE INDEX IF NOT EXISTS idx_withdrawals_user_id ON withdrawals(user_id);
       `);
 
       // Relational-authoritative state synchronization from Postgres
@@ -652,6 +708,7 @@ async function initPostgresIfConfigured() {
       });
     } catch (err) {
       pgSchemaReady = false;
+      dbInitPromise = null; // CRITICAL: Reset promise so subsequent requests can retry
       logger.error('initPostgresIfConfigured', 'Khởi tạo Postgres thất bại', { error: err.message });
       throw err;
     } finally {
@@ -988,8 +1045,11 @@ async function reloadStateFromPostgres() {
  * Positive amount = credit, Negative amount = debit.
  * NEVER deletes or mutates existing ledger entries.
  */
-function appendLedgerEntry(userId, type, amount, refId, note = '') {
-  if (!userId || !refId) return null;
+function appendLedgerEntry(userId, type, amount, refId, note = '', { forcedId = null } = {}) {
+  if (!userId || !refId) {
+    logger.error('appendLedgerEntry', 'Thiếu userId hoặc refId bắt buộc', { userId, refId });
+    return null;
+  }
   const rawAmt = Number(amount);
   if (!Number.isFinite(rawAmt) || rawAmt === 0) return null;
 
@@ -1001,7 +1061,7 @@ function appendLedgerEntry(userId, type, amount, refId, note = '') {
   if (exists) return exists;
 
   const entry = {
-    id: `led_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`,
+    id: forcedId || `led_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`,
     userId,
     type,
     amount: Math.round(rawAmt),
@@ -1015,8 +1075,9 @@ function appendLedgerEntry(userId, type, amount, refId, note = '') {
 }
 
 /**
- * Synchronize ledger entries via strictly compensatory reversal entries.
+ * Synchronize ledger entries via strictly compensatory Delta Reconciler.
  * Balance is computed purely as SUM(ledger.amount).
+ * Supports unlimited cycles of approval, cancellation, re-approval, and amount adjustment.
  */
 function recalculateUserWallet(userId, { persist = false } = {}) {
   logger.logEnter('recalculateUserWallet', { userId });
@@ -1031,68 +1092,77 @@ function recalculateUserWallet(userId, { persist = false } = {}) {
       (o.userCode && String(o.userCode).toUpperCase() === userCodeUpper)
   );
 
-  let pending = 0;
+  // 1. Build Map Index for O(1) lookups
+  const userLedger = db.ledger.filter((e) => e.userId === user.id);
+  const ledgerByOrderSn = new Map();
+  const ledgerByRefId = new Map();
 
-  for (const ord of userOrders) {
-    const cleanSn = String(ord.orderSn || '').trim();
-    if (!cleanSn) continue;
+  for (const entry of userLedger) {
+    if (entry.refId) {
+      ledgerByRefId.set(entry.refId, entry);
 
-    const amt = Math.round(Number(ord.userCashbackAmount || 0));
-    const creditRef = `order_credit_${cleanSn}`;
-    const revokeRef = `order_revoke_${cleanSn}`;
-
-    if (ord.status === 'pending') {
-      // If was previously credited and now moved back to pending, apply compensatory revocation
-      const hadCredit = db.ledger.find((e) => e.refId === creditRef);
-      const hadRevoke = db.ledger.find((e) => e.refId === revokeRef);
-      if (hadCredit && !hadRevoke) {
-        appendLedgerEntry(
-          user.id,
-          'order_revocation',
-          -Math.abs(hadCredit.amount),
-          revokeRef,
-          `Đơn #${cleanSn} quay về chờ xử lý, thu hồi hoa hồng tạm ứng`
-        );
+      let sn = null;
+      if (entry.refId.startsWith('ord_adj_')) {
+        const parts = entry.refId.slice(8).split('_');
+        parts.pop();
+        sn = parts.join('_');
+      } else if (entry.refId.startsWith('order_credit_')) {
+        sn = entry.refId.slice(13);
+      } else if (entry.refId.startsWith('order_revoke_')) {
+        sn = entry.refId.slice(13);
+      } else if (entry.refId.startsWith('order_recredit_')) {
+        sn = entry.refId.slice(15);
+      } else if (entry.refId.startsWith('order_cancellation_')) {
+        sn = entry.refId.slice(19);
       }
-      pending += amt;
-    } else if (ord.status === 'approved' && amt > 0) {
-      const hadCredit = db.ledger.find((e) => e.refId === creditRef);
-      const hadRevoke = db.ledger.find((e) => e.refId === revokeRef);
 
-      if (!hadCredit) {
-        appendLedgerEntry(
-          user.id,
-          'order_cashback',
-          amt,
-          creditRef,
-          `Hoàn tiền đơn hàng #${cleanSn}`
-        );
-      } else if (hadRevoke) {
-        // Re-approved after cancellation: append re-credit entry
-        const recreditRef = `order_recredit_${cleanSn}`;
-        appendLedgerEntry(
-          user.id,
-          'order_cashback',
-          amt,
-          recreditRef,
-          `Khôi phục hoàn tiền đơn hàng #${cleanSn}`
-        );
-      }
-    } else if (ord.status === 'cancelled') {
-      const hadCredit = db.ledger.find((e) => e.refId === creditRef);
-      const hadRevoke = db.ledger.find((e) => e.refId === revokeRef);
-      if (hadCredit && !hadRevoke) {
-        appendLedgerEntry(
-          user.id,
-          'order_cancellation',
-          -Math.abs(hadCredit.amount),
-          revokeRef,
-          `Hủy hoa hồng do đơn hàng #${cleanSn} bị hủy`
-        );
+      if (sn) {
+        if (!ledgerByOrderSn.has(sn)) ledgerByOrderSn.set(sn, []);
+        ledgerByOrderSn.get(sn).push(entry);
       }
     }
   }
 
+  let pending = 0;
+
+  // 2. Delta Reconciler: calculate exact difference between expected and current ledger
+  for (const ord of userOrders) {
+    const cleanSn = String(ord.orderSn || '').trim();
+    if (!cleanSn) continue;
+
+    const cashbackAmt = Math.round(Number(ord.userCashbackAmount || 0));
+    const expectedApprovedAmt = (ord.status === 'approved' && cashbackAmt > 0) ? cashbackAmt : 0;
+
+    if (ord.status === 'pending') {
+      pending += cashbackAmt;
+    }
+
+    const existingEntries = ledgerByOrderSn.get(cleanSn) || [];
+    const currentSum = existingEntries.reduce((sum, e) => sum + Number(e.amount || 0), 0);
+    const delta = expectedApprovedAmt - currentSum;
+
+    if (delta !== 0) {
+      const seq = existingEntries.length + 1;
+      const refId = (seq === 1 && delta > 0)
+        ? `order_credit_${cleanSn}`
+        : `ord_adj_${cleanSn}_${seq}`;
+
+      const type = delta > 0 ? 'order_cashback' : 'order_revocation';
+      const note = delta > 0
+        ? `Hoàn tiền đơn hàng #${cleanSn} (+${delta.toLocaleString('vi-VN')} đ)`
+        : `Điều chỉnh hoàn tiền đơn #${cleanSn} (${delta.toLocaleString('vi-VN')} đ)`;
+
+      const newEntry = appendLedgerEntry(user.id, type, delta, refId, note);
+      if (newEntry) {
+        existingEntries.push(newEntry);
+        userLedger.push(newEntry);
+        ledgerByRefId.set(refId, newEntry);
+        if (!ledgerByOrderSn.has(cleanSn)) ledgerByOrderSn.set(cleanSn, existingEntries);
+      }
+    }
+  }
+
+  // 3. Reconcile withdrawals
   const userWithdrawals = db.withdrawals.filter((w) => w.userId === user.id);
   for (const w of userWithdrawals) {
     const amt = Math.round(Number(w.amount || 0));
@@ -1100,38 +1170,52 @@ function recalculateUserWallet(userId, { persist = false } = {}) {
     const refundRef = `withdraw_refund_${w.id}`;
 
     if (w.status === 'pending' || w.status === 'paid') {
-      appendLedgerEntry(
-        user.id,
-        'withdrawal_lock',
-        -Math.abs(amt),
-        debitRef,
-        `Rút tiền #${w.id} (${w.bankName || 'Ngân hàng'})`
-      );
+      if (!ledgerByRefId.has(debitRef)) {
+        const entry = appendLedgerEntry(
+          user.id,
+          'withdrawal_lock',
+          -Math.abs(amt),
+          debitRef,
+          `Rút tiền #${w.id} (${w.bankName || 'Ngân hàng'})`
+        );
+        if (entry) {
+          userLedger.push(entry);
+          ledgerByRefId.set(debitRef, entry);
+        }
+      }
     } else if (w.status === 'rejected') {
-      const hadDebit = db.ledger.find((e) => e.refId === debitRef);
-      const hadRefund = db.ledger.find((e) => e.refId === refundRef);
+      const hadDebit = ledgerByRefId.get(debitRef);
+      const hadRefund = ledgerByRefId.get(refundRef);
       if (hadDebit && !hadRefund) {
-        appendLedgerEntry(
+        const entry = appendLedgerEntry(
           user.id,
           'withdrawal_refund',
           Math.abs(amt),
           refundRef,
           `Hoàn lại lệnh rút tiền bị từ chối #${w.id}`
         );
+        if (entry) {
+          userLedger.push(entry);
+          ledgerByRefId.set(refundRef, entry);
+        }
       }
     }
   }
 
-  // Compute balance strictly from append-only ledger SUM
-  const userLedger = db.ledger.filter((e) => e.userId === user.id);
+  // 4. Compute balance strictly from append-only ledger SUM & net earned
   let ledgerSum = 0;
-  let earnedSum = 0;
+  let earnedNetSum = 0;
 
   for (const entry of userLedger) {
     const entryAmt = Number(entry.amount || 0);
     ledgerSum += entryAmt;
-    if (entryAmt > 0 && (entry.type === 'order_cashback' || entry.type === 'referral_bonus')) {
-      earnedSum += entryAmt;
+    if (
+      entry.type === 'order_cashback' ||
+      entry.type === 'referral_bonus' ||
+      entry.type === 'order_revocation' ||
+      entry.type === 'order_cancellation'
+    ) {
+      earnedNetSum += entryAmt;
     }
   }
 
@@ -1140,7 +1224,7 @@ function recalculateUserWallet(userId, { persist = false } = {}) {
     .reduce((acc, w) => acc + Number(w.amount || 0), 0);
 
   user.balancePending = Math.max(0, Math.round(pending));
-  user.totalEarned = Math.max(0, Math.round(earnedSum));
+  user.totalEarned = Math.max(0, Math.round(earnedNetSum));
   user.totalWithdrawn = Math.max(0, Math.round(paidWithdrawn));
   user.balanceAvailable = Math.round(ledgerSum);
   user.hasNegativeBalance = user.balanceAvailable < 0;
@@ -1154,8 +1238,10 @@ function recalculateUserWallet(userId, { persist = false } = {}) {
   logger.logLeave('recalculateUserWallet', {
     userId,
     balanceAvailable: user.balanceAvailable,
+    totalEarned: user.totalEarned,
     hasNegativeBalance: user.hasNegativeBalance
   });
+
   return user;
 }
 
@@ -1197,8 +1283,9 @@ async function executeAtomicWithdrawal({
       throw new Error('Tên chủ tài khoản không hợp lệ.');
     }
 
-    const effectiveMin = Number.isFinite(Number(minWithdraw))
-      ? Math.max(0, Number(minWithdraw))
+    const rawMin = Number(minWithdraw);
+    const effectiveMin = Number.isFinite(rawMin) && rawMin > 0
+      ? Math.max(Number(db.settings.minWithdrawAmount ?? 50000), rawMin)
       : Number(db.settings.minWithdrawAmount ?? 50000);
 
     const numAmount = Math.round(Number(amount || 0));
@@ -1225,6 +1312,7 @@ async function executeAtomicWithdrawal({
     }
 
     const wdId = `wd_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
+    const ledgerId = `led_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
     const debitRef = `withdraw_debit_${wdId}`;
 
     // If PostgreSQL is configured, enforce strict transactional row lock & ledger balance
@@ -1261,7 +1349,6 @@ async function executeAtomicWithdrawal({
           throw new Error('Số dư khả dụng trên Sổ cái không đủ để thực hiện lệnh rút này.');
         }
 
-        const ledgerId = `led_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
         await client.query(
           `INSERT INTO ledger (id, user_id, type, amount, ref_id, note)
            VALUES ($1, $2, 'withdrawal_lock', $3, $4, $5)`,
@@ -1324,7 +1411,8 @@ async function executeAtomicWithdrawal({
       'withdrawal_lock',
       -Math.abs(numAmount),
       debitRef,
-      `Rút tiền #${wdId} (${user.bankName})`
+      `Rút tiền #${wdId} (${user.bankName})`,
+      { forcedId: ledgerId }
     );
     db.withdrawals.unshift(withdrawal);
 
@@ -1449,5 +1537,7 @@ module.exports = {
   verifyToken,
   sanitizeUser,
   getDatabaseStatus,
-  reloadStateFromPostgres
+  reloadStateFromPostgres,
+  getDefaultPostbackToken,
+  withUserLock
 };

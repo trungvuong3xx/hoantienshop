@@ -17,7 +17,9 @@ const {
   verifyToken,
   sanitizeUser,
   getDatabaseStatus,
-  reloadStateFromPostgres
+  reloadStateFromPostgres,
+  getDefaultPostbackToken,
+  withUserLock
 } = require('./dbService');
 const { convertTextLinks } = require('./converterService');
 const {
@@ -83,6 +85,9 @@ function getAuthUser(req) {
   if (!user) return null;
   if (Number(user.tokenVersion || 1) !== Number(payload.ver || 1)) {
     return null; // Token revoked after password change
+  }
+  if (user.accountLocked) {
+    return null; // Account temporarily locked
   }
   return user;
 }
@@ -1234,7 +1239,7 @@ function registerCashbackRoutes(app) {
   // Official AccessTrade Real-Time Postback (Supports query macros, body, and header token)
   async function handleAccessTradePostback(req, res) {
     const db = ensureDbLoaded();
-    const expectedToken = String(process.env.POSTBACK_SECRET || db.settings.postbackToken || '').trim();
+    const expectedToken = String(process.env.POSTBACK_SECRET || getDefaultPostbackToken() || '').trim();
     const providedToken = String(
       req.headers['x-postback-token'] ||
       (req.headers.authorization && req.headers.authorization.startsWith('Bearer ')
@@ -1315,8 +1320,7 @@ function registerCashbackRoutes(app) {
 
   app.post('/api/webhooks/postback', async (req, res) => {
     logger.logEnter('POST /api/webhooks/postback');
-    const db = ensureDbLoaded();
-    const secret = process.env.POSTBACK_SECRET || db.settings.postbackToken;
+    const secret = process.env.POSTBACK_SECRET || getDefaultPostbackToken();
     if (!secret) {
       return res.status(503).json({ error: 'Postback webhook not configured.' });
     }
@@ -1404,7 +1408,7 @@ function registerCashbackRoutes(app) {
 
     const proto = req.headers['x-forwarded-proto'] || req.protocol || 'https';
     const host = req.headers['x-forwarded-host'] || req.headers.host || 'hoantienshop.vercel.app';
-    const postbackToken = process.env.POSTBACK_SECRET || db.settings.postbackToken;
+    const postbackToken = process.env.POSTBACK_SECRET || getDefaultPostbackToken();
     const postbackUrlTemplate = `${proto}://${host}/api/webhooks/accesstrade?token=${encodeURIComponent(
       postbackToken
     )}&order_id={order_id}&sub1={sub1}&pub_commission={pub_commission}&billing={billing}&status={status}&merchant={merchant}`;
