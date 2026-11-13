@@ -131,8 +131,7 @@ app.use(async (req, res, next) => {
       logger.error('server', 'Postgres startup error', { error: err.message });
       if (process.env.DATABASE_URL || process.env.POSTGRES_URL) {
         return res.status(503).json({
-          error: 'Cơ sở dữ liệu đang đồng bộ hoặc khởi động. Vui lòng tải lại trang sau vài giây.',
-          details: err.message
+          error: 'Cơ sở dữ liệu đang đồng bộ hoặc khởi động. Vui lòng tải lại trang sau vài giây.'
         });
       }
     }
