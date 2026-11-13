@@ -1142,7 +1142,7 @@ function registerCashbackRoutes(app) {
   });
 
   // Official AccessTrade Real-Time Postback (Supports both GET query macros and POST body)
-  function handleAccessTradePostback(req, res) {
+  async function handleAccessTradePostback(req, res) {
     logger.logEnter('AccessTradePostback', { method: req.method });
     const db = ensureDbLoaded();
     const expectedToken = String(process.env.POSTBACK_SECRET || db.settings.postbackToken || '').trim();
@@ -1191,7 +1191,7 @@ function registerCashbackRoutes(app) {
     });
 
     recalculateAllWallets();
-    saveDb(db);
+    await saveDb(db);
     logger.logLeave('AccessTradePostback', {
       orderSn: order?.orderSn,
       userCode: order?.userCode,
