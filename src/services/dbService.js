@@ -974,6 +974,18 @@ async function batchSyncLedger(client, ledger) {
 
 async function batchSyncUsers(client, users) {
   if (!Array.isArray(users) || users.length === 0) return;
+
+  // Prune deleted users that have zero ledger records to keep phone uniqueness clean
+  const activeIds = users.map((u) => u.id).filter(Boolean);
+  if (activeIds.length > 0) {
+    try {
+      await client.query(
+        `DELETE FROM users WHERE id NOT IN (SELECT unnest($1::text[])) AND NOT EXISTS (SELECT 1 FROM ledger WHERE ledger.user_id = users.id)`,
+        [activeIds]
+      );
+    } catch (_) {}
+  }
+
   const chunks = chunkArray(users, 25);
   for (const chunk of chunks) {
     const valuePlaceholders = [];
