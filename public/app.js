@@ -411,7 +411,7 @@ function renderInstantPreviewCard(data) {
     : '';
 
   const cashbackHtml = data.estimatedCashback > 0
-    ? `<span class="ip-cashback">Ước tính hoàn: ~${fmtVnd(data.estimatedCashback)}</span>`
+    ? `<span class="ip-cashback">Hoàn tiền ước tính: ~${fmtVnd(data.estimatedCashback)}</span>`
     : `<span class="ip-cashback">Mức hoàn tùy đơn hàng (tự động cộng ví khi có đơn)</span>`;
 
   const authNotice = !authToken
@@ -533,8 +533,8 @@ async function handleGetCashbackLink() {
         const estCashbackHtml =
           item.estimatedCashback > 0
             ? `<div class="est-cashback-badge">
-                <span>Hoàn tiền:</span>
-                <strong>+${fmtVnd(item.estimatedCashback)}</strong>
+                <span>Hoàn tiền ước tính:</span>
+                <strong>~${fmtVnd(item.estimatedCashback)}</strong>
                </div>`
             : `<div class="est-cashback-badge normal">
                 <span>Mức hoàn tùy đơn hàng (${cbPct}% hoa hồng sàn)</span>
