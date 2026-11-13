@@ -260,7 +260,7 @@ document.getElementById('doRegisterBtn').addEventListener('click', async () => {
   const name = document.getElementById('regName').value.trim();
   const phone = document.getElementById('regPhone').value.trim();
   const password = document.getElementById('regPassword').value;
-  const refCode = document.getElementById('regRefCode').value.trim();
+  const refCode = document.getElementById('regRefCode')?.value?.trim() || '';
   try {
     const data = await apiFetch('/api/auth/register', {
       method: 'POST',
@@ -620,10 +620,13 @@ async function loadUserDashboard() {
     document.getElementById('statTotalEarned').textContent = fmtVnd(currentUser.totalEarned);
     document.getElementById('statWithdrawn').textContent = fmtVnd(currentUser.totalWithdrawn);
 
-    // Referral Info
-    document.getElementById('userRefCount').textContent = data.referralCount || 0;
-    const refLink = `${window.location.origin}/?ref=${encodeURIComponent(currentUser.code)}`;
-    document.getElementById('userReferralLinkInput').value = refLink;
+    // Referral Info (safely check if element exists)
+    const refCountEl = document.getElementById('userRefCount');
+    if (refCountEl) refCountEl.textContent = data.referralCount || 0;
+    const refInputEl = document.getElementById('userReferralLinkInput');
+    if (refInputEl) {
+      refInputEl.value = `${window.location.origin}/?ref=${encodeURIComponent(currentUser.code)}`;
+    }
 
     if (currentUser.bankName) document.getElementById('wdBankName').value = currentUser.bankName;
     if (currentUser.bankAccount) {
@@ -713,10 +716,13 @@ async function loadUserDashboard() {
   }
 }
 
-document.getElementById('copyRefLinkBtn').addEventListener('click', () => {
-  const val = document.getElementById('userReferralLinkInput').value;
-  if (val) copyText(val, 'Đã sao chép liên kết giới thiệu bạn bè!');
-});
+const copyRefLinkBtn = document.getElementById('copyRefLinkBtn');
+if (copyRefLinkBtn) {
+  copyRefLinkBtn.addEventListener('click', () => {
+    const val = document.getElementById('userReferralLinkInput')?.value;
+    if (val) copyText(val, 'Đã sao chép liên kết giới thiệu bạn bè!');
+  });
+}
 
 document.getElementById('refreshWalletBtn').addEventListener('click', loadUserDashboard);
 
@@ -769,6 +775,8 @@ document.getElementById('submitWithdrawBtn').addEventListener('click', async () 
 
 // ================= ADMIN DASHBOARD =================
 let latestAdminUsers = [];
+let latestAdminOrders = [];
+let currentAdminSettings = null;
 const admOrdCommission = document.getElementById('admOrdCommission');
 const admOrdPreview70 = document.getElementById('admOrdPreview70');
 
@@ -791,6 +799,8 @@ async function loadAdminDashboard() {
     const data = await apiFetch('/api/admin/dashboard');
     const st = data.stats;
     const s = data.settings;
+    currentAdminSettings = s;
+    latestAdminOrders = data.orders || [];
     const dbStatus = data.dbStatus || {};
 
     const dbTextEl = document.getElementById('admDbStatusText');
@@ -827,34 +837,55 @@ async function loadAdminDashboard() {
     document.getElementById('admSupportZalo').value = s.supportZalo || '';
 
     const ordTbody = document.getElementById('admOrdersTableBody');
-    ordTbody.innerHTML = (data.orders || [])
-      .map(
-        (o) => `
-      <tr>
-        <td><strong>${escapeHtml(o.orderSn)}</strong></td>
-        <td>${escapeHtml(o.userCode || 'GUEST')}</td>
-        <td>${fmtVnd(o.netCommission || o.totalCommission)}</td>
-        <td><strong style="color:#059669;">${fmtVnd(o.userCashbackAmount)}</strong></td>
-        <td>
-          <span class="status-badge st-${o.status}">${
-          o.status === 'approved'
-            ? 'Đã duyệt'
-            : o.status === 'cancelled'
-            ? 'Đã huỷ'
-            : 'Chờ duyệt'
-        }</span>
-        </td>
-        <td>
-          <button type="button" class="btn btn-success btn-sm" data-approve-ord="${escapeHtml(
-            o.orderSn
-          )}" data-comm="${o.grossCommission || o.totalCommission}" data-ucode="${escapeHtml(
-          o.userCode
-        )}">Duyệt</button>
-        </td>
-      </tr>
-    `
-      )
-      .join('');
+    if (latestAdminOrders.length === 0) {
+      ordTbody.innerHTML = '<tr><td colspan="7" class="text-center">Chưa có đơn hàng nào.</td></tr>';
+    } else {
+      ordTbody.innerHTML = latestAdminOrders
+        .map((o) => {
+          const actionButtons =
+            o.status === 'pending'
+              ? `<button type="button" class="btn btn-success btn-xs" data-ord-action="approve" data-ord-sn="${escapeHtml(o.orderSn)}" title="Duyệt đơn và cộng tiền hoàn vào ví khách">Duyệt</button>
+                 <button type="button" class="btn btn-warning btn-xs" data-ord-action="cancel" data-ord-sn="${escapeHtml(o.orderSn)}" title="Hủy đơn này">Hủy</button>
+                 <button type="button" class="btn btn-outline btn-xs" data-ord-action="edit" data-ord-sn="${escapeHtml(o.orderSn)}" title="Chỉnh sửa chi tiết & số tiền hoàn">Sửa</button>
+                 <button type="button" class="btn btn-ghost btn-xs text-danger" data-ord-action="delete" data-ord-sn="${escapeHtml(o.orderSn)}" title="Xóa vĩnh viễn đơn này">Xóa</button>`
+              : o.status === 'approved'
+              ? `<button type="button" class="btn btn-secondary btn-xs" data-ord-action="unapprove" data-ord-sn="${escapeHtml(o.orderSn)}" title="Hủy duyệt và thu hồi tiền hoàn về chờ duyệt">↩️ Hủy duyệt</button>
+                 <button type="button" class="btn btn-warning btn-xs" data-ord-action="cancel" data-ord-sn="${escapeHtml(o.orderSn)}" title="Hủy đơn và thu hồi tiền hoàn">Hủy đơn</button>
+                 <button type="button" class="btn btn-outline btn-xs" data-ord-action="edit" data-ord-sn="${escapeHtml(o.orderSn)}" title="Chỉnh sửa chi tiết & số tiền hoàn">Sửa</button>
+                 <button type="button" class="btn btn-ghost btn-xs text-danger" data-ord-action="delete" data-ord-sn="${escapeHtml(o.orderSn)}" title="Xóa vĩnh viễn đơn này">Xóa</button>`
+              : `<button type="button" class="btn btn-primary btn-xs" data-ord-action="reopen" data-ord-sn="${escapeHtml(o.orderSn)}" title="Khôi phục về trạng thái chờ duyệt">🔄 Khôi phục</button>
+                 <button type="button" class="btn btn-outline btn-xs" data-ord-action="edit" data-ord-sn="${escapeHtml(o.orderSn)}" title="Chỉnh sửa chi tiết & số tiền hoàn">Sửa</button>
+                 <button type="button" class="btn btn-ghost btn-xs text-danger" data-ord-action="delete" data-ord-sn="${escapeHtml(o.orderSn)}" title="Xóa vĩnh viễn đơn này">Xóa</button>`;
+
+          return `
+        <tr>
+          <td>
+            <strong>${escapeHtml(o.orderSn)}</strong><br/>
+            <small style="color:#64748b;">${escapeHtml(o.platform === 'tiktok' ? 'TikTok' : 'Shopee')}</small>
+          </td>
+          <td>${escapeHtml(o.userCode || 'GUEST')}</td>
+          <td>${fmtVnd(o.orderAmount || 0)}</td>
+          <td>${fmtVnd(o.netCommission || o.totalCommission || 0)}</td>
+          <td><strong style="color:#059669;">${fmtVnd(o.userCashbackAmount || 0)}</strong></td>
+          <td>
+            <span class="status-badge st-${o.status}">${
+              o.status === 'approved'
+                ? 'Đã duyệt'
+                : o.status === 'cancelled'
+                ? 'Đã huỷ'
+                : 'Chờ duyệt'
+            }</span>
+          </td>
+          <td>
+            <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center;">
+              ${actionButtons}
+            </div>
+          </td>
+        </tr>
+      `;
+        })
+        .join('');
+    }
 
     const wdTbody = document.getElementById('admWithdrawalsTableBody');
     const wds = data.withdrawals || [];
@@ -881,12 +912,15 @@ async function loadAdminDashboard() {
           )}</strong> (${escapeHtml(w.bankOwner)})</td>
           <td>${qrBtnHtml}</td>
           <td>
-            ${
-              w.status === 'pending'
-                ? `<button type="button" class="btn btn-success btn-sm" data-wd-action="paid" data-wd-id="${w.id}">Đã chuyển</button>
-                   <button type="button" class="btn btn-ghost btn-sm" data-wd-action="rejected" data-wd-id="${w.id}">Từ chối</button>`
-                : `<span class="status-badge st-${w.status}">${w.status}</span>`
-            }
+            <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center;">
+              ${
+                w.status === 'pending'
+                  ? `<button type="button" class="btn btn-success btn-xs" data-wd-action="paid" data-wd-id="${w.id}">Đã chuyển</button>
+                     <button type="button" class="btn btn-ghost btn-xs" data-wd-action="rejected" data-wd-id="${w.id}">Từ chối</button>`
+                  : `<span class="status-badge st-${w.status}">${w.status === 'paid' ? 'Đã chi trả' : 'Đã từ chối'}</span>`
+              }
+              <button type="button" class="btn btn-ghost btn-xs text-danger" data-wd-delete="${w.id}" title="Xóa lệnh rút tiền này">🗑️ Xóa</button>
+            </div>
           </td>
         </tr>
       `;
@@ -1017,22 +1051,91 @@ document.getElementById('admSaveOrderBtn').addEventListener('click', async () =>
 });
 
 document.getElementById('view-admin').addEventListener('click', async (e) => {
-  const approveBtn = e.target.closest('[data-approve-ord]');
-  if (approveBtn) {
-    const orderSn = approveBtn.getAttribute('data-approve-ord');
-    const totalCommission = Number(approveBtn.getAttribute('data-comm') || 0);
-    const userCode = approveBtn.getAttribute('data-ucode');
-    try {
-      await apiFetch('/api/admin/orders', {
-        method: 'POST',
-        body: JSON.stringify({ orderSn, userCode, totalCommission, status: 'approved' })
-      });
-      showToast(`Đã duyệt đơn ${orderSn}!`);
-      loadAdminDashboard();
-    } catch (err) {
-      showToast(err.message);
+  const ordActionBtn = e.target.closest('[data-ord-action]');
+  if (ordActionBtn) {
+    const action = ordActionBtn.getAttribute('data-ord-action');
+    const orderSn = ordActionBtn.getAttribute('data-ord-sn');
+    const order = latestAdminOrders.find((o) => o.orderSn === orderSn);
+
+    if (action === 'approve') {
+      try {
+        await apiFetch('/api/admin/orders', {
+          method: 'POST',
+          body: JSON.stringify({ orderSn, status: 'approved' })
+        });
+        showToast(`Đã duyệt đơn #${orderSn} và cộng tiền hoàn vào ví khách!`);
+        loadAdminDashboard();
+      } catch (err) {
+        showToast(err.message);
+      }
+      return;
     }
-    return;
+
+    if (action === 'unapprove') {
+      try {
+        await apiFetch('/api/admin/orders', {
+          method: 'POST',
+          body: JSON.stringify({ orderSn, status: 'pending' })
+        });
+        showToast(`Đã hủy duyệt đơn #${orderSn}, tiền hoàn đã chuyển về Chờ duyệt!`);
+        loadAdminDashboard();
+      } catch (err) {
+        showToast(err.message);
+      }
+      return;
+    }
+
+    if (action === 'cancel') {
+      try {
+        await apiFetch('/api/admin/orders', {
+          method: 'POST',
+          body: JSON.stringify({ orderSn, status: 'cancelled' })
+        });
+        showToast(`Đã chuyển đơn #${orderSn} sang trạng thái Đã huỷ!`);
+        loadAdminDashboard();
+      } catch (err) {
+        showToast(err.message);
+      }
+      return;
+    }
+
+    if (action === 'reopen') {
+      try {
+        await apiFetch('/api/admin/orders', {
+          method: 'POST',
+          body: JSON.stringify({ orderSn, status: 'pending' })
+        });
+        showToast(`Đã khôi phục đơn #${orderSn} về Chờ duyệt!`);
+        loadAdminDashboard();
+      } catch (err) {
+        showToast(err.message);
+      }
+      return;
+    }
+
+    if (action === 'edit') {
+      if (order) {
+        openOrderEditModal(order);
+      }
+      return;
+    }
+
+    if (action === 'delete') {
+      if (!confirm(`Bạn có chắc chắn muốn xóa vĩnh viễn đơn hàng #${orderSn} không?\nTiền hoàn của đơn sẽ bị xóa khỏi ví người dùng.`)) {
+        return;
+      }
+      try {
+        await apiFetch('/api/admin/orders/delete', {
+          method: 'POST',
+          body: JSON.stringify({ orderSn })
+        });
+        showToast(`Đã xóa vĩnh viễn đơn #${orderSn}!`);
+        loadAdminDashboard();
+      } catch (err) {
+        showToast(err.message);
+      }
+      return;
+    }
   }
 
   const wdBtn = e.target.closest('[data-wd-action]');
@@ -1045,6 +1148,25 @@ document.getElementById('view-admin').addEventListener('click', async (e) => {
         body: JSON.stringify({ id, status })
       });
       showToast('Đã cập nhật trạng thái rút tiền!');
+      loadAdminDashboard();
+    } catch (err) {
+      showToast(err.message);
+    }
+    return;
+  }
+
+  const wdDeleteBtn = e.target.closest('[data-wd-delete]');
+  if (wdDeleteBtn) {
+    const id = wdDeleteBtn.getAttribute('data-wd-delete');
+    if (!confirm(`Bạn có chắc chắn muốn xóa yêu cầu rút tiền #${id} không?`)) {
+      return;
+    }
+    try {
+      await apiFetch('/api/admin/withdrawals/delete', {
+        method: 'POST',
+        body: JSON.stringify({ id })
+      });
+      showToast('Đã xóa yêu cầu rút tiền!');
       loadAdminDashboard();
     } catch (err) {
       showToast(err.message);
@@ -1135,6 +1257,31 @@ document.getElementById('btnAdjustUserBalance').addEventListener('click', async 
   }
 });
 
+const btnResetZero = document.getElementById('btnResetUserBalanceZero');
+if (btnResetZero) {
+  btnResetZero.addEventListener('click', async () => {
+    if (!currentManagingUser) return;
+    if (
+      !confirm(
+        `Bạn có chắc chắn muốn xóa toàn bộ số dư khả dụng của khách hàng ${currentManagingUser.code} về 0đ không?`
+      )
+    ) {
+      return;
+    }
+    try {
+      const res = await apiFetch('/api/admin/users/action', {
+        method: 'POST',
+        body: JSON.stringify({ userId: currentManagingUser.id, action: 'reset_balance' })
+      });
+      showToast(res.message);
+      userManageModal.classList.add('hidden');
+      loadAdminDashboard();
+    } catch (err) {
+      showToast(err.message);
+    }
+  });
+}
+
 document.getElementById('btnToggleUserLock').addEventListener('click', async () => {
   if (!currentManagingUser) return;
   try {
@@ -1167,6 +1314,90 @@ document.getElementById('btnDeleteUser').addEventListener('click', async () => {
     showToast(err.message);
   }
 });
+
+// ================= ORDER EDIT MODAL =================
+const orderEditModal = document.getElementById('orderEditModal');
+let currentEditingOrder = null;
+
+function openOrderEditModal(order) {
+  currentEditingOrder = order;
+  document.getElementById('editOrdId').value = order.id || '';
+  document.getElementById('editOrdSn').value = order.orderSn || '';
+  document.getElementById('editOrdUserCode').value = order.userCode || '';
+  document.getElementById('editOrdPlatform').value = order.platform || 'shopee';
+  document.getElementById('editOrdProduct').value = order.productName || '';
+  document.getElementById('editOrdAmount').value = order.orderAmount || 0;
+  document.getElementById('editOrdCommission').value =
+    order.grossCommission || order.totalCommission || 0;
+  document.getElementById('editOrdCashbackAmount').value = order.userCashbackAmount || 0;
+  document.getElementById('editOrdStatus').value = order.status || 'pending';
+
+  orderEditModal.classList.remove('hidden');
+}
+
+const closeOrderEditBtn = document.getElementById('closeOrderEditModalBtn');
+if (closeOrderEditBtn) {
+  closeOrderEditBtn.addEventListener('click', () => {
+    orderEditModal.classList.add('hidden');
+  });
+}
+
+const cancelOrderEditBtn = document.getElementById('cancelOrderEditBtn');
+if (cancelOrderEditBtn) {
+  cancelOrderEditBtn.addEventListener('click', () => {
+    orderEditModal.classList.add('hidden');
+  });
+}
+
+const btnAutoCalcCashback = document.getElementById('btnAutoCalcCashback');
+if (btnAutoCalcCashback) {
+  btnAutoCalcCashback.addEventListener('click', () => {
+    const gross = Number(document.getElementById('editOrdCommission').value || 0);
+    const taxRate = Number(currentAdminSettings?.taxDeductPercent ?? 10);
+    const cbRate = Number(currentAdminSettings?.cashbackPercent ?? 70);
+    const net = Math.round(gross * (1 - taxRate / 100));
+    const cb = Math.round((net * cbRate) / 100);
+    document.getElementById('editOrdCashbackAmount').value = cb;
+    showToast(`Đã tính tiền hoàn: ${cb.toLocaleString('vi-VN')}đ (70% sau thuế)`);
+  });
+}
+
+const saveOrderEditBtn = document.getElementById('saveOrderEditBtn');
+if (saveOrderEditBtn) {
+  saveOrderEditBtn.addEventListener('click', async () => {
+    const id = document.getElementById('editOrdId').value;
+    const orderSn = document.getElementById('editOrdSn').value.trim();
+    const userCode = document.getElementById('editOrdUserCode').value.trim();
+    const platform = document.getElementById('editOrdPlatform').value;
+    const productName = document.getElementById('editOrdProduct').value.trim();
+    const orderAmount = Number(document.getElementById('editOrdAmount').value || 0);
+    const totalCommission = Number(document.getElementById('editOrdCommission').value || 0);
+    const userCashbackAmount = Number(document.getElementById('editOrdCashbackAmount').value || 0);
+    const status = document.getElementById('editOrdStatus').value;
+
+    try {
+      await apiFetch('/api/admin/orders', {
+        method: 'POST',
+        body: JSON.stringify({
+          id,
+          orderSn,
+          userCode,
+          platform,
+          productName,
+          orderAmount,
+          totalCommission,
+          userCashbackAmount,
+          status
+        })
+      });
+      orderEditModal.classList.add('hidden');
+      showToast(`Đã lưu thay đổi cho đơn #${orderSn}!`);
+      loadAdminDashboard();
+    } catch (err) {
+      showToast(err.message);
+    }
+  });
+}
 
 function splitCsvLine(line) {
   const result = [];

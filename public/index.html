@@ -229,20 +229,6 @@
           </div>
         </div>
 
-        <!-- 1-Level Referral Box -->
-        <div class="panel referral-banner">
-          <div class="referral-flex">
-            <div>
-              <h3>🎁 Chương Trình Giới Thiệu Bạn Bè (Thưởng thêm 5%)</h3>
-              <p class="panel-sub">Chia sẻ liên kết bên dưới cho bạn bè. Khi bạn bè đăng ký và mua sắm nhận hoàn tiền thành công, bạn nhận thêm thưởng giới thiệu trực tiếp từ hệ thống (đã giới thiệu: <strong id="userRefCount">0</strong> người).</p>
-            </div>
-            <div class="ref-link-group">
-              <input type="text" id="userReferralLinkInput" readonly />
-              <button type="button" class="btn btn-outline btn-sm" id="copyRefLinkBtn">Sao chép link</button>
-            </div>
-          </div>
-        </div>
-
         <div class="wallet-two-col">
           <!-- Left: Orders Table & Missing Order Lookup -->
           <div class="panel">
@@ -615,8 +601,9 @@
                 <tr>
                   <th>Mã Đơn</th>
                   <th>Khách</th>
+                  <th>Giá trị đơn</th>
                   <th>Sau thuế</th>
-                  <th>Hoàn khách (70%)</th>
+                  <th>Hoàn khách</th>
                   <th>Trạng thái</th>
                   <th>Thao tác</th>
                 </tr>
@@ -703,15 +690,83 @@
             </select>
             <input type="number" id="manageAdjustAmount" placeholder="Số tiền (VNĐ)..." style="flex: 1;" />
           </div>
-          <div style="display: flex; gap: 8px;">
+          <div style="display: flex; gap: 8px; margin-bottom: 8px;">
             <input type="text" id="manageAdjustNote" placeholder="Lý do (thưởng sự kiện, đền bù, phạt)..." style="flex: 1;" />
             <button type="button" class="btn btn-success btn-sm" id="btnAdjustUserBalance">Ghi Sổ Cái</button>
+          </div>
+          <div style="text-align: right;">
+            <button type="button" class="btn btn-warning btn-sm" id="btnResetUserBalanceZero">🧹 Đặt Lại Số Dư = 0đ</button>
           </div>
         </div>
 
         <div style="border-top: 1px dashed #cbd5e1; padding-top: 12px; display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap;">
           <button type="button" class="btn btn-outline btn-sm" id="btnToggleUserLock">🔒 Khóa / Mở Khóa Tài Khoản</button>
           <button type="button" class="btn btn-ghost btn-sm" id="btnDeleteUser" style="color: #dc2626;">🗑️ Xóa Tài Khoản</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Order Edit Modal for Admin -->
+  <div id="orderEditModal" class="modal-backdrop hidden">
+    <div class="modal-box" style="max-width: 520px;">
+      <div class="modal-head">
+        <h3>✏️ Chỉnh Sửa Chi Tiết Đơn Hàng</h3>
+        <button type="button" class="close-btn" id="closeOrderEditModalBtn">✕</button>
+      </div>
+
+      <div class="modal-body-form" style="gap: 12px;">
+        <input type="hidden" id="editOrdId" />
+        <div class="form-group">
+          <label>Mã Đơn Hàng (orderSn)</label>
+          <input type="text" id="editOrdSn" readonly style="background:#f1f5f9;font-weight:700;color:#1e293b;" />
+        </div>
+        <div class="grid-2">
+          <div class="form-group">
+            <label>Mã Khách Hàng (hoặc SĐT)</label>
+            <input type="text" id="editOrdUserCode" placeholder="VD: GUEST hoặc mã khách" />
+          </div>
+          <div class="form-group">
+            <label>Sàn Thương Mại</label>
+            <select id="editOrdPlatform">
+              <option value="shopee">Shopee</option>
+              <option value="tiktok">TikTok Shop</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Tên Sản Phẩm</label>
+          <input type="text" id="editOrdProduct" placeholder="Tên sản phẩm..." />
+        </div>
+        <div class="grid-2">
+          <div class="form-group">
+            <label>Giá Trị Đơn Hàng (VNĐ)</label>
+            <input type="number" id="editOrdAmount" placeholder="0" />
+          </div>
+          <div class="form-group">
+            <label>Hoa Hồng Sàn Nhận (VNĐ)</label>
+            <input type="number" id="editOrdCommission" placeholder="0" />
+          </div>
+        </div>
+        <div class="form-group" style="background:#f8fafc;padding:12px;border-radius:8px;border:1px solid #e2e8f0;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;gap:8px;flex-wrap:wrap;">
+            <label style="margin:0;font-weight:600;color:#059669;">Tiền Hoàn Cho Khách (VNĐ)</label>
+            <button type="button" class="btn btn-outline btn-xs" id="btnAutoCalcCashback">⚡ Tự tính theo % cấu hình</button>
+          </div>
+          <input type="number" id="editOrdCashbackAmount" placeholder="Nhập số tiền hoàn tùy ý..." style="font-size:15px;font-weight:700;color:#059669;" />
+          <small style="color:#64748b;font-size:12px;display:block;margin-top:4px;">Bạn có thể tinh chỉnh trực tiếp số tiền hoàn hoặc bấm nút tự tính (70% sau thuế).</small>
+        </div>
+        <div class="form-group">
+          <label>Trạng Thái Đơn Hàng</label>
+          <select id="editOrdStatus">
+            <option value="pending">Chờ đối soát (pending)</option>
+            <option value="approved">Đã duyệt (approved - cộng vào ví khả dụng)</option>
+            <option value="cancelled">Đã huỷ (cancelled - thu hồi tiền hoàn)</option>
+          </select>
+        </div>
+        <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:10px;">
+          <button type="button" class="btn btn-outline" id="cancelOrderEditBtn">Đóng</button>
+          <button type="button" class="btn btn-success" id="saveOrderEditBtn">💾 Lưu Thay Đổi</button>
         </div>
       </div>
     </div>
@@ -768,10 +823,6 @@
         <div class="form-group">
           <label>Mật khẩu (tối thiểu 6 ký tự)</label>
           <input type="password" id="regPassword" placeholder="Tạo mật khẩu..." />
-        </div>
-        <div class="form-group">
-          <label>Mã giới thiệu (Tùy chọn)</label>
-          <input type="text" id="regRefCode" placeholder="Bỏ trống nếu không có" />
         </div>
         <button type="button" class="btn btn-primary btn-full" id="doRegisterBtn">Đăng Ký Tài Khoản</button>
       </div>

@@ -1320,6 +1320,7 @@ function registerCashbackRoutes(app) {
       productName,
       orderAmount,
       totalCommission,
+      userCashbackAmount,
       status
     } = req.body || {};
 
@@ -1327,8 +1328,13 @@ function registerCashbackRoutes(app) {
       return res.status(400).json({ error: 'Thiếu Mã đơn hàng (orderSn).' });
     }
 
+    const cleanOrderSn = String(orderSn).trim().toUpperCase();
+    const hasTotalCommission = totalCommission !== undefined && totalCommission !== null && totalCommission !== '';
+    const hasCustomCashback = userCashbackAmount !== undefined && userCashbackAmount !== null && userCashbackAmount !== '';
+
+    const rawComm = hasTotalCommission ? Number(totalCommission) : 0;
     const split = calculateCommissionSplit(
-      totalCommission,
+      rawComm,
       db.settings.cashbackPercent,
       db.settings.taxDeductPercent
     );
@@ -1345,42 +1351,65 @@ function registerCashbackRoutes(app) {
     let targetOrder = db.orders.find(
       (o) =>
         (id && o.id === id) ||
-        o.orderSn.toUpperCase() === String(orderSn).trim().toUpperCase()
+        o.orderSn.toUpperCase() === cleanOrderSn
     );
 
     if (targetOrder) {
-      targetOrder.orderSn = String(orderSn).trim().toUpperCase();
-      targetOrder.platform = platform || targetOrder.platform;
-      targetOrder.userCode = matchedUser ? matchedUser.code : rawCode.toUpperCase();
-      targetOrder.userId = matchedUser ? matchedUser.id : targetOrder.userId;
-      targetOrder.productName = productName || targetOrder.productName;
-      targetOrder.orderAmount = Number(orderAmount ?? targetOrder.orderAmount);
-      targetOrder.grossCommission = split.grossCommission;
-      targetOrder.taxAmount = split.taxAmount;
-      targetOrder.netCommission = split.netCommission;
-      targetOrder.totalCommission = split.netCommission;
-      targetOrder.cashbackRate = split.cashbackRate;
-      targetOrder.userCashbackAmount = split.userCashbackAmount;
-      targetOrder.adminShareAmount = split.adminShareAmount;
-      targetOrder.status = status || targetOrder.status;
+      targetOrder.orderSn = cleanOrderSn;
+      if (platform) targetOrder.platform = platform;
+      if (userCode) {
+        targetOrder.userCode = matchedUser ? matchedUser.code : rawCode.toUpperCase();
+        targetOrder.userId = matchedUser ? matchedUser.id : targetOrder.userId;
+      }
+      if (productName) targetOrder.productName = productName;
+      if (orderAmount !== undefined && orderAmount !== null && orderAmount !== '') {
+        targetOrder.orderAmount = Number(orderAmount);
+      }
+
+      if (hasTotalCommission) {
+        targetOrder.grossCommission = split.grossCommission;
+        targetOrder.taxAmount = split.taxAmount;
+        targetOrder.netCommission = split.netCommission;
+        targetOrder.totalCommission = split.netCommission;
+        targetOrder.cashbackRate = split.cashbackRate;
+      }
+
+      if (hasCustomCashback) {
+        targetOrder.userCashbackAmount = Math.max(0, Math.round(Number(userCashbackAmount)));
+      } else if (hasTotalCommission) {
+        targetOrder.userCashbackAmount = split.userCashbackAmount;
+      }
+
+      targetOrder.adminShareAmount = Math.max(
+        0,
+        Number(targetOrder.netCommission || targetOrder.grossCommission || 0) - Number(targetOrder.userCashbackAmount || 0)
+      );
+
+      if (status) {
+        targetOrder.status = status;
+      }
       targetOrder.updatedAt = new Date().toISOString();
     } else {
+      const finalCashback = hasCustomCashback
+        ? Math.max(0, Math.round(Number(userCashbackAmount)))
+        : split.userCashbackAmount;
+
       targetOrder = {
         id: `ord_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`,
-        orderSn: String(orderSn).trim().toUpperCase(),
+        orderSn: cleanOrderSn,
         platform: platform === 'tiktok' ? 'tiktok' : 'shopee',
         clickId: matchedClick ? matchedClick.clickId : null,
         userCode: matchedUser ? matchedUser.code : rawCode.toUpperCase(),
         userId: matchedUser ? matchedUser.id : null,
-        productName: productName || `Đơn hàng #${orderSn}`,
+        productName: productName || `Đơn hàng #${cleanOrderSn}`,
         orderAmount: Number(orderAmount || 0),
         grossCommission: split.grossCommission,
         taxAmount: split.taxAmount,
         netCommission: split.netCommission,
         totalCommission: split.netCommission,
         cashbackRate: split.cashbackRate,
-        userCashbackAmount: split.userCashbackAmount,
-        adminShareAmount: split.adminShareAmount,
+        userCashbackAmount: finalCashback,
+        adminShareAmount: Math.max(0, split.netCommission - finalCashback),
         status: status || 'pending',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
@@ -1391,8 +1420,37 @@ function registerCashbackRoutes(app) {
     recalculateAllWallets();
     saveDb(db);
 
-    logger.logLeave('POST /api/admin/orders', { orderSn: targetOrder.orderSn });
+    logger.logLeave('POST /api/admin/orders', { orderSn: targetOrder.orderSn, status: targetOrder.status, cashback: targetOrder.userCashbackAmount });
     return res.json({ order: targetOrder });
+  });
+
+  // Admin Delete Order
+  app.post('/api/admin/orders/delete', (req, res) => {
+    logger.logEnter('POST /api/admin/orders/delete');
+    if (!requireAdmin(req, res)) return;
+
+    const { id, orderSn } = req.body || {};
+    if (!id && !orderSn) {
+      return res.status(400).json({ error: 'Thiếu ID hoặc Mã đơn hàng để xóa.' });
+    }
+
+    const db = ensureDbLoaded();
+    const idx = db.orders.findIndex(
+      (o) =>
+        (id && o.id === id) ||
+        (orderSn && o.orderSn.toUpperCase() === String(orderSn).trim().toUpperCase())
+    );
+
+    if (idx === -1) {
+      return res.status(404).json({ error: 'Không tìm thấy đơn hàng cần xóa.' });
+    }
+
+    const [deletedOrder] = db.orders.splice(idx, 1);
+    recalculateAllWallets();
+    saveDb(db);
+
+    logger.logLeave('POST /api/admin/orders/delete', { orderSn: deletedOrder.orderSn });
+    return res.json({ status: 'ok', message: `Đã xóa đơn hàng #${deletedOrder.orderSn} thành công!` });
   });
 
   // Admin CSV Import (Higher payload limit 200kb only on this route)
@@ -1450,7 +1508,35 @@ function registerCashbackRoutes(app) {
     return res.json({ withdrawal: wd });
   });
 
-  // Admin User Management Action (Reset password, Lock/Unlock, Adjust balance, Delete)
+  // Admin Delete Withdrawal
+  app.post('/api/admin/withdrawals/delete', (req, res) => {
+    logger.logEnter('POST /api/admin/withdrawals/delete');
+    if (!requireAdmin(req, res)) return;
+
+    const { id } = req.body || {};
+    if (!id) {
+      return res.status(400).json({ error: 'Thiếu ID lệnh rút tiền cần xóa.' });
+    }
+
+    const db = ensureDbLoaded();
+    const idx = db.withdrawals.findIndex((w) => w.id === id);
+    if (idx === -1) {
+      return res.status(404).json({ error: 'Không tìm thấy lệnh rút tiền.' });
+    }
+
+    const [deletedWd] = db.withdrawals.splice(idx, 1);
+    // Remove ledger debit & refund entries for this withdrawal so balance is unlocked/restored
+    db.ledger = db.ledger.filter(
+      (e) => !e.refId.startsWith(`withdraw_debit_${id}`) && !e.refId.startsWith(`withdraw_refund_${id}`)
+    );
+    recalculateUserWallet(deletedWd.userId);
+    saveDb(db);
+
+    logger.logLeave('POST /api/admin/withdrawals/delete', { id });
+    return res.json({ status: 'ok', message: `Đã xóa lệnh rút tiền #${id} thành công!` });
+  });
+
+  // Admin User Management Action (Reset password, Lock/Unlock, Adjust balance, Reset balance, Delete)
   app.post('/api/admin/users/action', (req, res) => {
     logger.logEnter('POST /api/admin/users/action');
     if (!requireAdmin(req, res)) return;
@@ -1461,6 +1547,27 @@ function registerCashbackRoutes(app) {
     const db = ensureDbLoaded();
     const targetUser = db.users.find((u) => u.id === userId);
     if (!targetUser) return res.status(404).json({ error: 'Không tìm thấy người dùng.' });
+
+    if (action === 'reset_balance') {
+      const currentAvailable = Number(targetUser.balanceAvailable || 0);
+      if (currentAvailable !== 0) {
+        const refId = `admin_reset_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
+        appendLedgerEntry(
+          targetUser.id,
+          'admin_adjustment',
+          -currentAvailable,
+          refId,
+          'Quản trị viên đặt lại số dư về 0đ'
+        );
+      }
+      recalculateUserWallet(targetUser.id);
+      saveDb(db);
+      logger.logLeave('POST /api/admin/users/action', { action, userCode: targetUser.code });
+      return res.json({
+        status: 'ok',
+        message: `Đã đặt số dư khả dụng của ${targetUser.code} về 0đ thành công!`
+      });
+    }
 
     if (action === 'reset_password') {
       if (!newPassword || String(newPassword).trim().length < 6) {

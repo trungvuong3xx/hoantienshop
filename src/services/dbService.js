@@ -617,44 +617,37 @@ function recalculateUserWallet(userId) {
     const revokeRef = `order_revoke_${ord.orderSn}`;
 
     if (ord.status === 'pending') {
+      // Revert any previous credit or revoke for this order if it was unapproved
+      db.ledger = db.ledger.filter(
+        (e) =>
+          e.refId !== creditRef &&
+          e.refId !== revokeRef &&
+          !e.refId.startsWith(`ref_bonus_${ord.orderSn}_`)
+      );
       pending += amt;
     } else if (ord.status === 'approved' && amt > 0) {
-      appendLedgerEntry(
-        user.id,
-        'order_cashback',
-        amt,
-        creditRef,
-        `Hoàn tiền đơn hàng #${ord.orderSn}`
-      );
-      // 1-level referral bonus if user was referred by someone
-      if (user.referredBy) {
-        const referrer = db.users.find((u) => u.code === user.referredBy || u.id === user.referredBy);
-        if (referrer && referrer.id !== user.id) {
-          const refRate = Number(db.settings.referralBonusPercent ?? 5);
-          const refBonus = Math.round((Number(ord.netCommission || ord.totalCommission || 0) * refRate) / 100);
-          if (refBonus > 0) {
-            appendLedgerEntry(
-              referrer.id,
-              'referral_bonus',
-              refBonus,
-              `ref_bonus_${ord.orderSn}_${referrer.id}`,
-              `Thưởng giới thiệu đơn #${ord.orderSn} từ ${user.code}`
-            );
-          }
-        }
-      }
-    } else if (ord.status === 'cancelled') {
-      // If previously credited, append compensating negative entry
-      const hadCredit = db.ledger.find((e) => e.refId === creditRef);
-      if (hadCredit) {
+      // Clean up any old revoke entry
+      db.ledger = db.ledger.filter((e) => e.refId !== revokeRef);
+      const existingCredit = db.ledger.find((e) => e.refId === creditRef);
+      if (existingCredit) {
+        existingCredit.amount = amt;
+        existingCredit.userId = user.id;
+      } else {
         appendLedgerEntry(
           user.id,
-          'order_cancelled_reversal',
-          -Math.abs(hadCredit.amount),
-          revokeRef,
-          `Thu hồi hoàn tiền do đơn #${ord.orderSn} bị huỷ/hoàn trả`
+          'order_cashback',
+          amt,
+          creditRef,
+          `Hoàn tiền đơn hàng #${ord.orderSn}`
         );
       }
+    } else if (ord.status === 'cancelled') {
+      // If cancelled, remove any credit so it does not count in ledger
+      db.ledger = db.ledger.filter(
+        (e) =>
+          e.refId !== creditRef &&
+          !e.refId.startsWith(`ref_bonus_${ord.orderSn}_`)
+      );
     }
   }
 
@@ -926,6 +919,27 @@ function auditLedgerIntegrity() {
 
 function recalculateAllWallets() {
   const db = ensureDbLoaded();
+
+  // Purge any referral bonuses from ledger (referral reward removed per user request)
+  db.ledger = db.ledger.filter((e) => !e.refId.startsWith('ref_bonus_'));
+
+  // Build map of existing approved orders
+  const approvedOrderMap = new Map();
+  for (const ord of db.orders) {
+    if (ord.status === 'approved') {
+      approvedOrderMap.set(ord.orderSn.toUpperCase(), ord);
+    }
+  }
+
+  // Remove any order_credit_ whose order is no longer in db.orders or no longer approved
+  db.ledger = db.ledger.filter((e) => {
+    if (e.refId.startsWith('order_credit_')) {
+      const sn = e.refId.replace('order_credit_', '').toUpperCase();
+      return approvedOrderMap.has(sn);
+    }
+    return true;
+  });
+
   for (const u of db.users) {
     recalculateUserWallet(u.id);
   }

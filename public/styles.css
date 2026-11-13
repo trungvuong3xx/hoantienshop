@@ -1078,6 +1078,47 @@ select:focus {
   border-radius: 7px;
 }
 
+.btn-xs {
+  padding: 4px 8px;
+  font-size: 11px;
+  border-radius: 6px;
+  line-height: 1.2;
+}
+
+.btn-warning {
+  background: #f59e0b;
+  color: #ffffff;
+  border-color: #f59e0b;
+}
+
+.btn-warning:hover:not(:disabled) {
+  background: #d97706;
+}
+
+.btn-secondary {
+  background: #64748b;
+  color: #ffffff;
+  border-color: #64748b;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: #475569;
+}
+
+.btn-danger {
+  background: #dc2626;
+  color: #ffffff;
+  border-color: #dc2626;
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: #b91c1c;
+}
+
+.text-danger {
+  color: #dc2626 !important;
+}
+
 .btn-full {
   width: 100%;
 }
