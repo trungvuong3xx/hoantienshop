@@ -156,6 +156,12 @@ body {
   color: var(--amber);
 }
 
+.nav-btn.nav-admin.active {
+  background: var(--amber);
+  color: #fff;
+  border-color: var(--amber);
+}
+
 .nav-auth,
 .nav-user {
   display: flex;
@@ -537,7 +543,7 @@ body {
 .search-input-group input {
   width: 100%;
   height: 52px;
-  padding: 0 82px 0 18px;
+  padding: 0 114px 0 18px;
   border: 2px solid var(--border);
   border-radius: 14px;
   font-size: 14.5px;
@@ -920,10 +926,16 @@ body {
   cursor: pointer;
 }
 
-.aff-input-box:focus-within,
-.aff-input-box:hover {
+.aff-input-box:focus-within {
   border-color: var(--shopee);
   background: #ffffff;
+}
+
+@media (hover: hover) {
+  .aff-input-box:hover {
+    border-color: var(--shopee);
+    background: #ffffff;
+  }
 }
 
 .aff-link-icon {
@@ -1335,7 +1347,8 @@ body {
 }
 
 input:not([type="checkbox"]):not([type="radio"]),
-select {
+select,
+textarea {
   width: 100%;
   font-family: inherit;
   font-size: 13.5px;
@@ -1344,10 +1357,12 @@ select {
   border-radius: 8px;
   background: #fff;
   color: var(--text-main);
+  resize: vertical;
 }
 
 input:focus,
-select:focus {
+select:focus,
+textarea:focus {
   outline: none;
   border-color: var(--shopee);
 }
@@ -1598,7 +1613,7 @@ select:focus {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 16px;
+  padding: calc(16px + env(safe-area-inset-top, 0px)) 16px calc(16px + env(safe-area-inset-bottom, 0px));
   z-index: 100;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -1683,7 +1698,8 @@ select:focus {
 /* Toast */
 .toast {
   position: fixed;
-  bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  top: calc(24px + env(safe-area-inset-top, 0px));
+  bottom: auto;
   right: 24px;
   background: #0f172a;
   color: #fff;
@@ -1692,7 +1708,7 @@ select:focus {
   font-size: 13.5px;
   font-weight: 600;
   box-shadow: var(--shadow-md);
-  z-index: 200;
+  z-index: 250;
 }
 
 /* ==================== PWA INSTALL FLOATING BANNER ==================== */
@@ -1911,14 +1927,15 @@ select:focus {
   /* Search Input & Action Buttons sizing on Mobile (Wins over base rules) */
   .search-input-group input {
     height: 48px;
-    padding: 0 76px 0 14px;
+    padding: 0 110px 0 14px;
     border-radius: 12px;
   }
 
   .btn-paste-inline {
     right: 8px;
-    padding: 5px 12px;
-    min-height: 34px;
+    padding: 0 14px;
+    min-height: 40px;
+    height: 40px;
     border-radius: 8px;
   }
 
@@ -1939,12 +1956,20 @@ select:focus {
     height: 56px;
   }
 
-  /* Card padding reduction for mobile real-estate */
-  .panel,
+  /* Card padding reduction for mobile real-estate (excluding empty state) */
+  .panel:not(.empty-auth-box),
   .step-card,
   .rules-card {
     padding: 16px 14px;
     border-radius: 14px;
+  }
+
+  .wallet-header-banner,
+  .admin-banner,
+  .stat-box,
+  .modal-body-form,
+  .pwa-guide-content {
+    padding: 14px 16px;
   }
 
   /* Touch targets minimum size */
@@ -1953,17 +1978,23 @@ select:focus {
   }
 
   .nav-btn {
-    min-height: 36px;
-    font-size: 13px;
-    padding: 6px 12px;
+    min-height: 40px;
+    font-size: 13.5px;
+    padding: 8px 14px;
     display: inline-flex;
     align-items: center;
   }
 
   .btn-pwa-install,
   .btn-pwa-dismiss {
-    min-height: 38px;
+    min-height: 40px;
+    height: 40px;
     flex: 1;
+  }
+
+  /* Hide quick-guide orphaned arrow when steps wrap on small mobile */
+  .qg-arrow {
+    display: none;
   }
 
   /* Safe Area positioning on iPhone & Toast separated to Top */
