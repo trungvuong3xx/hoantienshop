@@ -1733,6 +1733,12 @@ textarea:focus {
   }
 }
 
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .pwa-banner-card {
   display: flex;
   align-items: flex-start;

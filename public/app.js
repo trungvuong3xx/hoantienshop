@@ -1,17 +1,58 @@
+// Safe storage helper with try/catch to protect against private browsing restrictions
+const safeStorage = {
+  get(key, storage = localStorage) {
+    try {
+      return storage.getItem(key);
+    } catch {
+      return null;
+    }
+  },
+  set(key, val, storage = localStorage) {
+    try {
+      storage.setItem(key, String(val));
+      return true;
+    } catch {
+      return false;
+    }
+  },
+  remove(key, storage = localStorage) {
+    try {
+      storage.removeItem(key);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+};
+
 const TOKEN_KEY = 'hoantienshop_token_v1';
 const USER_KEY = 'hoantienshop_user_v1';
 
-// Purge any legacy token from localStorage; auth now uses HttpOnly; SameSite=Lax cookie (hts_auth)
-try {
-  localStorage.removeItem(TOKEN_KEY);
-} catch {}
+// Purge any legacy token from localStorage; auth now uses HttpOnly cookie (hts_auth)
+safeStorage.remove(TOKEN_KEY);
 
 let currentUser = null;
-try {
-  const saved = localStorage.getItem(USER_KEY);
-  if (saved) currentUser = JSON.parse(saved);
-} catch {}
+const savedUser = safeStorage.get(USER_KEY);
+if (savedUser) {
+  try {
+    currentUser = JSON.parse(savedUser);
+  } catch {}
+}
 let authToken = currentUser ? 'httponly_cookie_session' : '';
+
+// Helper with guard for safe event listener attachment
+const on = (idOrEl, ev, fn) => {
+  const el = typeof idOrEl === 'string' ? document.getElementById(idOrEl) : idOrEl;
+  el?.addEventListener(ev, fn);
+  return el;
+};
+
+// Helper for numeric input values that avoids treating 0 as falsy
+function numOr(val, fallback) {
+  if (val === undefined || val === null || val === '') return fallback;
+  const n = Number(val);
+  return isNaN(n) ? fallback : n;
+}
 
 let publicConfig = {
   siteName: 'Hoàn Tiền Sàn',
@@ -21,11 +62,13 @@ let publicConfig = {
 };
 
 // Capture ?ref=... referral code from URL if present
-const urlParams = new URLSearchParams(window.location.search);
-const urlRefCode = urlParams.get('ref');
-if (urlRefCode) {
-  sessionStorage.setItem('hoantienshop_ref', urlRefCode.trim());
-}
+try {
+  const urlParams = new URLSearchParams(window.location.search);
+  const urlRefCode = urlParams.get('ref');
+  if (urlRefCode) {
+    safeStorage.set('hoantienshop_ref', urlRefCode.trim(), sessionStorage);
+  }
+} catch {}
 
 function fmtVnd(amount) {
   return Number(amount || 0).toLocaleString('vi-VN') + 'đ';
@@ -51,26 +94,73 @@ function safeHttpsUrl(rawUrl) {
   }
 }
 
+function safeAppOrWebUrl(rawUrl) {
+  const s = String(rawUrl || '').trim();
+  if (!s) return '';
+  try {
+    const u = new URL(s);
+    if (['https:', 'http:', 'shopee:', 'snssdk1180:'].includes(u.protocol)) {
+      return escapeHtml(s);
+    }
+    return '';
+  } catch {
+    if (s.startsWith('https://') || s.startsWith('shopee://') || s.startsWith('snssdk1180://')) {
+      return escapeHtml(s);
+    }
+    return '';
+  }
+}
+
+const STATUS_CLASS_MAP = {
+  pending: 'st-pending',
+  approved: 'st-approved',
+  paid: 'st-paid',
+  cancelled: 'st-cancelled',
+  rejected: 'st-rejected'
+};
+
+function getStatusClass(status) {
+  return STATUS_CLASS_MAP[String(status).toLowerCase()] || 'st-pending';
+}
+
 function showToast(msg) {
   const t = document.getElementById('toast');
+  if (!t) return;
   t.textContent = msg;
+  t.setAttribute('role', 'status');
   t.classList.remove('hidden');
   clearTimeout(showToast._timer);
   showToast._timer = setTimeout(() => t.classList.add('hidden'), 2800);
 }
 
 async function copyText(text, msg = 'Đã sao chép thành công!') {
-  try {
-    await navigator.clipboard.writeText(text);
+  if (!text) return;
+  let copied = false;
+  if (navigator?.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      copied = true;
+    } catch {}
+  }
+  if (!copied) {
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.top = '-9999px';
+      ta.style.left = '-9999px';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      copied = document.execCommand('copy');
+      document.body.removeChild(ta);
+    } catch {}
+  }
+  if (copied) {
     showToast(msg);
-  } catch {
-    const ta = document.createElement('textarea');
-    ta.value = text;
-    document.body.appendChild(ta);
-    ta.select();
-    document.execCommand('copy');
-    document.body.removeChild(ta);
-    showToast(msg);
+  } else {
+    showToast('Không thể tự động sao chép. Vui lòng sao chép thủ công!');
   }
 }
 
@@ -79,29 +169,53 @@ async function apiFetch(url, options = {}) {
     'Content-Type': 'application/json',
     ...(options.headers || {})
   };
-  const res = await fetch(url, {
-    ...options,
-    headers,
-    credentials: 'same-origin'
-  });
-  const data = await res.json().catch(() => ({}));
-  if (res.status === 401 && authToken && !url.includes('/api/auth/')) {
-    clearSession();
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15000);
+  const signal = options.signal || controller.signal;
+
+  try {
+    const res = await fetch(url, {
+      ...options,
+      signal,
+      headers,
+      credentials: 'same-origin'
+    });
+    clearTimeout(timeoutId);
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 401 && authToken && !url.includes('/api/auth/')) {
+      clearSession();
+    }
+    if (!res.ok) {
+      throw new Error(data.error || `Lỗi kết nối (${res.status})`);
+    }
+    return data;
+  } catch (err) {
+    clearTimeout(timeoutId);
+    if (err.name === 'AbortError') {
+      throw new Error('Yêu cầu quá thời gian chờ (Timeout). Vui lòng thử lại.');
+    }
+    if (err instanceof TypeError || String(err.message).includes('Failed to fetch')) {
+      throw new Error('Mất kết nối mạng hoặc máy chủ không phản hồi. Vui lòng kiểm tra lại kết nối.');
+    }
+    throw err;
   }
-  if (!res.ok) {
-    throw new Error(data.error || `Lỗi kết nối (${res.status})`);
-  }
-  return data;
 }
 
-// Navigation
-function switchView(viewName) {
+// Navigation & History API
+function switchView(viewName, updateHistory = true) {
   document.querySelectorAll('.view-section').forEach((sec) => {
     sec.classList.toggle('active', sec.id === `view-${viewName}`);
   });
   document.querySelectorAll('.nav-btn').forEach((btn) => {
     btn.classList.toggle('active', btn.getAttribute('data-nav') === viewName);
   });
+
+  if (updateHistory) {
+    try {
+      history.pushState({ view: viewName }, '', `#${viewName}`);
+    } catch {}
+  }
 
   if (viewName === 'wallet' && authToken) {
     loadUserDashboard();
@@ -111,6 +225,12 @@ function switchView(viewName) {
   }
 }
 
+window.addEventListener('popstate', (e) => {
+  const v = e.state?.view || window.location.hash.replace('#', '') || 'home';
+  switchView(v, false);
+});
+
+// Event delegation for clicks across the app
 document.body.addEventListener('click', (e) => {
   const navEl = e.target.closest('[data-nav]');
   if (navEl) {
@@ -132,18 +252,51 @@ document.body.addEventListener('click', (e) => {
     return;
   }
 
+  // Click on affiliate single input auto-selects text without inline onclick
+  const affInput = e.target.closest('.aff-single-input');
+  if (affInput) {
+    affInput.select();
+    return;
+  }
+
   const qrBtn = e.target.closest('[data-vietqr]');
   if (qrBtn) {
-    const imgUrl = qrBtn.getAttribute('data-vietqr');
+    const imgUrl = qrBtn.getAttribute('data-vietqr') || '';
     const info = qrBtn.getAttribute('data-vietqr-info') || '';
-    document.getElementById('vietQrModalImg').src = imgUrl;
-    document.getElementById('vietQrModalInfo').textContent = info;
-    document.getElementById('vietQrModal').classList.remove('hidden');
+    const safeQr = safeHttpsUrl(imgUrl);
+    if (
+      safeQr &&
+      (safeQr.startsWith('https://img.vietqr.io/') || safeQr.startsWith('https://api.vietqr.io/'))
+    ) {
+      const modalImg = document.getElementById('vietQrModalImg');
+      const modalInfo = document.getElementById('vietQrModalInfo');
+      const modal = document.getElementById('vietQrModal');
+      if (modalImg) modalImg.src = safeQr;
+      if (modalInfo) modalInfo.textContent = info;
+      modal?.classList.remove('hidden');
+    } else {
+      showToast('Đường dẫn VietQR không hợp lệ.');
+    }
   }
 });
 
-document.getElementById('closeVietQrModalBtn').addEventListener('click', () => {
-  document.getElementById('vietQrModal').classList.add('hidden');
+on('closeVietQrModalBtn', 'click', () => {
+  document.getElementById('vietQrModal')?.classList.add('hidden');
+});
+
+// Modal close on backdrop click & Escape key
+document.querySelectorAll('.modal-backdrop').forEach((backdrop) => {
+  backdrop.addEventListener('click', (e) => {
+    if (e.target === backdrop) {
+      backdrop.classList.add('hidden');
+    }
+  });
+});
+
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    document.querySelectorAll('.modal-backdrop').forEach((m) => m.classList.add('hidden'));
+  }
 });
 
 // Sync Auth UI
@@ -155,44 +308,56 @@ function syncAuthUi() {
   const walletAuthenticatedContent = document.getElementById('walletAuthenticatedContent');
 
   if (authToken && currentUser) {
-    navAuthArea.classList.add('hidden');
-    navUserArea.classList.remove('hidden');
-    walletGuestPrompt.classList.add('hidden');
-    walletAuthenticatedContent.classList.remove('hidden');
+    navAuthArea?.classList.add('hidden');
+    navUserArea?.classList.remove('hidden');
+    walletGuestPrompt?.classList.add('hidden');
+    walletAuthenticatedContent?.classList.remove('hidden');
 
-    document.getElementById('headerUserName').textContent = currentUser.name;
-    document.getElementById('headerUserBalance').textContent = fmtVnd(
-      currentUser.balanceAvailable
-    );
+    const headerNameEl = document.getElementById('headerUserName');
+    if (headerNameEl) headerNameEl.textContent = currentUser.name || '';
+    const headerBalEl = document.getElementById('headerUserBalance');
+    if (headerBalEl) headerBalEl.textContent = fmtVnd(currentUser.balanceAvailable);
 
     if (currentUser.role === 'admin') {
-      navAdminBtn.classList.remove('hidden');
+      navAdminBtn?.classList.remove('hidden');
     } else {
-      navAdminBtn.classList.add('hidden');
+      navAdminBtn?.classList.add('hidden');
     }
   } else {
-    navAuthArea.classList.remove('hidden');
-    navUserArea.classList.add('hidden');
-    navAdminBtn.classList.add('hidden');
-    walletGuestPrompt.classList.remove('hidden');
-    walletAuthenticatedContent.classList.add('hidden');
+    navAuthArea?.classList.remove('hidden');
+    navUserArea?.classList.add('hidden');
+    navAdminBtn?.classList.add('hidden');
+    walletGuestPrompt?.classList.remove('hidden');
+    walletAuthenticatedContent?.classList.add('hidden');
   }
 }
 
 function setSession(_token, user) {
   authToken = 'httponly_cookie_session';
   currentUser = user;
-  localStorage.removeItem(TOKEN_KEY);
-  localStorage.setItem(USER_KEY, JSON.stringify(user));
+  safeStorage.remove(TOKEN_KEY);
+  // Only store minimal non-sensitive identity in localStorage; balance/account loaded from /api/user/me
+  safeStorage.set(
+    USER_KEY,
+    JSON.stringify({
+      code: user.code,
+      name: user.name,
+      role: user.role
+    })
+  );
   syncAuthUi();
 }
 
-function clearSession() {
+async function clearSession() {
   authToken = '';
   currentUser = null;
-  localStorage.removeItem(TOKEN_KEY);
-  localStorage.removeItem(USER_KEY);
-  fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' }).catch(() => {});
+  safeStorage.remove(TOKEN_KEY);
+  safeStorage.remove(USER_KEY);
+  try {
+    await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' });
+  } catch (err) {
+    console.warn('Logout network notice:', err);
+  }
   syncAuthUi();
   switchView('home');
 }
@@ -206,76 +371,137 @@ async function initPublicConfig() {
     if (rateEl) rateEl.textContent = `${publicConfig.cashbackPercent}%`;
     const minLabel = document.getElementById('minWithdrawLabel');
     if (minLabel) minLabel.textContent = fmtVnd(publicConfig.minWithdrawAmount);
-  } catch {}
+  } catch (err) {
+    console.warn('Init public config notice:', err);
+  }
 }
 
 // Auth Modal Logic
 const authModal = document.getElementById('authModal');
 function openAuthModal(tab = 'login') {
+  if (!authModal) return;
   authModal.classList.remove('hidden');
   document.querySelectorAll('.auth-tab').forEach((t) => {
     t.classList.toggle('active', t.getAttribute('data-auth-tab') === tab);
   });
-  document.getElementById('loginFormBox').classList.toggle('hidden', tab !== 'login');
-  document.getElementById('registerFormBox').classList.toggle('hidden', tab !== 'register');
-  document.getElementById('authModalTitle').textContent =
-    tab === 'login' ? 'Đăng nhập tài khoản' : 'Đăng ký tài khoản';
+  document.getElementById('loginFormBox')?.classList.toggle('hidden', tab !== 'login');
+  document.getElementById('registerFormBox')?.classList.toggle('hidden', tab !== 'register');
+  const titleEl = document.getElementById('authModalTitle');
+  if (titleEl) {
+    titleEl.textContent = tab === 'login' ? 'Đăng nhập tài khoản' : 'Đăng ký tài khoản';
+  }
 
-  const savedRef = sessionStorage.getItem('hoantienshop_ref');
+  const savedRef = safeStorage.get('hoantienshop_ref', sessionStorage);
   const regRefInput = document.getElementById('regRefCode');
   if (savedRef && regRefInput && !regRefInput.value) {
     regRefInput.value = savedRef;
   }
 }
 
-document.getElementById('openLoginBtn').addEventListener('click', () => openAuthModal('login'));
-document.getElementById('openRegisterBtn').addEventListener('click', () => openAuthModal('register'));
-document.getElementById('walletLoginBtn').addEventListener('click', () => openAuthModal('login'));
-document.getElementById('walletRegisterBtn').addEventListener('click', () => openAuthModal('register'));
-document.getElementById('closeAuthModalBtn').addEventListener('click', () => authModal.classList.add('hidden'));
+on('openLoginBtn', 'click', () => openAuthModal('login'));
+on('openRegisterBtn', 'click', () => openAuthModal('register'));
+on('walletLoginBtn', 'click', () => openAuthModal('login'));
+on('walletRegisterBtn', 'click', () => openAuthModal('register'));
+on('closeAuthModalBtn', 'click', () => authModal?.classList.add('hidden'));
 
 document.querySelectorAll('.auth-tab').forEach((tabBtn) => {
   tabBtn.addEventListener('click', () => openAuthModal(tabBtn.getAttribute('data-auth-tab')));
 });
 
-document.getElementById('doLoginBtn').addEventListener('click', async () => {
-  const identifier = document.getElementById('loginIdentifier').value.trim();
-  const password = document.getElementById('loginPassword').value;
+// Login execution with button lock
+async function handleDoLogin() {
+  const btn = document.getElementById('doLoginBtn');
+  const identifier = document.getElementById('loginIdentifier')?.value?.trim() || '';
+  const password = document.getElementById('loginPassword')?.value || '';
+
+  if (!identifier || !password) {
+    showToast('Vui lòng nhập đầy đủ tài khoản và mật khẩu!');
+    return;
+  }
+
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Đang đăng nhập...';
+  }
+
   try {
     const data = await apiFetch('/api/auth/login', {
       method: 'POST',
       body: JSON.stringify({ identifier, password })
     });
     setSession(data.token, data.user);
-    authModal.classList.add('hidden');
+    authModal?.classList.add('hidden');
     showToast(`Xin chào ${data.user.name}!`);
     if (data.user.role === 'admin') {
       switchView('admin');
     }
   } catch (err) {
     showToast(err.message);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Đăng Nhập';
+    }
   }
-});
+}
 
-document.getElementById('doRegisterBtn').addEventListener('click', async () => {
-  const name = document.getElementById('regName').value.trim();
-  const phone = document.getElementById('regPhone').value.trim();
-  const password = document.getElementById('regPassword').value;
+on('doLoginBtn', 'click', handleDoLogin);
+
+// Register execution with button lock
+async function handleDoRegister() {
+  const btn = document.getElementById('doRegisterBtn');
+  const name = document.getElementById('regName')?.value?.trim() || '';
+  const phone = document.getElementById('regPhone')?.value?.trim() || '';
+  const password = document.getElementById('regPassword')?.value || '';
   const refCode = document.getElementById('regRefCode')?.value?.trim() || '';
+
+  if (!name || !phone || !password) {
+    showToast('Vui lòng điền đầy đủ họ tên, SĐT và mật khẩu!');
+    return;
+  }
+  if (password.length < 6) {
+    showToast('Mật khẩu phải có tối thiểu 6 ký tự.');
+    return;
+  }
+
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Đang tạo tài khoản...';
+  }
+
   try {
     const data = await apiFetch('/api/auth/register', {
       method: 'POST',
       body: JSON.stringify({ name, phone, password, refCode })
     });
     setSession(data.token, data.user);
-    authModal.classList.add('hidden');
+    authModal?.classList.add('hidden');
     showToast('Đăng ký tài khoản thành công!');
   } catch (err) {
     showToast(err.message);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Đăng Ký Tài Khoản';
+    }
   }
+}
+
+on('doRegisterBtn', 'click', handleDoRegister);
+
+// Allow Enter key submit inside login and register inputs
+['loginIdentifier', 'loginPassword'].forEach((id) => {
+  on(id, 'keydown', (e) => {
+    if (e.key === 'Enter') handleDoLogin();
+  });
+});
+['regName', 'regPhone', 'regPassword', 'regRefCode'].forEach((id) => {
+  on(id, 'keydown', (e) => {
+    if (e.key === 'Enter') handleDoRegister();
+  });
 });
 
-document.getElementById('logoutBtn').addEventListener('click', () => {
+on('logoutBtn', 'click', () => {
   clearSession();
   showToast('Đã đăng xuất tài khoản.');
 });
@@ -290,54 +516,63 @@ const instantPreviewArea = document.getElementById('instantPreviewArea');
 const instantPreviewCard = document.getElementById('instantPreviewCard');
 
 let previewDebounceTimer = null;
+let previewAbortController = null;
+let isConverting = false;
 
-productUrlInput.addEventListener('input', () => {
-  const val = productUrlInput.value.trim();
-  clearInputBtn.classList.toggle('hidden', !val);
-  if (conversionResultSection) {
-    conversionResultSection.classList.add('hidden');
-  }
-  if (val.startsWith('http://') || val.startsWith('https://')) {
+if (productUrlInput) {
+  productUrlInput.addEventListener('input', () => {
+    const val = productUrlInput.value.trim();
+    clearInputBtn?.classList.toggle('hidden', !val);
     clearTimeout(previewDebounceTimer);
-    previewDebounceTimer = setTimeout(() => {
-      fetchInstantPreview(val);
-    }, 450);
-  } else {
-    if (instantPreviewArea) instantPreviewArea.classList.add('hidden');
-  }
-});
+    if (conversionResultSection) {
+      conversionResultSection.classList.add('hidden');
+    }
+    if (val.startsWith('http://') || val.startsWith('https://')) {
+      previewDebounceTimer = setTimeout(() => {
+        fetchInstantPreview(val);
+      }, 450);
+    } else {
+      if (previewAbortController) previewAbortController.abort();
+      if (instantPreviewArea) instantPreviewArea.classList.add('hidden');
+    }
+  });
 
-productUrlInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') {
-    e.preventDefault();
-    handleGetCashbackLink();
-  }
-});
+  productUrlInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleGetCashbackLink();
+    }
+  });
+}
 
-document.getElementById('pasteBtn').addEventListener('click', async () => {
+on('pasteBtn', 'click', async () => {
   try {
     const text = await navigator.clipboard.readText();
-    if (text) {
+    if (text && productUrlInput) {
       productUrlInput.value = text;
-      clearInputBtn.classList.remove('hidden');
+      clearInputBtn?.classList.remove('hidden');
       if (conversionResultSection) {
         conversionResultSection.classList.add('hidden');
       }
       fetchInstantPreview(text);
     }
   } catch {
-    productUrlInput.focus();
+    productUrlInput?.focus();
     showToast('Hãy nhấn giữ hoặc Ctrl+V vào ô nhập để dán link.');
   }
 });
 
-clearInputBtn.addEventListener('click', () => {
-  productUrlInput.value = '';
-  clearInputBtn.classList.add('hidden');
-  if (instantPreviewArea) instantPreviewArea.classList.add('hidden');
-  conversionResultSection.classList.add('hidden');
-  productUrlInput.focus();
-});
+if (clearInputBtn) {
+  clearInputBtn.addEventListener('click', () => {
+    clearTimeout(previewDebounceTimer);
+    if (previewAbortController) previewAbortController.abort();
+    if (productUrlInput) productUrlInput.value = '';
+    clearInputBtn.classList.add('hidden');
+    if (instantPreviewArea) instantPreviewArea.classList.add('hidden');
+    if (conversionResultSection) conversionResultSection.classList.add('hidden');
+    productUrlInput?.focus();
+  });
+}
 
 async function fetchInstantPreview(rawText) {
   if (!instantPreviewArea || !instantPreviewCard || !rawText) return;
@@ -345,6 +580,13 @@ async function fetchInstantPreview(rawText) {
   if (!match) return;
 
   const url = match[0];
+
+  if (previewAbortController) {
+    previewAbortController.abort();
+  }
+  previewAbortController = new AbortController();
+  const signal = previewAbortController.signal;
+
   instantPreviewArea.classList.remove('hidden');
   instantPreviewCard.classList.add('loading');
   instantPreviewCard.innerHTML = `
@@ -357,20 +599,24 @@ async function fetchInstantPreview(rawText) {
   try {
     const res = await apiFetch('/api/preview', {
       method: 'POST',
-      body: JSON.stringify({ url })
+      body: JSON.stringify({ url }),
+      signal
     });
 
+    if (signal.aborted) return;
     if (!res || !res.found) {
       instantPreviewArea.classList.add('hidden');
       return;
     }
-
     renderInstantPreviewCard(res);
   } catch (err) {
-    // If preview fails, keep it hidden gracefully
-    instantPreviewArea.classList.add('hidden');
+    if (err.name !== 'AbortError') {
+      instantPreviewArea.classList.add('hidden');
+    }
   } finally {
-    instantPreviewCard.classList.remove('loading');
+    if (!signal.aborted) {
+      instantPreviewCard.classList.remove('loading');
+    }
   }
 }
 
@@ -380,63 +626,45 @@ function renderInstantPreviewCard(data) {
   const isShopee = data.platform === 'shopee';
   const isTikTok = data.platform === 'tiktok';
 
-  const platLabel = isShopee
-    ? `<span class="plat-badge-inline shopee">
-        <svg class="plat-svg-icon" viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
-          <path d="M19 7h-3V6a4 4 0 0 0-8 0v1H5a1 1 0 0 0-1 1v11a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3V8a1 1 0 0 0-1-1zm-9-1a2 2 0 0 1 4 0v1h-4V6zm8 13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V9h2v1.5a1 1 0 0 0 2 0V9h4v1.5a1 1 0 0 0 2 0V9h2v10z"/>
-          <path d="M13.5 13.5c-.3-.2-.7-.3-1.1-.4-.6-.2-.9-.3-.9-.6 0-.3.3-.5.7-.5.5 0 .9.2 1.2.4a.5.5 0 1 0 .6-.8c-.5-.3-1.1-.6-1.8-.6-1 0-1.7.6-1.7 1.5 0 .6.4 1.1 1.2 1.3.6.2.8.3.8.6 0 .3-.3.5-.8.5-.6 0-1.1-.3-1.4-.6a.5.5 0 1 0-.7.7c.5.5 1.2.8 2.1.8 1.1 0 1.8-.6 1.8-1.5 0-.7-.4-1.1-1.1-1.3z"/>
-        </svg> Shopee
-      </span>`
+  const platBadge = isShopee
+    ? `<span class="plat-badge-inline shopee">Shopee</span>`
     : isTikTok
-    ? `<span class="plat-badge-inline tiktok">
-        <svg class="plat-svg-icon" viewBox="0 0 24 24" width="13" height="13" fill="currentColor">
-          <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.34 0 .67.06.98.17V8.89a6.45 6.45 0 0 0-.98-.07A6.33 6.33 0 0 0 3 15.16 6.33 6.33 0 0 0 9.34 21.5a6.33 6.33 0 0 0 6.33-6.34V8.47a8.28 8.28 0 0 0 4.81 1.53V6.69h-.89z"/>
-        </svg> TikTok Shop
-      </span>`
-    : '🔗 Liên kết';
+    ? `<span class="plat-badge-inline tiktok">TikTok Shop</span>`
+    : '<span>Sàn TMĐT</span>';
 
-  const safeThumb = safeHttpsUrl(data.imageUrl);
-  const thumbHtml = safeThumb
-    ? `<img src="${safeThumb}" alt="Sản phẩm" referrerpolicy="no-referrer" />`
-    : `<div style="font-size:28px;">🛍️</div>`;
+  const title = escapeHtml(data.title || 'Sản phẩm hoàn tiền');
+  const price = data.price > 0 ? fmtVnd(data.price) : 'Đang cập nhật';
+  const estCashback = data.estimatedCashback > 0 ? `+${fmtVnd(data.estimatedCashback)}` : null;
 
-  const isGenericTitle =
-    !data.productName ||
-    /^Sản phẩm (Shopee|TikTok Shop)\s*#/i.test(data.productName) ||
-    data.productName === 'Sản phẩm Shopee';
-  const displayTitle = isGenericTitle ? 'Đang cập nhật thông tin sản phẩm' : data.productName;
+  const thumbHtml = data.imageUrl
+    ? `<img src="${escapeHtml(data.imageUrl)}" alt="${title}" class="ip-thumb" referrerpolicy="no-referrer" />`
+    : `<div class="ip-thumb ip-thumb-fallback">🛍️</div>`;
 
-  const priceHtml = data.price > 0
-    ? `<span class="ip-price">Giá: <strong>${fmtVnd(data.price)}</strong></span>`
-    : '';
-
-  const cashbackHtml = data.estimatedCashback > 0
-    ? `<span class="ip-cashback">Hoàn tiền ước tính: ~${fmtVnd(data.estimatedCashback)}</span>`
-    : `<span class="ip-cashback">Mức hoàn tùy đơn hàng (tự động cộng ví khi có đơn)</span>`;
+  const cashbackPill = estCashback
+    ? `<span class="cashback-pill">Hoàn tiền ước tính: <strong>${estCashback}</strong></span>`
+    : `<span class="cashback-pill" style="background:#f1f5f9;color:#475569;">Có hoàn tiền</span>`;
 
   const authNotice = !authToken
-    ? `<div class="ip-guest-hint">Đăng nhập để đơn được ghi nhận tự động vào ví của bạn.</div>`
-    : `<div class="ip-guest-hint"><strong>Sẵn sàng nhận hoàn tiền:</strong> Bấm nút để lấy link mua hàng!</div>`;
+    ? `<div class="ip-auth-notice">
+         ⚠️ Bạn chưa đăng nhập. Nhấn Tạo link để nhận liên kết mua hàng, hoặc <button type="button" class="inline-link" data-open-auth="login">Đăng nhập ngay</button> để tích lũy tiền vào ví!
+       </div>`
+    : '';
 
   instantPreviewCard.innerHTML = `
     <div class="ip-top-row">
-      <div class="ip-badge-group">
-        <span class="ip-badge-cashback">🟢 Có tiền hoàn</span>
-        ${platLabel}
-      </div>
+      <span class="ip-status-badge">✨ Đã tìm thấy sản phẩm</span>
+      ${platBadge}
     </div>
-
-    <div class="ip-product-row">
-      <div class="ip-thumb">${thumbHtml}</div>
-      <div class="ip-details">
-        <div class="ip-title">${escapeHtml(displayTitle)}</div>
-        <div class="ip-numbers">
-          ${priceHtml}
-          ${cashbackHtml}
+    <div class="ip-main-row">
+      ${thumbHtml}
+      <div class="ip-info">
+        <h4 class="ip-title">${title}</h4>
+        <div class="ip-meta">
+          <span class="ip-price">Giá bán: <strong>${price}</strong></span>
+          ${cashbackPill}
         </div>
       </div>
     </div>
-
     <div class="ip-footer-row">
       ${authNotice}
       <button type="button" class="btn btn-primary btn-sm" id="btnTriggerConvertFromPreview">
@@ -445,24 +673,25 @@ function renderInstantPreviewCard(data) {
     </div>
   `;
 
-  const convertBtn = document.getElementById('btnTriggerConvertFromPreview');
-  if (convertBtn) {
-    convertBtn.addEventListener('click', () => {
-      handleGetCashbackLink();
-    });
-  }
+  on('btnTriggerConvertFromPreview', 'click', () => {
+    handleGetCashbackLink();
+  });
 }
 
 async function handleGetCashbackLink() {
-  const text = productUrlInput.value.trim();
+  if (isConverting) return;
+  const text = productUrlInput?.value?.trim() || '';
   if (!text) {
     showToast('Vui lòng dán link sản phẩm Shopee hoặc TikTok Shop!');
-    productUrlInput.focus();
+    productUrlInput?.focus();
     return;
   }
 
-  getCashbackLinkBtn.disabled = true;
-  getCashbackLinkBtn.textContent = 'Đang tạo link...';
+  isConverting = true;
+  if (getCashbackLinkBtn) {
+    getCashbackLinkBtn.disabled = true;
+    getCashbackLinkBtn.textContent = 'Đang tạo link...';
+  }
 
   try {
     const data = await apiFetch('/api/convert', {
@@ -480,7 +709,7 @@ async function handleGetCashbackLink() {
     if (instantPreviewArea) {
       instantPreviewArea.classList.add('hidden');
     }
-    conversionResultSection.classList.remove('hidden');
+    conversionResultSection?.classList.remove('hidden');
 
     const guestNoticeHtml = !authToken
       ? `<div class="guest-card-note">
@@ -489,122 +718,126 @@ async function handleGetCashbackLink() {
          </div>`
       : '';
 
-    resultCardsList.innerHTML = items
-      .map((item) => {
-        const isShopee = item.platform === 'shopee';
-        const isTikTok = item.platform === 'tiktok';
-        const openAppBtnText = isShopee ? 'Mở Shopee' : isTikTok ? 'Mở TikTok' : 'Mở Mua Hàng';
-        const platLabel = isShopee
-          ? `<span class="plat-badge-inline shopee">
-              <svg class="plat-svg-icon" viewBox="0 0 24 24" width="15" height="15" fill="currentColor">
-                <path d="M19 7h-3V6a4 4 0 0 0-8 0v1H5a1 1 0 0 0-1 1v11a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3V8a1 1 0 0 0-1-1zm-9-1a2 2 0 0 1 4 0v1h-4V6zm8 13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V9h2v1.5a1 1 0 0 0 2 0V9h4v1.5a1 1 0 0 0 2 0V9h2v10z"/>
-                <path d="M13.5 13.5c-.3-.2-.7-.3-1.1-.4-.6-.2-.9-.3-.9-.6 0-.3.3-.5.7-.5.5 0 .9.2 1.2.4a.5.5 0 1 0 .6-.8c-.5-.3-1.1-.6-1.8-.6-1 0-1.7.6-1.7 1.5 0 .6.4 1.1 1.2 1.3.6.2.8.3.8.6 0 .3-.3.5-.8.5-.6 0-1.1-.3-1.4-.6a.5.5 0 1 0-.7.7c.5.5 1.2.8 2.1.8 1.1 0 1.8-.6 1.8-1.5 0-.7-.4-1.1-1.1-1.3z"/>
-              </svg> Shopee
-            </span>`
-          : isTikTok
-          ? `<span class="plat-badge-inline tiktok">
-              <svg class="plat-svg-icon" viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
-                <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.34 0 .67.06.98.17V8.89a6.45 6.45 0 0 0-.98-.07A6.33 6.33 0 0 0 3 15.16 6.33 6.33 0 0 0 9.34 21.5a6.33 6.33 0 0 0 6.33-6.34V8.47a8.28 8.28 0 0 0 4.81 1.53V6.69h-.89z"/>
-              </svg> TikTok Shop
-            </span>`
-          : '🔗 Liên kết';
+    if (resultCardsList) {
+      resultCardsList.innerHTML = items
+        .map((item) => {
+          const isShopee = item.platform === 'shopee';
+          const isTikTok = item.platform === 'tiktok';
+          const openAppBtnText = isShopee ? 'Mở Shopee' : isTikTok ? 'Mở TikTok' : 'Mở Mua Hàng';
 
-        const safeThumbUrl = safeHttpsUrl(item.imageUrl);
-        const safeAffUrl = safeHttpsUrl(item.affiliateUrl);
+          const platLabel = isShopee
+            ? `<span class="plat-badge-inline shopee">
+                <svg class="plat-svg-icon" viewBox="0 0 24 24" width="15" height="15" fill="currentColor">
+                  <path d="M19 7h-3V6a4 4 0 0 0-8 0v1H5a1 1 0 0 0-1 1v11a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3V8a1 1 0 0 0-1-1zm-9-1a2 2 0 0 1 4 0v1h-4V6zm8 13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V9h2v1.5a1 1 0 0 0 2 0V9h4v1.5a1 1 0 0 0 2 0V9h2v10z"/>
+                  <path d="M13.5 13.5c-.3-.2-.7-.3-1.1-.4-.6-.2-.9-.3-.9-.6 0-.3.3-.5.7-.5.5 0 .9.2 1.2.4a.5.5 0 1 0 .6-.8c-.5-.3-1.1-.6-1.8-.6-1 0-1.7.6-1.7 1.5 0 .6.4 1.1 1.2 1.3.6.2.8.3.8.6 0 .3-.3.5-.8.5-.6 0-1.1-.3-1.4-.6a.5.5 0 1 0-.7.7c.5.5 1.2.8 2.1.8 1.1 0 1.8-.6 1.8-1.5 0-.7-.4-1.1-1.1-1.3z"/>
+                </svg> Shopee
+              </span>`
+            : isTikTok
+            ? `<span class="plat-badge-inline tiktok">
+                <svg class="plat-svg-icon" viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+                  <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.34 0 .67.06.98.17V8.89a6.45 6.45 0 0 0-.98-.07A6.33 6.33 0 0 0 3 15.16 6.33 6.33 0 0 0 9.34 21.5a6.33 6.33 0 0 0 6.33-6.34V8.47a8.28 8.28 0 0 0 4.81 1.53V6.69h-.89z"/>
+                </svg> TikTok Shop
+              </span>`
+            : '🔗 Liên kết';
 
-        const thumbHtml = safeThumbUrl
-          ? `<img src="${safeThumbUrl}" alt="Sản phẩm" class="product-thumb" referrerpolicy="no-referrer" />`
-          : `<div class="product-thumb" style="display:flex;align-items:center;justify-content:center;font-size:26px;">🛍️</div>`;
+          const safeThumbUrl = safeHttpsUrl(item.imageUrl);
+          const safeAffUrl = safeAppOrWebUrl(item.affiliateUrl);
 
-        const priceInfoHtml =
-          item.price > 0
-            ? `<span class="prod-price-tag">Giá: <strong>${fmtVnd(item.price)}</strong></span>`
-            : '';
+          const thumbHtml = safeThumbUrl
+            ? `<img src="${safeThumbUrl}" alt="Sản phẩm" class="product-thumb" referrerpolicy="no-referrer" />`
+            : `<div class="product-thumb" style="display:flex;align-items:center;justify-content:center;font-size:26px;">🛍️</div>`;
 
-        const isGenericItemTitle =
-          !item.productName ||
-          /^Sản phẩm (Shopee|TikTok Shop)\s*#/i.test(item.productName) ||
-          item.productName === 'Sản phẩm Shopee';
-        const displayItemTitle = isGenericItemTitle
-          ? 'Đang cập nhật thông tin sản phẩm'
-          : item.productName;
+          const priceInfoHtml =
+            item.price > 0
+              ? `<span class="prod-price-tag">Giá bán: <strong>${fmtVnd(item.price)}</strong></span>`
+              : `<span class="prod-price-tag">Giá bán: <strong>Đang cập nhật</strong></span>`;
 
-        const cbPct = Number(item.cashbackPercent || 70);
-        const estCashbackHtml =
-          item.estimatedCashback > 0
-            ? `<div class="est-cashback-badge">
-                <span>Hoàn tiền ước tính:</span>
-                <strong>~${fmtVnd(item.estimatedCashback)}</strong>
-               </div>`
-            : `<div class="est-cashback-badge normal">
-                <span>Mức hoàn tùy đơn hàng (${cbPct}% hoa hồng sàn)</span>
-               </div>`;
+          const estCashbackHtml =
+            item.estimatedCashback > 0
+              ? `<span class="cashback-badge">Hoàn tiền ước tính: ~<strong>${fmtVnd(
+                  item.estimatedCashback
+                )}</strong></span>`
+              : `<span class="cashback-badge" style="background:#ecfdf5;color:#059669;">Có hoàn tiền</span>`;
 
-        return `
-        <div class="cashback-product-card">
-          <div class="cp-top">
-            <span class="valid-badge">✨ Đã tạo link hoàn tiền</span>
-            <span style="font-size:13px;font-weight:700;color:#475569;">${platLabel}</span>
-          </div>
+          const displayItemTitle =
+            item.title && !item.title.match(/Sản phẩm (Shopee|TikTok)/i)
+              ? item.title
+              : isShopee
+              ? 'Sản phẩm Shopee'
+              : 'Sản phẩm TikTok Shop';
 
-          <!-- Product Details Row -->
-          <div class="product-meta-row">
-            ${thumbHtml}
-            <div class="product-meta-info">
-              <h4>${escapeHtml(displayItemTitle)}</h4>
-              <div class="product-meta-sub">
-                ${priceInfoHtml}
-                ${estCashbackHtml}
+          const ctaButtonHtml = safeAffUrl
+            ? `<a href="${safeAffUrl}" target="_blank" rel="noopener" class="btn btn-cta btn-open-aff">
+                 🛒 ${openAppBtnText} (Mua ngay)
+               </a>`
+            : `<div style="color:#dc2626;font-size:13px;padding:8px 0;">Không thể tạo liên kết mở app cho sản phẩm này.</div>`;
+
+          return `
+            <div class="cashback-product-card">
+              <div class="cp-top">
+                <span class="valid-badge">✅ Đã tạo link hoàn tiền</span>
+                ${platLabel}
               </div>
+
+              <!-- Product Details Row -->
+              <div class="product-meta-row">
+                ${thumbHtml}
+                <div class="product-meta-info">
+                  <h4>${escapeHtml(displayItemTitle)}</h4>
+                  <div class="product-meta-sub">
+                    ${priceInfoHtml}
+                    ${estCashbackHtml}
+                  </div>
+                </div>
+              </div>
+
+              <!-- Nút Mua Hàng to rõ -->
+              <div class="cp-cta-block">
+                ${ctaButtonHtml}
+              </div>
+
+              <!-- Rút gọn link aff thành 1 ô ngang duy nhất (Bỏ hoàn toàn mã QR) -->
+              <div class="cp-link-single-row">
+                <div class="aff-input-box" title="Bấm để sao chép link">
+                  <span class="aff-link-icon">🔗</span>
+                  <input
+                    type="text"
+                    class="aff-single-input"
+                    value="${safeAffUrl}"
+                    readonly
+                    data-copy="${safeAffUrl}"
+                    data-copy-msg="Đã sao chép link mua hàng hoàn tiền!"
+                  />
+                </div>
+                <button
+                  type="button"
+                  class="btn btn-copy-inline"
+                  data-copy="${safeAffUrl}"
+                  data-copy-msg="Đã sao chép link mua hàng hoàn tiền!"
+                  title="Sao chép link mua hàng"
+                >
+                  📋 Sao chép
+                </button>
+              </div>
+
+              ${guestNoticeHtml}
             </div>
-          </div>
-
-          <!-- Nổi bật phần quan trọng: Nút Mua Hàng to rõ -->
-          <div class="cp-cta-block">
-            <a href="${safeAffUrl}" target="_blank" rel="noopener" class="btn btn-cta btn-open-aff">
-              🛒 ${openAppBtnText} (Mua ngay)
-            </a>
-          </div>
-
-          <!-- Rút gọn link aff thành 1 ô ngang duy nhất (Bỏ hoàn toàn mã QR) -->
-          <div class="cp-link-single-row">
-            <div class="aff-input-box" title="Bấm để sao chép link">
-              <span class="aff-link-icon">🔗</span>
-              <input
-                type="text"
-                class="aff-single-input"
-                value="${safeAffUrl}"
-                readonly
-                onclick="this.select()"
-                data-copy="${safeAffUrl}"
-                data-copy-msg="Đã sao chép link mua hàng hoàn tiền!"
-              />
-            </div>
-            <button
-              type="button"
-              class="btn btn-copy-inline"
-              data-copy="${safeAffUrl}"
-              data-copy-msg="Đã sao chép link mua hàng hoàn tiền!"
-              title="Sao chép link mua hàng"
-            >
-              📋 Sao chép
-            </button>
-          </div>
-
-          ${guestNoticeHtml}
-        </div>
-      `;
-      })
-      .join('');
+          `;
+        })
+        .join('');
+    }
   } catch (err) {
     showToast(err.message);
   } finally {
-    getCashbackLinkBtn.disabled = false;
-    getCashbackLinkBtn.textContent = 'Lấy Link Hoàn Tiền';
+    isConverting = false;
+    if (getCashbackLinkBtn) {
+      getCashbackLinkBtn.disabled = false;
+      getCashbackLinkBtn.textContent = 'Lấy Link Hoàn Tiền';
+    }
   }
 }
 
-getCashbackLinkBtn.addEventListener('click', handleGetCashbackLink);
+on('getCashbackLinkBtn', 'click', handleGetCashbackLink);
 
 // ================= USER WALLET & ORDERS =================
 const wdBankAccountInput = document.getElementById('wdBankAccount');
@@ -615,9 +848,9 @@ if (wdBankAccountInput) {
     const savedAcc = currentUser?.bankAccount || '';
     const newAcc = wdBankAccountInput.value.trim();
     if (savedAcc && newAcc && newAcc !== savedAcc) {
-      wdPasswordConfirmGroup.classList.remove('hidden');
+      wdPasswordConfirmGroup?.classList.remove('hidden');
     } else {
-      wdPasswordConfirmGroup.classList.add('hidden');
+      wdPasswordConfirmGroup?.classList.add('hidden');
     }
   });
 }
@@ -627,150 +860,232 @@ async function loadUserDashboard() {
   try {
     const data = await apiFetch('/api/user/me');
     currentUser = data.user;
-    localStorage.setItem(USER_KEY, JSON.stringify(currentUser));
+    safeStorage.set(
+      USER_KEY,
+      JSON.stringify({
+        code: currentUser.code,
+        name: currentUser.name,
+        role: currentUser.role
+      })
+    );
     syncAuthUi();
 
-    document.getElementById('walletUserName').textContent = currentUser.name;
-    document.getElementById('statAvailable').textContent = fmtVnd(currentUser.balanceAvailable);
-    document.getElementById('statPending').textContent = fmtVnd(currentUser.balancePending);
-    document.getElementById('statTotalEarned').textContent = fmtVnd(currentUser.totalEarned);
-    document.getElementById('statWithdrawn').textContent = fmtVnd(currentUser.totalWithdrawn);
+    const setTxt = (id, txt) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = txt;
+    };
 
-    // Referral Info (safely check if element exists)
-    const refCountEl = document.getElementById('userRefCount');
-    if (refCountEl) refCountEl.textContent = data.referralCount || 0;
+    setTxt('walletUserName', currentUser.name || '');
+    setTxt('statAvailable', fmtVnd(currentUser.balanceAvailable));
+    setTxt('statPending', fmtVnd(currentUser.balancePending));
+    setTxt('statTotalEarned', fmtVnd(currentUser.totalEarned));
+    setTxt('statWithdrawn', fmtVnd(currentUser.totalWithdrawn));
+    setTxt('userRefCount', data.referralCount || 0);
+
     const refInputEl = document.getElementById('userReferralLinkInput');
-    if (refInputEl) {
+    if (refInputEl && currentUser.code) {
       refInputEl.value = `${window.location.origin}/?ref=${encodeURIComponent(currentUser.code)}`;
     }
 
-    if (currentUser.bankName) document.getElementById('wdBankName').value = currentUser.bankName;
-    if (currentUser.bankAccount) {
+    if (currentUser.bankName && document.getElementById('wdBankName')) {
+      document.getElementById('wdBankName').value = currentUser.bankName;
+    }
+    if (currentUser.bankAccount && document.getElementById('wdBankAccount')) {
       document.getElementById('wdBankAccount').value = currentUser.bankAccount;
     }
-    if (currentUser.bankOwner) document.getElementById('wdBankOwner').value = currentUser.bankOwner;
-    wdPasswordConfirmGroup.classList.add('hidden');
+    if (currentUser.bankOwner && document.getElementById('wdBankOwner')) {
+      document.getElementById('wdBankOwner').value = currentUser.bankOwner;
+    }
+    wdPasswordConfirmGroup?.classList.add('hidden');
 
-    // Orders
+    // Orders Table
     const ordBody = document.getElementById('userOrdersTableBody');
     const orders = data.orders || [];
-    if (orders.length === 0) {
-      ordBody.innerHTML =
-        '<tr><td colspan="4" class="text-center">Chưa có đơn hàng nào được ghi nhận.</td></tr>';
-    } else {
-      ordBody.innerHTML = orders
-        .map((o) => {
-          const stBadge =
-            o.status === 'approved'
-              ? '<span class="status-badge st-approved">Đã cộng vào ví</span>'
-              : o.status === 'cancelled'
-              ? '<span class="status-badge st-cancelled">Đã huỷ</span>'
-              : '<span class="status-badge st-pending">Đang đối soát</span>';
-          return `
-            <tr>
-              <td><strong>${escapeHtml(o.orderSn)}</strong></td>
-              <td>${escapeHtml(o.productName)}</td>
-              <td><strong style="color:#059669;">+${fmtVnd(o.userCashbackAmount)}</strong></td>
-              <td>${stBadge}</td>
-            </tr>
-          `;
-        })
-        .join('');
+    if (ordBody) {
+      if (orders.length === 0) {
+        ordBody.innerHTML =
+          '<tr><td colspan="4" class="text-center">Chưa có đơn hàng nào được ghi nhận.</td></tr>';
+      } else {
+        ordBody.innerHTML = orders
+          .map((o) => {
+            const stCls = getStatusClass(o.status);
+            const stLabel =
+              o.status === 'approved'
+                ? 'Đã cộng vào ví'
+                : o.status === 'cancelled'
+                ? 'Đã huỷ'
+                : 'Đang đối soát';
+            return `
+              <tr>
+                <td><strong>${escapeHtml(o.orderSn)}</strong></td>
+                <td>${escapeHtml(o.productName)}</td>
+                <td><strong style="color:#059669;">+${fmtVnd(o.userCashbackAmount)}</strong></td>
+                <td><span class="status-badge ${stCls}">${stLabel}</span></td>
+              </tr>
+            `;
+          })
+          .join('');
+      }
     }
 
-    // Ledger
+    // Ledger Table
     const ledBody = document.getElementById('userLedgerTableBody');
     const ledger = data.ledger || [];
-    if (ledger.length === 0) {
-      ledBody.innerHTML =
-        '<tr><td colspan="3" class="text-center">Chưa có biến động số dư.</td></tr>';
-    } else {
-      ledBody.innerHTML = ledger
-        .map((l) => {
-          const isPos = Number(l.amount) >= 0;
-          const color = isPos ? '#059669' : '#dc2626';
-          const prefix = isPos ? '+' : '';
-          return `
-            <tr>
-              <td>${new Date(l.createdAt).toLocaleDateString('vi-VN')}</td>
-              <td>${escapeHtml(l.note)}</td>
-              <td><strong style="color:${color};">${prefix}${fmtVnd(l.amount)}</strong></td>
-            </tr>
-          `;
-        })
-        .join('');
+    if (ledBody) {
+      if (ledger.length === 0) {
+        ledBody.innerHTML =
+          '<tr><td colspan="3" class="text-center">Chưa có biến động số dư.</td></tr>';
+      } else {
+        ledBody.innerHTML = ledger
+          .map((l) => {
+            const isPos = Number(l.amount) >= 0;
+            const color = isPos ? '#059669' : '#dc2626';
+            const prefix = isPos ? '+' : '';
+            const dt = l.createdAt ? new Date(l.createdAt).toLocaleDateString('vi-VN') : '—';
+            return `
+              <tr>
+                <td>${dt}</td>
+                <td>${escapeHtml(l.note)}</td>
+                <td><strong style="color:${color};">${prefix}${fmtVnd(l.amount)}</strong></td>
+              </tr>
+            `;
+          })
+          .join('');
+      }
     }
 
-    // Withdrawals
+    // Withdrawals Table
     const wdBody = document.getElementById('userWithdrawalsTableBody');
     const wds = data.withdrawals || [];
-    if (wds.length === 0) {
-      wdBody.innerHTML =
-        '<tr><td colspan="4" class="text-center">Chưa có lịch sử rút tiền.</td></tr>';
-    } else {
-      wdBody.innerHTML = wds
-        .map((w) => {
-          const stBadge =
-            w.status === 'paid'
-              ? '<span class="status-badge st-paid">Đã chuyển khoản</span>'
-              : w.status === 'rejected'
-              ? '<span class="status-badge st-rejected">Từ chối</span>'
-              : '<span class="status-badge st-pending">Chờ thanh toán</span>';
-          return `
-            <tr>
-              <td>${new Date(w.createdAt).toLocaleDateString('vi-VN')}</td>
-              <td><strong>${fmtVnd(w.amount)}</strong></td>
-              <td>${escapeHtml(w.bankName)} - ${escapeHtml(w.bankAccount)}</td>
-              <td>${stBadge}</td>
-            </tr>
-          `;
-        })
-        .join('');
+    if (wdBody) {
+      if (wds.length === 0) {
+        wdBody.innerHTML =
+          '<tr><td colspan="4" class="text-center">Chưa có lịch sử rút tiền.</td></tr>';
+      } else {
+        wdBody.innerHTML = wds
+          .map((w) => {
+            const stCls = getStatusClass(w.status);
+            const stLabel =
+              w.status === 'paid'
+                ? 'Đã chuyển khoản'
+                : w.status === 'rejected'
+                ? 'Từ chối'
+                : 'Chờ thanh toán';
+            const dt = w.createdAt ? new Date(w.createdAt).toLocaleDateString('vi-VN') : '—';
+            return `
+              <tr>
+                <td>${dt}</td>
+                <td><strong>${fmtVnd(w.amount)}</strong></td>
+                <td>${escapeHtml(w.bankName)} - ${escapeHtml(w.bankAccount)}</td>
+                <td><span class="status-badge ${stCls}">${stLabel}</span></td>
+              </tr>
+            `;
+          })
+          .join('');
+      }
     }
   } catch (err) {
     showToast(err.message);
   }
 }
 
-const copyRefLinkBtn = document.getElementById('copyRefLinkBtn');
-if (copyRefLinkBtn) {
-  copyRefLinkBtn.addEventListener('click', () => {
-    const val = document.getElementById('userReferralLinkInput')?.value;
-    if (val) copyText(val, 'Đã sao chép liên kết giới thiệu bạn bè!');
-  });
-}
+on('copyRefLinkBtn', 'click', () => {
+  const val = document.getElementById('userReferralLinkInput')?.value;
+  if (val) copyText(val, 'Đã sao chép liên kết giới thiệu bạn bè!');
+});
 
-document.getElementById('refreshWalletBtn').addEventListener('click', loadUserDashboard);
+on('refreshWalletBtn', 'click', loadUserDashboard);
 
-document.getElementById('submitOrderClaimBtn').addEventListener('click', async () => {
-  const platform = document.getElementById('claimPlatform').value;
-  const orderSn = document.getElementById('claimOrderSn').value.trim();
-  const productName = document.getElementById('claimProductName').value.trim();
+on('submitOrderClaimBtn', 'click', async () => {
+  const platform = document.getElementById('claimPlatform')?.value || 'shopee';
+  const orderSn = document.getElementById('claimOrderSn')?.value?.trim() || '';
+  const productName = document.getElementById('claimProductName')?.value?.trim() || '';
+
+  if (!orderSn) {
+    showToast('Vui lòng nhập mã đơn hàng của bạn!');
+    return;
+  }
+
+  const btn = document.getElementById('submitOrderClaimBtn');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Đang gửi...';
+  }
+
   try {
     const res = await apiFetch('/api/user/submit-order', {
       method: 'POST',
       body: JSON.stringify({ platform, orderSn, productName })
     });
-    document.getElementById('claimOrderSn').value = '';
-    document.getElementById('claimProductName').value = '';
+    if (document.getElementById('claimOrderSn')) document.getElementById('claimOrderSn').value = '';
+    if (document.getElementById('claimProductName')) {
+      document.getElementById('claimProductName').value = '';
+    }
     showToast(res.message || 'Đã lưu mã đơn hàng thành công!');
-    loadUserDashboard();
+    await loadUserDashboard();
   } catch (err) {
     showToast(err.message);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Gửi Mã Đơn Hàng';
+    }
   }
 });
 
-document.getElementById('submitWithdrawBtn').addEventListener('click', async () => {
-  const method = document.getElementById('wdMethod').value;
-  const bankName = document.getElementById('wdBankName').value.trim();
-  const bankAccount = document.getElementById('wdBankAccount').value.trim();
-  const bankOwner = document.getElementById('wdBankOwner').value.trim();
-  const amount = Number(document.getElementById('wdAmount').value);
-  const currentPassword = document.getElementById('wdCurrentPassword').value;
+on('submitWithdrawBtn', 'click', async () => {
+  const method = document.getElementById('wdMethod')?.value || 'bank';
+  const bankName = document.getElementById('wdBankName')?.value?.trim() || '';
+  const bankAccount = document.getElementById('wdBankAccount')?.value?.trim() || '';
+  const bankOwner = document.getElementById('wdBankOwner')?.value?.trim() || '';
+  const amountStr = document.getElementById('wdAmount')?.value?.trim() || '';
+  const currentPassword = document.getElementById('wdCurrentPassword')?.value || '';
+
+  const amount = Number(amountStr);
+  const minAmount = numOr(publicConfig.minWithdrawAmount, 50000);
+  const available = currentUser?.balanceAvailable || 0;
+
+  if (!amountStr || isNaN(amount) || !Number.isInteger(amount) || amount <= 0) {
+    showToast('Vui lòng nhập số tiền rút hợp lệ (số nguyên dương)!');
+    return;
+  }
+  if (amount < minAmount) {
+    showToast(`Số tiền rút tối thiểu là ${fmtVnd(minAmount)}.`);
+    return;
+  }
+  if (amount > available) {
+    showToast(`Số dư khả dụng (${fmtVnd(available)}) không đủ để rút ${fmtVnd(amount)}.`);
+    return;
+  }
+  if (!bankName || !bankAccount || !bankOwner) {
+    showToast('Vui lòng nhập đầy đủ thông tin tài khoản ngân hàng nhận tiền.');
+    return;
+  }
+
+  const ok = confirm(
+    `XÁC NHẬN YÊU CẦU RÚT TIỀN:\n\n• Số tiền: ${fmtVnd(
+      amount
+    )}\n• Ngân hàng: ${bankName}\n• Số tài khoản: ${bankAccount}\n• Chủ tài khoản: ${bankOwner}\n\nBạn có chắc chắn muốn gửi yêu cầu rút tiền này không?`
+  );
+  if (!ok) return;
+
+  const btn = document.getElementById('submitWithdrawBtn');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Đang gửi yêu cầu...';
+  }
+
+  const idempotencyKey =
+    typeof crypto !== 'undefined' && crypto.randomUUID
+      ? crypto.randomUUID()
+      : 'wd_' + Date.now() + '_' + Math.random().toString(36).slice(2);
 
   try {
     await apiFetch('/api/user/withdraw', {
       method: 'POST',
+      headers: {
+        'Idempotency-Key': idempotencyKey
+      },
       body: JSON.stringify({
         method,
         bankName,
@@ -780,12 +1095,19 @@ document.getElementById('submitWithdrawBtn').addEventListener('click', async () 
         currentPassword
       })
     });
-    document.getElementById('wdAmount').value = '';
-    document.getElementById('wdCurrentPassword').value = '';
+    if (document.getElementById('wdAmount')) document.getElementById('wdAmount').value = '';
+    if (document.getElementById('wdCurrentPassword')) {
+      document.getElementById('wdCurrentPassword').value = '';
+    }
     showToast('Đã gửi yêu cầu rút tiền thành công!');
-    loadUserDashboard();
+    await loadUserDashboard();
   } catch (err) {
     showToast(err.message);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Gửi Yêu Cầu Rút Tiền';
+    }
   }
 });
 
@@ -797,9 +1119,10 @@ const admOrdCommission = document.getElementById('admOrdCommission');
 const admOrdPreview70 = document.getElementById('admOrdPreview70');
 
 function updateAdminSplitPreview() {
+  if (!admOrdCommission || !admOrdPreview70) return;
   const gross = Number(admOrdCommission.value || 0);
-  const taxRate = Number(document.getElementById('admTaxDeductPercent').value ?? 10);
-  const cbRate = Number(document.getElementById('admCashbackPercent').value || 70);
+  const taxRate = numOr(document.getElementById('admTaxDeductPercent')?.value, 10);
+  const cbRate = numOr(document.getElementById('admCashbackPercent')?.value, 70);
   const net = Math.round(gross * (1 - taxRate / 100));
   const userGet = Math.round((net * cbRate) / 100);
   const adminGet = net - userGet;
@@ -813,240 +1136,286 @@ if (admOrdCommission) {
 async function loadAdminDashboard() {
   try {
     const data = await apiFetch('/api/admin/dashboard');
-    const st = data.stats;
-    const s = data.settings;
+    const st = data.stats || {};
+    const s = data.settings || {};
     currentAdminSettings = s;
     latestAdminOrders = data.orders || [];
+    latestAdminUsers = data.users || [];
     const dbStatus = data.dbStatus || {};
 
     const dbTextEl = document.getElementById('admDbStatusText');
-    if (dbStatus.mode === 'postgres') {
-      dbTextEl.textContent = '🟢 Đã kết nối Cloud PostgreSQL (Dữ liệu bền vững + Sổ cái Ledger)';
-      dbTextEl.style.color = '#059669';
-    } else if (dbStatus.mode === 'ephemeral_tmp') {
-      dbTextEl.textContent =
-        '🟠 Đang chạy bộ nhớ tạm (/tmp) trên Vercel — Hãy gắn biến DATABASE_URL (Neon/Supabase) trong Vercel Settings để lưu vĩnh viễn.';
-      dbTextEl.style.color = '#d97706';
-    } else {
-      dbTextEl.textContent = '🟢 Chế độ Local JSON (Lưu trên ổ cứng máy tính)';
+    if (dbTextEl) {
+      if (dbStatus.mode === 'postgres') {
+        dbTextEl.textContent = '🟢 Đã kết nối Cloud PostgreSQL (Dữ liệu bền vững + Sổ cái Ledger)';
+        dbTextEl.style.color = '#059669';
+      } else if (dbStatus.mode === 'ephemeral_tmp') {
+        dbTextEl.textContent =
+          '🟠 Đang chạy bộ nhớ tạm (/tmp) trên Vercel — Hãy gắn DATABASE_URL trong Vercel Settings để lưu vĩnh viễn.';
+        dbTextEl.style.color = '#d97706';
+      } else {
+        dbTextEl.textContent = '🟢 Chế độ Local JSON (Lưu trên ổ cứng máy tính)';
+        dbTextEl.style.color = '#059669';
+      }
     }
 
-    document.getElementById('admTotalComm').textContent = fmtVnd(st.totalCommission);
-    document.getElementById('admUserShare').textContent = fmtVnd(st.totalUserCashback);
-    document.getElementById('admProfit').textContent = fmtVnd(st.totalAdminProfit);
-    document.getElementById('admUsersOrders').textContent = `${st.totalUsers} / ${st.totalOrders}`;
+    const setTxt = (id, txt) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = txt;
+    };
 
-    document.getElementById('admShopeeMode').value = s.shopeeMode || 'an_redir';
-    document.getElementById('admShopeeAffiliateId').value = s.shopeeAffiliateId || '';
-    document.getElementById('admShopeeAppId').value = s.shopeeAppId || '';
-    document.getElementById('admShopeeAppSecret').value = s.shopeeAppSecret || '';
-    const addliveEl = document.getElementById('admAddlivetagApiKey');
-    if (addliveEl) addliveEl.value = s.addlivetagApiKey || '';
-    document.getElementById('admTiktokMode').value = s.tiktokMode || 'deeplink';
-    document.getElementById('admTiktokDeepLink').value = s.tiktokDeepLinkTemplate || '';
-    const atKeyEl = document.getElementById('admAccesstradeApiKey');
-    if (atKeyEl) atKeyEl.value = s.accesstradeApiKey || '';
-    const pbUrlEl = document.getElementById('admPostbackUrl');
-    if (pbUrlEl) pbUrlEl.value = s.postbackUrlTemplate || '';
-    document.getElementById('admTaxDeductPercent').value = s.taxDeductPercent ?? 10;
-    document.getElementById('admCashbackPercent').value = s.cashbackPercent || 70;
-    document.getElementById('admMinWithdraw').value = s.minWithdrawAmount || 50000;
-    document.getElementById('admShortener').value = s.shortenerProvider || 'none';
-    document.getElementById('admSupportZalo').value = s.supportZalo || '';
+    setTxt('admTotalComm', fmtVnd(st.totalCommission || 0));
+    setTxt('admUserShare', fmtVnd(st.totalUserCashback || 0));
+    setTxt('admProfit', fmtVnd(st.totalAdminProfit || 0));
+    setTxt('admUsersOrders', `${st.totalUsers || 0} / ${st.totalOrders || 0}`);
 
+    const setVal = (id, val) => {
+      const el = document.getElementById(id);
+      if (el) el.value = val;
+    };
+
+    setVal('admShopeeMode', s.shopeeMode || 'an_redir');
+    setVal('admShopeeAffiliateId', s.shopeeAffiliateId || '');
+    setVal('admShopeeAppId', s.shopeeAppId || '');
+    setVal('admShopeeAppSecret', s.shopeeAppSecret || '');
+    setVal('admAddlivetagApiKey', s.addlivetagApiKey || '');
+    setVal('admTiktokMode', s.tiktokMode || 'deeplink');
+    setVal('admTiktokDeepLink', s.tiktokDeepLinkTemplate || '');
+    setVal('admAccesstradeApiKey', s.accesstradeApiKey || '');
+    setVal('admPostbackUrl', s.postbackUrlTemplate || '');
+    setVal('admTaxDeductPercent', s.taxDeductPercent ?? 10);
+    setVal('admCashbackPercent', s.cashbackPercent ?? 70);
+    setVal('admMinWithdraw', s.minWithdrawAmount ?? 50000);
+    setVal('admShortener', s.shortenerProvider || 'none');
+    setVal('admSupportZalo', s.supportZalo || '');
+
+    // Orders Table
     const ordTbody = document.getElementById('admOrdersTableBody');
-    if (latestAdminOrders.length === 0) {
-      ordTbody.innerHTML = '<tr><td colspan="7" class="text-center">Chưa có đơn hàng nào.</td></tr>';
-    } else {
-      ordTbody.innerHTML = latestAdminOrders
-        .map((o) => {
-          const actionButtons =
-            o.status === 'pending'
-              ? `<button type="button" class="btn btn-success btn-xs" data-ord-action="approve" data-ord-sn="${escapeHtml(o.orderSn)}" title="Duyệt đơn và cộng tiền hoàn vào ví khách">Duyệt</button>
-                 <button type="button" class="btn btn-warning btn-xs" data-ord-action="cancel" data-ord-sn="${escapeHtml(o.orderSn)}" title="Hủy đơn này">Hủy</button>
-                 <button type="button" class="btn btn-outline btn-xs" data-ord-action="edit" data-ord-sn="${escapeHtml(o.orderSn)}" title="Chỉnh sửa chi tiết & số tiền hoàn">Sửa</button>
-                 <button type="button" class="btn btn-ghost btn-xs text-danger" data-ord-action="delete" data-ord-sn="${escapeHtml(o.orderSn)}" title="Xóa vĩnh viễn đơn này">Xóa</button>`
-              : o.status === 'approved'
-              ? `<button type="button" class="btn btn-secondary btn-xs" data-ord-action="unapprove" data-ord-sn="${escapeHtml(o.orderSn)}" title="Hủy duyệt và thu hồi tiền hoàn về chờ duyệt">↩️ Hủy duyệt</button>
-                 <button type="button" class="btn btn-warning btn-xs" data-ord-action="cancel" data-ord-sn="${escapeHtml(o.orderSn)}" title="Hủy đơn và thu hồi tiền hoàn">Hủy đơn</button>
-                 <button type="button" class="btn btn-outline btn-xs" data-ord-action="edit" data-ord-sn="${escapeHtml(o.orderSn)}" title="Chỉnh sửa chi tiết & số tiền hoàn">Sửa</button>
-                 <button type="button" class="btn btn-ghost btn-xs text-danger" data-ord-action="delete" data-ord-sn="${escapeHtml(o.orderSn)}" title="Xóa vĩnh viễn đơn này">Xóa</button>`
-              : `<button type="button" class="btn btn-primary btn-xs" data-ord-action="reopen" data-ord-sn="${escapeHtml(o.orderSn)}" title="Khôi phục về trạng thái chờ duyệt">🔄 Khôi phục</button>
-                 <button type="button" class="btn btn-outline btn-xs" data-ord-action="edit" data-ord-sn="${escapeHtml(o.orderSn)}" title="Chỉnh sửa chi tiết & số tiền hoàn">Sửa</button>
-                 <button type="button" class="btn btn-ghost btn-xs text-danger" data-ord-action="delete" data-ord-sn="${escapeHtml(o.orderSn)}" title="Xóa vĩnh viễn đơn này">Xóa</button>`;
+    if (ordTbody) {
+      if (latestAdminOrders.length === 0) {
+        ordTbody.innerHTML =
+          '<tr><td colspan="7" class="text-center">Chưa có đơn hàng nào.</td></tr>';
+      } else {
+        ordTbody.innerHTML = latestAdminOrders
+          .map((o) => {
+            const ordKey = escapeHtml(o.id || o.orderSn);
+            const ordSnEsc = escapeHtml(o.orderSn);
+            const actionButtons =
+              o.status === 'pending'
+                ? `<button type="button" class="btn btn-success btn-xs" data-ord-action="approve" data-ord-id="${ordKey}" data-ord-sn="${ordSnEsc}" title="Duyệt đơn và cộng tiền hoàn vào ví khách">Duyệt</button>
+                   <button type="button" class="btn btn-warning btn-xs" data-ord-action="cancel" data-ord-id="${ordKey}" data-ord-sn="${ordSnEsc}" title="Hủy đơn này">Hủy</button>
+                   <button type="button" class="btn btn-outline btn-xs" data-ord-action="edit" data-ord-id="${ordKey}" data-ord-sn="${ordSnEsc}" title="Chỉnh sửa chi tiết & số tiền hoàn">Sửa</button>
+                   <button type="button" class="btn btn-ghost btn-xs text-danger" data-ord-action="delete" data-ord-id="${ordKey}" data-ord-sn="${ordSnEsc}" title="Xóa vĩnh viễn đơn này">Xóa</button>`
+                : o.status === 'approved'
+                ? `<button type="button" class="btn btn-secondary btn-xs" data-ord-action="unapprove" data-ord-id="${ordKey}" data-ord-sn="${ordSnEsc}" title="Hủy duyệt và thu hồi tiền hoàn về chờ duyệt">↩️ Hủy duyệt</button>
+                   <button type="button" class="btn btn-warning btn-xs" data-ord-action="cancel" data-ord-id="${ordKey}" data-ord-sn="${ordSnEsc}" title="Hủy đơn này">Hủy</button>
+                   <button type="button" class="btn btn-outline btn-xs" data-ord-action="edit" data-ord-id="${ordKey}" data-ord-sn="${ordSnEsc}" title="Chỉnh sửa">Sửa</button>
+                   <button type="button" class="btn btn-ghost btn-xs text-danger" data-ord-action="delete" data-ord-id="${ordKey}" data-ord-sn="${ordSnEsc}" title="Xóa vĩnh viễn">Xóa</button>`
+                : `<button type="button" class="btn btn-outline btn-xs" data-ord-action="reopen" data-ord-id="${ordKey}" data-ord-sn="${ordSnEsc}" title="Khôi phục về trạng thái chờ duyệt">Khôi phục</button>
+                   <button type="button" class="btn btn-outline btn-xs" data-ord-action="edit" data-ord-id="${ordKey}" data-ord-sn="${ordSnEsc}" title="Chỉnh sửa">Sửa</button>
+                   <button type="button" class="btn btn-ghost btn-xs text-danger" data-ord-action="delete" data-ord-id="${ordKey}" data-ord-sn="${ordSnEsc}" title="Xóa vĩnh viễn">Xóa</button>`;
 
-          return `
-        <tr>
-          <td>
-            <strong>${escapeHtml(o.orderSn)}</strong><br/>
-            <small style="color:#64748b;">${escapeHtml(o.platform === 'tiktok' ? 'TikTok' : 'Shopee')}</small>
-          </td>
-          <td>${escapeHtml(o.userCode || 'GUEST')}</td>
-          <td>${fmtVnd(o.orderAmount || 0)}</td>
-          <td>${fmtVnd(o.netCommission || o.totalCommission || 0)}</td>
-          <td><strong style="color:#059669;">${fmtVnd(o.userCashbackAmount || 0)}</strong></td>
-          <td>
-            <span class="status-badge st-${o.status}">${
-              o.status === 'approved'
-                ? 'Đã duyệt'
-                : o.status === 'cancelled'
-                ? 'Đã huỷ'
-                : 'Chờ duyệt'
-            }</span>
-          </td>
-          <td>
-            <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center;">
-              ${actionButtons}
-            </div>
-          </td>
-        </tr>
-      `;
-        })
-        .join('');
+            const dt = o.createdAt ? new Date(o.createdAt).toLocaleDateString('vi-VN') : '—';
+            const stCls = getStatusClass(o.status);
+            return `
+              <tr>
+                <td>${dt}</td>
+                <td><strong>${ordSnEsc}</strong></td>
+                <td><span style="font-weight:600;color:#2563eb;">${escapeHtml(
+                  o.userCode || 'GUEST'
+                )}</span></td>
+                <td>${escapeHtml(o.productName)}</td>
+                <td><strong>${fmtVnd(o.grossCommission || o.totalCommission)}</strong></td>
+                <td><strong style="color:#059669;">${fmtVnd(o.userCashbackAmount)}</strong></td>
+                <td><span class="status-badge ${stCls}">${escapeHtml(o.status)}</span></td>
+                <td><div style="display:flex;gap:6px;flex-wrap:wrap;">${actionButtons}</div></td>
+              </tr>
+            `;
+          })
+          .join('');
+      }
     }
 
+    // Withdrawals Table
     const wdTbody = document.getElementById('admWithdrawalsTableBody');
     const wds = data.withdrawals || [];
-    if (wds.length === 0) {
-      wdTbody.innerHTML =
-        '<tr><td colspan="5" class="text-center">Chưa có lệnh rút tiền nào.</td></tr>';
-    } else {
-      wdTbody.innerHTML = wds
-        .map((w) => {
-          const qrBtnHtml = w.vietQrUrl
-            ? `<button type="button" class="btn btn-outline btn-sm" data-vietqr="${escapeHtml(
-                w.vietQrUrl
-              )}" data-vietqr-info="${escapeHtml(w.bankName)} - ${escapeHtml(
-                w.bankAccount
-              )} (${escapeHtml(w.bankOwner)}): ${fmtVnd(w.amount)}">📱 Quét QR</button>`
-            : '<span style="font-size:12px;color:#64748b;">Chuyển tay</span>';
+    if (wdTbody) {
+      if (wds.length === 0) {
+        wdTbody.innerHTML =
+          '<tr><td colspan="6" class="text-center">Chưa có lệnh rút tiền nào.</td></tr>';
+      } else {
+        wdTbody.innerHTML = wds
+          .map((w) => {
+            const qrBtnHtml = w.vietQrUrl
+              ? `<button type="button" class="btn btn-outline btn-xs" data-vietqr="${escapeHtml(
+                  w.vietQrUrl
+                )}" data-vietqr-info="Chuyển ${fmtVnd(w.amount)} tới ${escapeHtml(
+                  w.bankName
+                )} - ${escapeHtml(w.bankAccount)} (${escapeHtml(
+                  w.bankOwner
+                )})" style="background:#eff6ff;color:#1e40af;border-color:#bfdbfe;">📱 Mã QR Chuyển Tiền</button>`
+              : '';
 
-          return `
-        <tr>
-          <td><strong>${escapeHtml(w.userName)}</strong> (${escapeHtml(w.userPhone)})</td>
-          <td><strong style="color:#dc2626;">${fmtVnd(w.amount)}</strong></td>
-          <td>${escapeHtml(w.bankName)} - <strong>${escapeHtml(
-            w.bankAccount
-          )}</strong> (${escapeHtml(w.bankOwner)})</td>
-          <td>${qrBtnHtml}</td>
-          <td>
-            <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center;">
-              ${
-                w.status === 'pending'
-                  ? `<button type="button" class="btn btn-success btn-xs" data-wd-action="paid" data-wd-id="${w.id}">Đã chuyển</button>
-                     <button type="button" class="btn btn-ghost btn-xs" data-wd-action="rejected" data-wd-id="${w.id}">Từ chối</button>`
-                  : `<span class="status-badge st-${w.status}">${w.status === 'paid' ? 'Đã chi trả' : 'Đã từ chối'}</span>`
-              }
-              <button type="button" class="btn btn-ghost btn-xs text-danger" data-wd-delete="${w.id}" title="Xóa lệnh rút tiền này">🗑️ Xóa</button>
-            </div>
-          </td>
-        </tr>
-      `;
-        })
-        .join('');
+            const wdActions =
+              w.status === 'pending'
+                ? `<button type="button" class="btn btn-success btn-xs" data-wd-action="paid" data-wd-id="${escapeHtml(
+                    w.id
+                  )}">Đã chuyển</button>
+                   <button type="button" class="btn btn-danger btn-xs" data-wd-action="rejected" data-wd-id="${escapeHtml(
+                     w.id
+                   )}">Từ chối</button>`
+                : `<button type="button" class="btn btn-ghost btn-xs text-danger" data-wd-delete="${escapeHtml(
+                    w.id
+                  )}">Xóa</button>`;
+
+            const dt = w.createdAt ? new Date(w.createdAt).toLocaleDateString('vi-VN') : '—';
+            const stCls = getStatusClass(w.status);
+            return `
+              <tr>
+                <td>${dt}</td>
+                <td><strong>${escapeHtml(w.userCode || w.userId)}</strong></td>
+                <td><strong style="color:#059669;">${fmtVnd(w.amount)}</strong></td>
+                <td>
+                  <div>${escapeHtml(w.bankName)} - <strong>${escapeHtml(
+              w.bankAccount
+            )}</strong></div>
+                  <div style="font-size:12px;color:#64748b;">${escapeHtml(w.bankOwner)}</div>
+                  <div style="margin-top:4px;">${qrBtnHtml}</div>
+                </td>
+                <td><span class="status-badge ${stCls}">${escapeHtml(w.status)}</span></td>
+                <td><div style="display:flex;gap:6px;flex-wrap:wrap;">${wdActions}</div></td>
+              </tr>
+            `;
+          })
+          .join('');
+      }
     }
 
-    const usrTbody = document.getElementById('admUsersTableBody');
-    latestAdminUsers = data.users || [];
-    usrTbody.innerHTML = latestAdminUsers
-      .map((u) => {
-        const isLocked = Boolean(u.accountLocked);
-        const statusHtml = isLocked
-          ? '<span class="status-badge st-cancelled">🔒 Đã khóa</span>'
-          : '<span class="status-badge st-approved">🟢 Hoạt động</span>';
-        const isSuperAdmin = u.role === 'admin';
-
-        return `
-      <tr>
-        <td><strong>${escapeHtml(u.code)}</strong></td>
-        <td>${escapeHtml(u.name)} (${escapeHtml(u.phone)})</td>
-        <td><strong style="color:#059669;">${fmtVnd(u.balanceAvailable)}</strong></td>
-        <td>${fmtVnd(u.balancePending)}</td>
-        <td>${statusHtml}</td>
-        <td>
-          ${
-            isSuperAdmin
-              ? '<span style="font-size:12px;color:#64748b;font-weight:600;">👑 Admin tối cao</span>'
-              : `<button type="button" class="btn btn-outline btn-sm" data-manage-user="${escapeHtml(
-                  u.id
-                )}">⚙️ Quản lý</button>`
-          }
-        </td>
-      </tr>
-    `;
-      })
-      .join('');
+    // Users Table
+    const userTbody = document.getElementById('admUsersTableBody');
+    if (userTbody) {
+      if (latestAdminUsers.length === 0) {
+        userTbody.innerHTML =
+          '<tr><td colspan="6" class="text-center">Chưa có người dùng nào.</td></tr>';
+      } else {
+        userTbody.innerHTML = latestAdminUsers
+          .map((u) => {
+            const lockBadge = u.accountLocked
+              ? '<span class="status-badge st-cancelled">Đã khóa</span>'
+              : '<span class="status-badge st-approved">Hoạt động</span>';
+            return `
+              <tr>
+                <td><strong>${escapeHtml(u.code)}</strong></td>
+                <td>
+                  <div>${escapeHtml(u.name || 'Chưa cập nhật')}</div>
+                  <div style="font-size:12px;color:#64748b;">${escapeHtml(u.phone)}</div>
+                </td>
+                <td><strong style="color:#059669;">${fmtVnd(u.balanceAvailable)}</strong></td>
+                <td>${fmtVnd(u.balancePending)}</td>
+                <td>${lockBadge}</td>
+                <td>
+                  <button type="button" class="btn btn-outline btn-xs" data-manage-user="${escapeHtml(
+                    u.id
+                  )}">Quản lý</button>
+                </td>
+              </tr>
+            `;
+          })
+          .join('');
+      }
+    }
   } catch (err) {
     showToast(err.message);
   }
 }
 
-document.getElementById('refreshAdminBtn').addEventListener('click', loadAdminDashboard);
+on('refreshAdminBtn', 'click', loadAdminDashboard);
 
-document.getElementById('syncShopeeNowBtn').addEventListener('click', async () => {
+on('syncShopeeNowBtn', 'click', async () => {
   const btn = document.getElementById('syncShopeeNowBtn');
-  btn.disabled = true;
-  btn.textContent = 'Đang đồng bộ...';
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Đang đồng bộ...';
+  }
   try {
     const res = await apiFetch('/api/admin/sync-shopee', { method: 'POST', body: '{}' });
     const warn = res.errors && res.errors.length ? ` (${res.errors.join(' | ')})` : '';
     showToast(`Đã đồng bộ tự động ${res.syncedCount || 0} đơn hàng!${warn}`);
-    loadAdminDashboard();
+    await loadAdminDashboard();
   } catch (err) {
     showToast(err.message);
   } finally {
-    btn.disabled = false;
-    btn.textContent = '⚡ Đồng bộ đơn tự động (Shopee + AccessTrade)';
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = '⚡ Đồng bộ đơn tự động (Shopee + AccessTrade)';
+    }
   }
 });
 
-const copyPostbackUrlBtn = document.getElementById('copyPostbackUrlBtn');
-if (copyPostbackUrlBtn) {
-  copyPostbackUrlBtn.addEventListener('click', async () => {
-    const val = document.getElementById('admPostbackUrl')?.value || '';
-    if (!val) return;
-    await navigator.clipboard.writeText(val);
-    showToast('Đã sao chép Link Postback AccessTrade!');
-  });
-}
+on('copyPostbackUrlBtn', 'click', () => {
+  const val = document.getElementById('admPostbackUrl')?.value || '';
+  if (!val) return;
+  copyText(val, 'Đã sao chép Link Postback AccessTrade!');
+});
 
-document.getElementById('saveAdminSettingsBtn').addEventListener('click', async () => {
+on('saveAdminSettingsBtn', 'click', async () => {
+  const btn = document.getElementById('saveAdminSettingsBtn');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Đang lưu cấu hình...';
+  }
   try {
     await apiFetch('/api/admin/settings', {
       method: 'POST',
       body: JSON.stringify({
-        shopeeMode: document.getElementById('admShopeeMode').value,
-        shopeeAffiliateId: document.getElementById('admShopeeAffiliateId').value.trim(),
-        shopeeAppId: document.getElementById('admShopeeAppId').value.trim(),
-        shopeeAppSecret: document.getElementById('admShopeeAppSecret').value.trim(),
+        shopeeMode: document.getElementById('admShopeeMode')?.value,
+        shopeeAffiliateId: document.getElementById('admShopeeAffiliateId')?.value?.trim() || '',
+        shopeeAppId: document.getElementById('admShopeeAppId')?.value?.trim() || '',
+        shopeeAppSecret: document.getElementById('admShopeeAppSecret')?.value?.trim() || '',
         addlivetagApiKey: document.getElementById('admAddlivetagApiKey')?.value?.trim() || '',
-        tiktokMode: document.getElementById('admTiktokMode').value,
-        tiktokDeepLinkTemplate: document.getElementById('admTiktokDeepLink').value.trim(),
-        accesstradeApiKey: document.getElementById('admAccesstradeApiKey')?.value.trim() || '',
-        taxDeductPercent: Number(document.getElementById('admTaxDeductPercent').value ?? 10),
-        cashbackPercent: Number(document.getElementById('admCashbackPercent').value || 70),
-        minWithdrawAmount: Number(document.getElementById('admMinWithdraw').value || 50000),
-        shortenerProvider: document.getElementById('admShortener').value,
-        supportZalo: document.getElementById('admSupportZalo').value.trim(),
-        newAdminPassword: document.getElementById('admNewPass').value.trim()
+        tiktokMode: document.getElementById('admTiktokMode')?.value,
+        tiktokDeepLinkTemplate:
+          document.getElementById('admTiktokDeepLink')?.value?.trim() || '',
+        accesstradeApiKey: document.getElementById('admAccesstradeApiKey')?.value?.trim() || '',
+        taxDeductPercent: numOr(document.getElementById('admTaxDeductPercent')?.value, 10),
+        cashbackPercent: numOr(document.getElementById('admCashbackPercent')?.value, 70),
+        minWithdrawAmount: numOr(document.getElementById('admMinWithdraw')?.value, 50000),
+        shortenerProvider: document.getElementById('admShortener')?.value || 'none',
+        supportZalo: document.getElementById('admSupportZalo')?.value?.trim() || '',
+        newAdminPassword: document.getElementById('admNewPass')?.value?.trim() || ''
       })
     });
-    document.getElementById('admNewPass').value = '';
+    if (document.getElementById('admNewPass')) document.getElementById('admNewPass').value = '';
     showToast('Đã lưu cấu hình hệ thống thành công!');
-    initPublicConfig();
-    loadAdminDashboard();
+    await initPublicConfig();
+    await loadAdminDashboard();
   } catch (err) {
     showToast(err.message);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Lưu Cấu Hình';
+    }
   }
 });
 
-document.getElementById('admSaveOrderBtn').addEventListener('click', async () => {
-  const orderSn = document.getElementById('admOrdSn').value.trim();
-  const userCode = document.getElementById('admOrdUserCode').value.trim();
-  const productName = document.getElementById('admOrdProduct').value.trim();
-  const orderAmount = Number(document.getElementById('admOrdAmount').value || 0);
-  const totalCommission = Number(document.getElementById('admOrdCommission').value || 0);
-  const status = document.getElementById('admOrdStatus').value;
+on('admSaveOrderBtn', 'click', async () => {
+  const btn = document.getElementById('admSaveOrderBtn');
+  const orderSn = document.getElementById('admOrdSn')?.value?.trim() || '';
+  const userCode = document.getElementById('admOrdUserCode')?.value?.trim() || '';
+  const productName = document.getElementById('admOrdProduct')?.value?.trim() || '';
+  const orderAmount = Number(document.getElementById('admOrdAmount')?.value || 0);
+  const totalCommission = Number(document.getElementById('admOrdCommission')?.value || 0);
+  const status = document.getElementById('admOrdStatus')?.value || 'pending';
+
+  if (!orderSn) {
+    showToast('Vui lòng nhập mã đơn hàng!');
+    return;
+  }
+
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Đang lưu...';
+  }
 
   try {
     await apiFetch('/api/admin/orders', {
@@ -1060,148 +1429,192 @@ document.getElementById('admSaveOrderBtn').addEventListener('click', async () =>
         status
       })
     });
-    document.getElementById('admOrdSn').value = '';
-    document.getElementById('admOrdCommission').value = '';
+    if (document.getElementById('admOrdSn')) document.getElementById('admOrdSn').value = '';
+    if (document.getElementById('admOrdCommission')) {
+      document.getElementById('admOrdCommission').value = '';
+    }
     showToast('Đã lưu đơn hàng & ghi nhận vào sổ cái!');
-    loadAdminDashboard();
+    await loadAdminDashboard();
   } catch (err) {
     showToast(err.message);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Lưu Đơn Hàng';
+    }
   }
 });
 
-document.getElementById('view-admin').addEventListener('click', async (e) => {
-  const ordActionBtn = e.target.closest('[data-ord-action]');
-  if (ordActionBtn) {
-    const action = ordActionBtn.getAttribute('data-ord-action');
-    const orderSn = ordActionBtn.getAttribute('data-ord-sn');
-    const order = latestAdminOrders.find((o) => o.orderSn === orderSn);
+// Admin View delegation for Orders and Withdrawals actions
+const viewAdmin = document.getElementById('view-admin');
+if (viewAdmin) {
+  viewAdmin.addEventListener('click', async (e) => {
+    const ordActionBtn = e.target.closest('[data-ord-action]');
+    if (ordActionBtn) {
+      const action = ordActionBtn.getAttribute('data-ord-action');
+      const orderId = ordActionBtn.getAttribute('data-ord-id');
+      const orderSn = ordActionBtn.getAttribute('data-ord-sn');
+      const order = latestAdminOrders.find((o) => (o.id || o.orderSn) === orderId || o.orderSn === orderSn);
 
-    if (action === 'approve') {
-      try {
-        await apiFetch('/api/admin/orders', {
-          method: 'POST',
-          body: JSON.stringify({ orderSn, status: 'approved' })
-        });
-        showToast(`Đã duyệt đơn #${orderSn} và cộng tiền hoàn vào ví khách!`);
-        loadAdminDashboard();
-      } catch (err) {
-        showToast(err.message);
-      }
-      return;
-    }
-
-    if (action === 'unapprove') {
-      try {
-        await apiFetch('/api/admin/orders', {
-          method: 'POST',
-          body: JSON.stringify({ orderSn, status: 'pending' })
-        });
-        showToast(`Đã hủy duyệt đơn #${orderSn}, tiền hoàn đã chuyển về Chờ duyệt!`);
-        loadAdminDashboard();
-      } catch (err) {
-        showToast(err.message);
-      }
-      return;
-    }
-
-    if (action === 'cancel') {
-      try {
-        await apiFetch('/api/admin/orders', {
-          method: 'POST',
-          body: JSON.stringify({ orderSn, status: 'cancelled' })
-        });
-        showToast(`Đã chuyển đơn #${orderSn} sang trạng thái Đã huỷ!`);
-        loadAdminDashboard();
-      } catch (err) {
-        showToast(err.message);
-      }
-      return;
-    }
-
-    if (action === 'reopen') {
-      try {
-        await apiFetch('/api/admin/orders', {
-          method: 'POST',
-          body: JSON.stringify({ orderSn, status: 'pending' })
-        });
-        showToast(`Đã khôi phục đơn #${orderSn} về Chờ duyệt!`);
-        loadAdminDashboard();
-      } catch (err) {
-        showToast(err.message);
-      }
-      return;
-    }
-
-    if (action === 'edit') {
-      if (order) {
-        openOrderEditModal(order);
-      }
-      return;
-    }
-
-    if (action === 'delete') {
-      if (!confirm(`Bạn có chắc chắn muốn xóa vĩnh viễn đơn hàng #${orderSn} không?\nTiền hoàn của đơn sẽ bị xóa khỏi ví người dùng.`)) {
+      if (action === 'approve') {
+        ordActionBtn.disabled = true;
+        try {
+          await apiFetch('/api/admin/orders', {
+            method: 'POST',
+            body: JSON.stringify({ id: order?.id, orderSn, status: 'approved' })
+          });
+          showToast(`Đã duyệt đơn #${orderSn} và cộng tiền hoàn vào ví khách!`);
+          await loadAdminDashboard();
+        } catch (err) {
+          showToast(err.message);
+        } finally {
+          ordActionBtn.disabled = false;
+        }
         return;
       }
+
+      if (action === 'unapprove') {
+        ordActionBtn.disabled = true;
+        try {
+          await apiFetch('/api/admin/orders', {
+            method: 'POST',
+            body: JSON.stringify({ id: order?.id, orderSn, status: 'pending' })
+          });
+          showToast(`Đã hủy duyệt đơn #${orderSn}, tiền hoàn đã chuyển về Chờ duyệt!`);
+          await loadAdminDashboard();
+        } catch (err) {
+          showToast(err.message);
+        } finally {
+          ordActionBtn.disabled = false;
+        }
+        return;
+      }
+
+      if (action === 'cancel') {
+        if (!confirm(`Xác nhận hủy đơn hàng #${orderSn}? Tiền hoàn sẽ không được cộng vào ví khách.`)) {
+          return;
+        }
+        ordActionBtn.disabled = true;
+        try {
+          await apiFetch('/api/admin/orders', {
+            method: 'POST',
+            body: JSON.stringify({ id: order?.id, orderSn, status: 'cancelled' })
+          });
+          showToast(`Đã chuyển đơn #${orderSn} sang trạng thái Đã huỷ!`);
+          await loadAdminDashboard();
+        } catch (err) {
+          showToast(err.message);
+        } finally {
+          ordActionBtn.disabled = false;
+        }
+        return;
+      }
+
+      if (action === 'reopen') {
+        ordActionBtn.disabled = true;
+        try {
+          await apiFetch('/api/admin/orders', {
+            method: 'POST',
+            body: JSON.stringify({ id: order?.id, orderSn, status: 'pending' })
+          });
+          showToast(`Đã khôi phục đơn #${orderSn} về Chờ duyệt!`);
+          await loadAdminDashboard();
+        } catch (err) {
+          showToast(err.message);
+        } finally {
+          ordActionBtn.disabled = false;
+        }
+        return;
+      }
+
+      if (action === 'edit') {
+        if (order) {
+          openOrderEditModal(order);
+        }
+        return;
+      }
+
+      if (action === 'delete') {
+        if (
+          !confirm(
+            `Bạn có chắc chắn muốn xóa vĩnh viễn đơn hàng #${orderSn} không?\nTiền hoàn của đơn sẽ bị xóa khỏi ví người dùng.`
+          )
+        ) {
+          return;
+        }
+        ordActionBtn.disabled = true;
+        try {
+          await apiFetch('/api/admin/orders/delete', {
+            method: 'POST',
+            body: JSON.stringify({ id: order?.id, orderSn })
+          });
+          showToast(`Đã xóa vĩnh viễn đơn hàng #${orderSn}!`);
+          await loadAdminDashboard();
+        } catch (err) {
+          showToast(err.message);
+        } finally {
+          ordActionBtn.disabled = false;
+        }
+        return;
+      }
+    }
+
+    const wdBtn = e.target.closest('[data-wd-action]');
+    if (wdBtn) {
+      const id = wdBtn.getAttribute('data-wd-id');
+      const status = wdBtn.getAttribute('data-wd-action');
+      const label = status === 'paid' ? 'ĐÃ CHUYỂN TIỀN' : 'TỪ CHỐI';
+      if (!confirm(`Xác nhận đánh dấu ${label} cho yêu cầu rút tiền #${id}?`)) {
+        return;
+      }
+      wdBtn.disabled = true;
       try {
-        await apiFetch('/api/admin/orders/delete', {
+        await apiFetch('/api/admin/withdrawals/update', {
           method: 'POST',
-          body: JSON.stringify({ orderSn })
+          body: JSON.stringify({ id, status })
         });
-        showToast(`Đã xóa vĩnh viễn đơn #${orderSn}!`);
-        loadAdminDashboard();
+        showToast('Đã cập nhật trạng thái rút tiền!');
+        await loadAdminDashboard();
       } catch (err) {
         showToast(err.message);
+      } finally {
+        wdBtn.disabled = false;
       }
       return;
     }
-  }
 
-  const wdBtn = e.target.closest('[data-wd-action]');
-  if (wdBtn) {
-    const id = wdBtn.getAttribute('data-wd-id');
-    const status = wdBtn.getAttribute('data-wd-action');
-    try {
-      await apiFetch('/api/admin/withdrawals/update', {
-        method: 'POST',
-        body: JSON.stringify({ id, status })
-      });
-      showToast('Đã cập nhật trạng thái rút tiền!');
-      loadAdminDashboard();
-    } catch (err) {
-      showToast(err.message);
-    }
-    return;
-  }
-
-  const wdDeleteBtn = e.target.closest('[data-wd-delete]');
-  if (wdDeleteBtn) {
-    const id = wdDeleteBtn.getAttribute('data-wd-delete');
-    if (!confirm(`Bạn có chắc chắn muốn xóa yêu cầu rút tiền #${id} không?`)) {
+    const wdDeleteBtn = e.target.closest('[data-wd-delete]');
+    if (wdDeleteBtn) {
+      const id = wdDeleteBtn.getAttribute('data-wd-delete');
+      if (!confirm(`Bạn có chắc chắn muốn xóa yêu cầu rút tiền #${id} không?`)) {
+        return;
+      }
+      wdDeleteBtn.disabled = true;
+      try {
+        await apiFetch('/api/admin/withdrawals/delete', {
+          method: 'POST',
+          body: JSON.stringify({ id })
+        });
+        showToast('Đã xóa yêu cầu rút tiền!');
+        await loadAdminDashboard();
+      } catch (err) {
+        showToast(err.message);
+      } finally {
+        wdDeleteBtn.disabled = false;
+      }
       return;
     }
-    try {
-      await apiFetch('/api/admin/withdrawals/delete', {
-        method: 'POST',
-        body: JSON.stringify({ id })
-      });
-      showToast('Đã xóa yêu cầu rút tiền!');
-      loadAdminDashboard();
-    } catch (err) {
-      showToast(err.message);
-    }
-    return;
-  }
 
-  const manageUserBtn = e.target.closest('[data-manage-user]');
-  if (manageUserBtn) {
-    const uid = manageUserBtn.getAttribute('data-manage-user');
-    const targetUser = latestAdminUsers.find((u) => u.id === uid);
-    if (targetUser) {
-      openUserManageModal(targetUser);
+    const manageUserBtn = e.target.closest('[data-manage-user]');
+    if (manageUserBtn) {
+      const uid = manageUserBtn.getAttribute('data-manage-user');
+      const targetUser = latestAdminUsers.find((u) => u.id === uid);
+      if (targetUser) {
+        openUserManageModal(targetUser);
+      }
     }
-  }
-});
+  });
+}
 
 // Admin User Management Modal Functions
 const userManageModal = document.getElementById('userManageModal');
@@ -1209,99 +1622,135 @@ let currentManagingUser = null;
 
 function openUserManageModal(user) {
   currentManagingUser = user;
-  document.getElementById('manageUserId').value = user.id;
-  document.getElementById('manageUserCode').textContent = user.code;
-  document.getElementById('manageUserName').textContent = user.name || 'Chưa cập nhật';
-  document.getElementById('manageUserPhone').textContent = user.phone;
-  document.getElementById('manageUserBalance').textContent = fmtVnd(user.balanceAvailable);
-  document.getElementById('manageUserStatus').innerHTML = user.accountLocked
-    ? '<span style="color:#dc2626;">🔒 Đang bị khóa (Chặn đăng nhập & rút tiền)</span>'
-    : '<span style="color:#059669;">🟢 Đang hoạt động bình thường</span>';
+  if (!userManageModal) return;
+  const setTxt = (id, txt) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = txt;
+  };
 
-  document.getElementById('manageNewPassword').value = '';
-  document.getElementById('manageAdjustAmount').value = '';
-  document.getElementById('manageAdjustNote').value = '';
+  if (document.getElementById('manageUserId')) {
+    document.getElementById('manageUserId').value = user.id;
+  }
+  setTxt('manageUserCode', user.code);
+  setTxt('manageUserName', user.name || 'Chưa cập nhật');
+  setTxt('manageUserPhone', user.phone);
+  setTxt('manageUserBalance', fmtVnd(user.balanceAvailable));
+
+  const statusEl = document.getElementById('manageUserStatus');
+  if (statusEl) {
+    statusEl.innerHTML = user.accountLocked
+      ? '<span style="color:#dc2626;">🔒 Đang bị khóa (Chặn đăng nhập & rút tiền)</span>'
+      : '<span style="color:#059669;">🟢 Đang hoạt động bình thường</span>';
+  }
+
+  const setVal = (id, v) => {
+    const el = document.getElementById(id);
+    if (el) el.value = v;
+  };
+  setVal('manageNewPassword', '');
+  setVal('manageAdjustAmount', '');
+  setVal('manageAdjustNote', '');
 
   const lockBtn = document.getElementById('btnToggleUserLock');
-  lockBtn.textContent = user.accountLocked ? '🔓 Mở Khóa Tài Khoản' : '🔒 Khóa Tài Khoản Này';
-  lockBtn.className = user.accountLocked ? 'btn btn-success btn-sm' : 'btn btn-outline btn-sm';
+  if (lockBtn) {
+    lockBtn.textContent = user.accountLocked ? '🔓 Mở Khóa Tài Khoản' : '🔒 Khóa Tài Khoản Này';
+    lockBtn.className = user.accountLocked ? 'btn btn-success btn-sm' : 'btn btn-outline btn-sm';
+  }
 
   userManageModal.classList.remove('hidden');
 }
 
-document.getElementById('closeUserManageModalBtn').addEventListener('click', () => {
-  userManageModal.classList.add('hidden');
+on('closeUserManageModalBtn', 'click', () => {
+  userManageModal?.classList.add('hidden');
 });
 
-document.getElementById('btnResetUserPassword').addEventListener('click', async () => {
+on('btnResetUserPassword', 'click', async () => {
   if (!currentManagingUser) return;
-  const newPassword = document.getElementById('manageNewPassword').value.trim();
+  const newPassword = document.getElementById('manageNewPassword')?.value?.trim() || '';
   if (newPassword.length < 6) {
     showToast('Mật khẩu mới phải có ít nhất 6 ký tự.');
     return;
   }
+  const btn = document.getElementById('btnResetUserPassword');
+  if (btn) btn.disabled = true;
   try {
     const res = await apiFetch('/api/admin/users/action', {
       method: 'POST',
-      body: JSON.stringify({ userId: currentManagingUser.id, action: 'reset_password', newPassword })
+      body: JSON.stringify({
+        userId: currentManagingUser.id,
+        action: 'reset_password',
+        newPassword
+      })
     });
     showToast(res.message);
-    document.getElementById('manageNewPassword').value = '';
-    loadAdminDashboard();
+    if (document.getElementById('manageNewPassword')) {
+      document.getElementById('manageNewPassword').value = '';
+    }
+    await loadAdminDashboard();
   } catch (err) {
     showToast(err.message);
+  } finally {
+    if (btn) btn.disabled = false;
   }
 });
 
-document.getElementById('btnAdjustUserBalance').addEventListener('click', async () => {
+on('btnAdjustUserBalance', 'click', async () => {
   if (!currentManagingUser) return;
-  const type = document.getElementById('manageAdjustType').value;
-  const rawAmt = Number(document.getElementById('manageAdjustAmount').value || 0);
-  const note = document.getElementById('manageAdjustNote').value.trim();
+  const type = document.getElementById('manageAdjustType')?.value;
+  const rawAmt = Number(document.getElementById('manageAdjustAmount')?.value || 0);
+  const note = document.getElementById('manageAdjustNote')?.value?.trim() || '';
+
   if (!rawAmt || rawAmt <= 0) {
     showToast('Vui lòng nhập số tiền lớn hơn 0.');
     return;
   }
   const amount = type === 'minus' ? -rawAmt : rawAmt;
+  const btn = document.getElementById('btnAdjustUserBalance');
+  if (btn) btn.disabled = true;
+
   try {
     const res = await apiFetch('/api/admin/users/action', {
       method: 'POST',
-      body: JSON.stringify({ userId: currentManagingUser.id, action: 'adjust_balance', amount, note })
+      body: JSON.stringify({
+        userId: currentManagingUser.id,
+        action: 'adjust_balance',
+        amount,
+        note
+      })
     });
     showToast(res.message);
-    userManageModal.classList.add('hidden');
-    loadAdminDashboard();
+    userManageModal?.classList.add('hidden');
+    await loadAdminDashboard();
+  } catch (err) {
+    showToast(err.message);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+});
+
+on('btnResetUserBalanceZero', 'click', async () => {
+  if (!currentManagingUser) return;
+  if (
+    !confirm(
+      `Bạn có chắc chắn muốn xóa toàn bộ số dư khả dụng của khách hàng ${currentManagingUser.code} về 0đ không?`
+    )
+  ) {
+    return;
+  }
+  try {
+    const res = await apiFetch('/api/admin/users/action', {
+      method: 'POST',
+      body: JSON.stringify({ userId: currentManagingUser.id, action: 'reset_balance' })
+    });
+    showToast(res.message);
+    userManageModal?.classList.add('hidden');
+    await loadAdminDashboard();
   } catch (err) {
     showToast(err.message);
   }
 });
 
-const btnResetZero = document.getElementById('btnResetUserBalanceZero');
-if (btnResetZero) {
-  btnResetZero.addEventListener('click', async () => {
-    if (!currentManagingUser) return;
-    if (
-      !confirm(
-        `Bạn có chắc chắn muốn xóa toàn bộ số dư khả dụng của khách hàng ${currentManagingUser.code} về 0đ không?`
-      )
-    ) {
-      return;
-    }
-    try {
-      const res = await apiFetch('/api/admin/users/action', {
-        method: 'POST',
-        body: JSON.stringify({ userId: currentManagingUser.id, action: 'reset_balance' })
-      });
-      showToast(res.message);
-      userManageModal.classList.add('hidden');
-      loadAdminDashboard();
-    } catch (err) {
-      showToast(err.message);
-    }
-  });
-}
-
-document.getElementById('btnToggleUserLock').addEventListener('click', async () => {
+on('btnToggleUserLock', 'click', async () => {
   if (!currentManagingUser) return;
   try {
     const res = await apiFetch('/api/admin/users/action', {
@@ -1309,16 +1758,20 @@ document.getElementById('btnToggleUserLock').addEventListener('click', async () 
       body: JSON.stringify({ userId: currentManagingUser.id, action: 'toggle_lock' })
     });
     showToast(res.message);
-    userManageModal.classList.add('hidden');
-    loadAdminDashboard();
+    userManageModal?.classList.add('hidden');
+    await loadAdminDashboard();
   } catch (err) {
     showToast(err.message);
   }
 });
 
-document.getElementById('btnDeleteUser').addEventListener('click', async () => {
+on('btnDeleteUser', 'click', async () => {
   if (!currentManagingUser) return;
-  if (!confirm(`Bạn có chắc chắn muốn xóa tài khoản ${currentManagingUser.code} (${currentManagingUser.phone}) không?`)) {
+  if (
+    !confirm(
+      `Bạn có chắc chắn muốn xóa tài khoản ${currentManagingUser.code} (${currentManagingUser.phone}) không?`
+    )
+  ) {
     return;
   }
   try {
@@ -1327,8 +1780,8 @@ document.getElementById('btnDeleteUser').addEventListener('click', async () => {
       body: JSON.stringify({ userId: currentManagingUser.id, action: 'delete' })
     });
     showToast(res.message);
-    userManageModal.classList.add('hidden');
-    loadAdminDashboard();
+    userManageModal?.classList.add('hidden');
+    await loadAdminDashboard();
   } catch (err) {
     showToast(err.message);
   }
@@ -1340,84 +1793,83 @@ let currentEditingOrder = null;
 
 function openOrderEditModal(order) {
   currentEditingOrder = order;
-  document.getElementById('editOrdId').value = order.id || '';
-  document.getElementById('editOrdSn').value = order.orderSn || '';
-  document.getElementById('editOrdUserCode').value = order.userCode || '';
-  document.getElementById('editOrdPlatform').value = order.platform || 'shopee';
-  document.getElementById('editOrdProduct').value = order.productName || '';
-  document.getElementById('editOrdAmount').value = order.orderAmount || 0;
-  document.getElementById('editOrdCommission').value =
-    order.grossCommission || order.totalCommission || 0;
-  document.getElementById('editOrdCashbackAmount').value = order.userCashbackAmount || 0;
-  document.getElementById('editOrdStatus').value = order.status || 'pending';
+  if (!orderEditModal) return;
+  const setVal = (id, val) => {
+    const el = document.getElementById(id);
+    if (el) el.value = val;
+  };
+  setVal('editOrdId', order.id || '');
+  setVal('editOrdSn', order.orderSn || '');
+  setVal('editOrdUserCode', order.userCode || '');
+  setVal('editOrdPlatform', order.platform || 'shopee');
+  setVal('editOrdProduct', order.productName || '');
+  setVal('editOrdAmount', order.orderAmount || 0);
+  setVal('editOrdCommission', order.grossCommission || order.totalCommission || 0);
+  setVal('editOrdCashbackAmount', order.userCashbackAmount || 0);
+  setVal('editOrdStatus', order.status || 'pending');
 
   orderEditModal.classList.remove('hidden');
 }
 
-const closeOrderEditBtn = document.getElementById('closeOrderEditModalBtn');
-if (closeOrderEditBtn) {
-  closeOrderEditBtn.addEventListener('click', () => {
-    orderEditModal.classList.add('hidden');
-  });
-}
+on('closeOrderEditModalBtn', 'click', () => {
+  orderEditModal?.classList.add('hidden');
+});
+on('cancelOrderEditBtn', 'click', () => {
+  orderEditModal?.classList.add('hidden');
+});
 
-const cancelOrderEditBtn = document.getElementById('cancelOrderEditBtn');
-if (cancelOrderEditBtn) {
-  cancelOrderEditBtn.addEventListener('click', () => {
-    orderEditModal.classList.add('hidden');
-  });
-}
-
-const btnAutoCalcCashback = document.getElementById('btnAutoCalcCashback');
-if (btnAutoCalcCashback) {
-  btnAutoCalcCashback.addEventListener('click', () => {
-    const gross = Number(document.getElementById('editOrdCommission').value || 0);
-    const taxRate = Number(currentAdminSettings?.taxDeductPercent ?? 10);
-    const cbRate = Number(currentAdminSettings?.cashbackPercent ?? 70);
-    const net = Math.round(gross * (1 - taxRate / 100));
-    const cb = Math.round((net * cbRate) / 100);
+on('btnAutoCalcCashback', 'click', () => {
+  const gross = Number(document.getElementById('editOrdCommission')?.value || 0);
+  const taxRate = numOr(currentAdminSettings?.taxDeductPercent, 10);
+  const cbRate = numOr(currentAdminSettings?.cashbackPercent, 70);
+  const net = Math.round(gross * (1 - taxRate / 100));
+  const cb = Math.round((net * cbRate) / 100);
+  if (document.getElementById('editOrdCashbackAmount')) {
     document.getElementById('editOrdCashbackAmount').value = cb;
-    showToast(`Đã tính tiền hoàn: ${cb.toLocaleString('vi-VN')}đ (70% sau thuế)`);
-  });
-}
+  }
+  showToast(`Đã tính tiền hoàn: ${fmtVnd(cb)} (${cbRate}% sau thuế)`);
+});
 
-const saveOrderEditBtn = document.getElementById('saveOrderEditBtn');
-if (saveOrderEditBtn) {
-  saveOrderEditBtn.addEventListener('click', async () => {
-    const id = document.getElementById('editOrdId').value;
-    const orderSn = document.getElementById('editOrdSn').value.trim();
-    const userCode = document.getElementById('editOrdUserCode').value.trim();
-    const platform = document.getElementById('editOrdPlatform').value;
-    const productName = document.getElementById('editOrdProduct').value.trim();
-    const orderAmount = Number(document.getElementById('editOrdAmount').value || 0);
-    const totalCommission = Number(document.getElementById('editOrdCommission').value || 0);
-    const userCashbackAmount = Number(document.getElementById('editOrdCashbackAmount').value || 0);
-    const status = document.getElementById('editOrdStatus').value;
+on('saveOrderEditBtn', 'click', async () => {
+  const btn = document.getElementById('saveOrderEditBtn');
+  const id = document.getElementById('editOrdId')?.value;
+  const orderSn = document.getElementById('editOrdSn')?.value?.trim();
+  const userCode = document.getElementById('editOrdUserCode')?.value?.trim();
+  const platform = document.getElementById('editOrdPlatform')?.value;
+  const productName = document.getElementById('editOrdProduct')?.value?.trim();
+  const orderAmount = Number(document.getElementById('editOrdAmount')?.value || 0);
+  const totalCommission = Number(document.getElementById('editOrdCommission')?.value || 0);
+  const userCashbackAmount = Number(document.getElementById('editOrdCashbackAmount')?.value || 0);
+  const status = document.getElementById('editOrdStatus')?.value;
 
-    try {
-      await apiFetch('/api/admin/orders', {
-        method: 'POST',
-        body: JSON.stringify({
-          id,
-          orderSn,
-          userCode,
-          platform,
-          productName,
-          orderAmount,
-          totalCommission,
-          userCashbackAmount,
-          status
-        })
-      });
-      orderEditModal.classList.add('hidden');
-      showToast(`Đã lưu thay đổi cho đơn #${orderSn}!`);
-      loadAdminDashboard();
-    } catch (err) {
-      showToast(err.message);
-    }
-  });
-}
+  if (btn) btn.disabled = true;
 
+  try {
+    await apiFetch('/api/admin/orders', {
+      method: 'POST',
+      body: JSON.stringify({
+        id,
+        orderSn,
+        userCode,
+        platform,
+        productName,
+        orderAmount,
+        totalCommission,
+        userCashbackAmount,
+        status
+      })
+    });
+    orderEditModal?.classList.add('hidden');
+    showToast(`Đã lưu thay đổi cho đơn #${orderSn}!`);
+    await loadAdminDashboard();
+  } catch (err) {
+    showToast(err.message);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+});
+
+// ================= CSV IMPORT & RECONCILIATION =================
 function splitCsvLine(line) {
   const result = [];
   let current = '';
@@ -1437,7 +1889,35 @@ function splitCsvLine(line) {
   return result;
 }
 
-document.getElementById('admCsvInput').addEventListener('change', async (e) => {
+// Robust Vietnamese & International money parser
+function parseVnMoney(raw) {
+  if (raw === undefined || raw === null) return 0;
+  let s = String(raw).trim().replace(/[₫đVNDvnd\s]/g, '');
+  if (!s) return 0;
+  if (s.includes('.') && s.includes(',')) {
+    if (s.lastIndexOf(',') > s.lastIndexOf('.')) {
+      s = s.replace(/\./g, '').replace(',', '.');
+    } else {
+      s = s.replace(/,/g, '');
+    }
+  } else if (s.includes('.')) {
+    const parts = s.split('.');
+    if (parts.length > 2 || (parts.length === 2 && parts[1].length === 3)) {
+      s = s.replace(/\./g, '');
+    }
+  } else if (s.includes(',')) {
+    const parts = s.split(',');
+    if (parts.length > 2 || (parts.length === 2 && parts[1].length === 3)) {
+      s = s.replace(/,/g, '');
+    } else {
+      s = s.replace(',', '.');
+    }
+  }
+  const n = parseFloat(s);
+  return isNaN(n) ? 0 : n;
+}
+
+on('admCsvInput', 'change', async (e) => {
   const file = e.target.files[0];
   if (!file) return;
 
@@ -1451,10 +1931,15 @@ document.getElementById('admCsvInput').addEventListener('change', async (e) => {
 
     const headers = splitCsvLine(lines[0]).map((h) => h.replace(/^\uFEFF/, '').toLowerCase());
     const rows = [];
+    let totalEstComm = 0;
+    let skippedCount = 0;
 
     for (let i = 1; i < lines.length; i++) {
       const cols = splitCsvLine(lines[i]);
-      if (cols.length < 2) continue;
+      if (cols.length < 2) {
+        skippedCount++;
+        continue;
+      }
 
       const rowObj = {};
       headers.forEach((h, idx) => {
@@ -1468,7 +1953,13 @@ document.getElementById('admCsvInput').addEventListener('change', async (e) => {
         rowObj['conversion_id'] ||
         rowObj['transaction_id'] ||
         rowObj['ordersn'] ||
-        cols[0];
+        cols[0] ||
+        '';
+
+      if (!orderSn || !orderSn.trim()) {
+        skippedCount++;
+        continue;
+      }
 
       const subId1 =
         rowObj['sub_id1'] ||
@@ -1510,8 +2001,10 @@ document.getElementById('admCsvInput').addEventListener('change', async (e) => {
         ''
       ).toLowerCase();
 
-      const totalCommission = Number(String(commRaw).replace(/[^\d.]/g, '')) || 0;
-      const orderAmount = Number(String(amountRaw).replace(/[^\d.]/g, '')) || 0;
+      const totalCommission = parseVnMoney(commRaw);
+      const orderAmount = parseVnMoney(amountRaw);
+      totalEstComm += totalCommission;
+
       const status =
         statusRaw === '1' ||
         statusRaw.includes('hoàn thành') ||
@@ -1530,37 +2023,46 @@ document.getElementById('admCsvInput').addEventListener('change', async (e) => {
 
       const platform = merchantRaw.includes('tiktok') ? 'tiktok' : 'shopee';
 
-      if (orderSn) {
-        rows.push({
-          orderSn,
-          userCode: subId1 || 'GUEST',
-          totalCommission,
-          orderAmount,
-          platform,
-          status
-        });
-      }
+      rows.push({
+        orderSn: String(orderSn).trim(),
+        userCode: String(subId1 || 'GUEST').trim(),
+        totalCommission,
+        orderAmount,
+        platform,
+        status
+      });
     }
 
-    const res = await apiFetch('/api/admin/import-orders', {
-      method: 'POST',
-      body: JSON.stringify({ rows })
-    });
-    showToast(`Đã nhập & đối soát tự động ${res.importedCount} đơn hàng!`);
-    loadAdminDashboard();
+    if (rows.length === 0) {
+      showToast('Không tìm thấy dòng dữ liệu đơn hàng hợp lệ nào trong file CSV.');
+      return;
+    }
+
+    const confirmMsg = `XÁC NHẬN NHẬP CSV ĐỐI SOÁT:\n\n• Số đơn hợp lệ: ${rows.length}\n• Số dòng bỏ qua/lỗi: ${skippedCount}\n• Tổng hoa hồng ước tính: ${fmtVnd(
+      totalEstComm
+    )}\n\nBạn có muốn tiếp tục nhập và cập nhật ví khách hàng không?`;
+    if (!confirm(confirmMsg)) return;
+
+    // Batch requests in chunks of 500 rows to prevent payload exhaustion
+    const CHUNK_SIZE = 500;
+    let totalImported = 0;
+    for (let c = 0; c < rows.length; c += CHUNK_SIZE) {
+      const chunk = rows.slice(c, c + CHUNK_SIZE);
+      const res = await apiFetch('/api/admin/import-orders', {
+        method: 'POST',
+        body: JSON.stringify({ rows: chunk })
+      });
+      totalImported += res.importedCount || chunk.length;
+    }
+
+    showToast(`Đã nhập & đối soát thành công ${totalImported} đơn hàng!`);
+    await loadAdminDashboard();
   } catch (err) {
     showToast(`Lỗi đọc file CSV: ${err.message}`);
   } finally {
     e.target.value = '';
   }
 });
-
-// Boot
-initPublicConfig();
-syncAuthUi();
-if (authToken) {
-  loadUserDashboard();
-}
 
 // ==================== PWA INSTALL & HOME SCREEN CONTROLLER ====================
 let deferredInstallPrompt = null;
@@ -1570,8 +2072,6 @@ const pwaInstallBtn = document.getElementById('pwaInstallBtn');
 const pwaDismissBtn = document.getElementById('pwaDismissBtn');
 const pwaGuideModal = document.getElementById('pwaGuideModal');
 const pwaGuideContent = document.getElementById('pwaGuideContent');
-const closePwaGuideBtn = document.getElementById('closePwaGuideBtn');
-const ackPwaGuideBtn = document.getElementById('ackPwaGuideBtn');
 
 // Register Service Worker if supported
 if ('serviceWorker' in navigator) {
@@ -1589,30 +2089,36 @@ function isPwaStandalone() {
 }
 
 function isIosDevice() {
-  return /iphone|ipad|ipod/i.test(navigator.userAgent || '') && !window.MSStream;
+  const ua = navigator.userAgent || '';
+  const isIosUa = /iphone|ipad|ipod/i.test(ua);
+  const isIpadOs = navigator.maxTouchPoints > 1 && /Macintosh/.test(ua);
+  return (isIosUa || isIpadOs) && !window.MSStream;
 }
 
 function showPwaBanner() {
   if (isPwaStandalone()) return;
-  const dismissedTime = localStorage.getItem('hts_pwa_dismissed');
+  const dismissedTime = safeStorage.get('hts_pwa_dismissed');
   if (dismissedTime && Date.now() - Number(dismissedTime) < 2 * 86400 * 1000) {
     return;
   }
   if (!pwaInstallBanner) return;
 
   if (isIosDevice()) {
-    pwaBannerDesc.textContent = 'Thêm Hoàn Tiền Sàn ra màn hình chính iPhone để mở nhanh như App.';
+    if (pwaBannerDesc) {
+      pwaBannerDesc.textContent =
+        'Thêm Hoàn Tiền Sàn ra màn hình chính iPhone để mở nhanh như App.';
+    }
   } else {
-    pwaBannerDesc.textContent = 'Thêm Hoàn Tiền Sàn ra màn hình chính để truy cập nhanh.';
+    if (pwaBannerDesc) {
+      pwaBannerDesc.textContent = 'Thêm Hoàn Tiền Sàn ra màn hình chính để truy cập nhanh.';
+    }
   }
 
   pwaInstallBanner.classList.remove('hidden');
 }
 
 function hidePwaBanner() {
-  if (pwaInstallBanner) {
-    pwaInstallBanner.classList.add('hidden');
-  }
+  pwaInstallBanner?.classList.add('hidden');
 }
 
 function openPwaGuideModal(type = 'ios') {
@@ -1666,9 +2172,7 @@ function openPwaGuideModal(type = 'ios') {
 }
 
 function closePwaGuideModal() {
-  if (pwaGuideModal) {
-    pwaGuideModal.classList.add('hidden');
-  }
+  pwaGuideModal?.classList.add('hidden');
 }
 
 // Listen for browser install prompt (Chrome / Edge / Samsung Internet / Android)
@@ -1678,7 +2182,6 @@ window.addEventListener('beforeinstallprompt', (e) => {
   showPwaBanner();
 });
 
-// User installs app
 if (pwaInstallBtn) {
   pwaInstallBtn.addEventListener('click', async () => {
     if (deferredInstallPrompt) {
@@ -1702,18 +2205,56 @@ if (pwaInstallBtn) {
   });
 }
 
-// User dismisses banner
 if (pwaDismissBtn) {
   pwaDismissBtn.addEventListener('click', () => {
-    localStorage.setItem('hts_pwa_dismissed', String(Date.now()));
+    safeStorage.set('hts_pwa_dismissed', String(Date.now()));
     hidePwaBanner();
   });
 }
 
-if (closePwaGuideBtn) closePwaGuideBtn.addEventListener('click', closePwaGuideModal);
-if (ackPwaGuideBtn) ackPwaGuideBtn.addEventListener('click', closePwaGuideModal);
+on('closePwaGuideBtn', 'click', closePwaGuideModal);
+on('ackPwaGuideBtn', 'click', closePwaGuideModal);
 
-// Auto-trigger banner after initial page load (if not installed & not dismissed)
+// Auto-trigger banner after initial page load only on iOS or when prompt is available
 setTimeout(() => {
-  showPwaBanner();
+  if (isIosDevice() || deferredInstallPrompt) {
+    showPwaBanner();
+  }
 }, 1500);
+
+// ================= BOOTSTRAP INITIALIZATION =================
+async function initBoot() {
+  await initPublicConfig();
+  syncAuthUi();
+
+  if (authToken) {
+    try {
+      const data = await apiFetch('/api/user/me');
+      if (data?.user) {
+        currentUser = data.user;
+        safeStorage.set(
+          USER_KEY,
+          JSON.stringify({
+            code: currentUser.code,
+            name: currentUser.name,
+            role: currentUser.role
+          })
+        );
+        syncAuthUi();
+      }
+    } catch {}
+    loadUserDashboard();
+  }
+
+  // Restore view from URL hash on load
+  const initialHash = window.location.hash.replace('#', '');
+  if (initialHash && ['home', 'wallet', 'admin', 'faq', 'terms'].includes(initialHash)) {
+    switchView(initialHash, false);
+  }
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initBoot);
+} else {
+  initBoot();
+}
