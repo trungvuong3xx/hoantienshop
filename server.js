@@ -227,6 +227,18 @@ app.use((err, req, res, next) => {
 });
 
 if (require.main === module) {
+  process.on('unhandledRejection', (reason) => {
+    logger.error('process', 'Unhandled Rejection tại promise', {
+      reason: reason instanceof Error ? reason.stack : String(reason)
+    });
+  });
+
+  process.on('uncaughtException', (err) => {
+    logger.error('process', 'Uncaught Exception', {
+      error: err ? err.stack || err.message : 'Unknown error'
+    });
+  });
+
   initPostgresIfConfigured().catch((err) => {
     logger.error('server', 'Khởi tạo kết nối Postgres nền thất bại', { error: err.message });
   });
