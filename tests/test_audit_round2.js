@@ -285,6 +285,14 @@ async function runTests() {
   console.log('  PASS: Only pending withdrawals can be cancelled.');
 
   await new Promise((resolve) => server.close(resolve));
+
+  // Cleanup test artifacts so tests never pollute database
+  db.orders = db.orders.filter((o) => o.orderSn !== testOrderSn);
+  db.withdrawals = db.withdrawals.filter((w) => w.id !== testWdId && w.id !== paidWdId);
+  db.ledger = db.ledger.filter((l) => l.userId !== testUserId);
+  db.users = db.users.filter((u) => u.id !== testUserId);
+  await saveDb(db);
+
   console.log('\n=== ALL 6 AUDIT VERIFICATION SUITES PASSED CLEANLY! ===\n');
   process.exit(0);
 }
