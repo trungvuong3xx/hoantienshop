@@ -824,6 +824,8 @@ async function loadAdminDashboard() {
     document.getElementById('admShopeeAffiliateId').value = s.shopeeAffiliateId || '';
     document.getElementById('admShopeeAppId').value = s.shopeeAppId || '';
     document.getElementById('admShopeeAppSecret').value = s.shopeeAppSecret || '';
+    const addliveEl = document.getElementById('admAddlivetagApiKey');
+    if (addliveEl) addliveEl.value = s.addlivetagApiKey || '';
     document.getElementById('admTiktokMode').value = s.tiktokMode || 'deeplink';
     document.getElementById('admTiktokDeepLink').value = s.tiktokDeepLinkTemplate || '';
     const atKeyEl = document.getElementById('admAccesstradeApiKey');
@@ -1001,6 +1003,7 @@ document.getElementById('saveAdminSettingsBtn').addEventListener('click', async 
         shopeeAffiliateId: document.getElementById('admShopeeAffiliateId').value.trim(),
         shopeeAppId: document.getElementById('admShopeeAppId').value.trim(),
         shopeeAppSecret: document.getElementById('admShopeeAppSecret').value.trim(),
+        addlivetagApiKey: document.getElementById('admAddlivetagApiKey')?.value?.trim() || '',
         tiktokMode: document.getElementById('admTiktokMode').value,
         tiktokDeepLinkTemplate: document.getElementById('admTiktokDeepLink').value.trim(),
         accesstradeApiKey: document.getElementById('admAccesstradeApiKey')?.value.trim() || '',

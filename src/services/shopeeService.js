@@ -214,6 +214,103 @@ async function fetchShopeeProductOffer(itemId, appId, appSecret, shopId = null) 
 }
 
 /**
+ * Query data.addlivetag.com API for product details, image, price & commission.
+ * Supports both Shopee (item_id or url) and TikTok Shop (url).
+ */
+async function fetchAddlivetagProductData({ platform, itemId, url, apiKey }) {
+  const key = String(
+    apiKey ||
+      process.env.ADDLIVETAG_API_KEY ||
+      'b426eeae7cc0b156969f923935e661362aa3b13d09dba032'
+  ).trim();
+  if (!key) return null;
+
+  const cacheKey = `addlivetag:${platform}:${itemId || url}`;
+  const cached = getCached(productMetaCache, cacheKey);
+  if (cached) {
+    logger.logLeave('fetchAddlivetagProductData', { cached: true, platform, itemId });
+    return cached;
+  }
+
+  logger.logEnter('fetchAddlivetagProductData', { platform, itemId, hasKey: Boolean(key) });
+
+  try {
+    let endpoint = '';
+    if (platform === 'shopee') {
+      const param = itemId
+        ? `item_id=${encodeURIComponent(itemId)}`
+        : `url=${encodeURIComponent(url)}`;
+      endpoint = `https://data.addlivetag.com/product-data/product-data.php?${param}`;
+    } else if (platform === 'tiktok') {
+      endpoint = `https://data.addlivetag.com/tiktok/product.php?url=${encodeURIComponent(url)}`;
+    } else {
+      return null;
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 6500);
+
+    const res = await fetch(endpoint, {
+      method: 'GET',
+      headers: {
+        'X-API-Key': key,
+        'User-Agent': 'HoanTienShop/1.0'
+      },
+      signal: controller.signal
+    });
+    clearTimeout(timeout);
+
+    if (!res.ok) {
+      console.warn(`[AddLiveTag API] HTTP ${res.status} from ${endpoint}`);
+      logger.warning('fetchAddlivetagProductData', 'HTTP Error', { status: res.status });
+      return null;
+    }
+
+    const json = await res.json();
+    if (json.status !== 'success' || !json.productInfo) {
+      return null;
+    }
+
+    const info = json.productInfo;
+    const price = Number(info.price || 0);
+    const commRate = Number(
+      info.totalRatePercent || info.commissionRatePercent || info.shopeeRatePercent || 0
+    );
+    const commission = Number(info.commission || (price * commRate) / 100);
+
+    const result = {
+      itemId: String(info.itemId || info.productId || itemId || ''),
+      productName: info.productName || '',
+      imageUrl: info.imageUrl || '',
+      price: price,
+      priceMin: Number(info?.priceStats?.minPrice || price),
+      priceMax: Number(info?.priceStats?.maxPrice || price),
+      commissionRate: commRate,
+      commission: commission,
+      shopName: info.shopName || info.storeName || '',
+      sales: Number(info.sales || 0),
+      ratingStar: Number(info.rating || 5),
+      dataSource: 'addlivetag'
+    };
+
+    if (result.productName || result.imageUrl) {
+      setCached(productMetaCache, cacheKey, result);
+    }
+    logger.logLeave('fetchAddlivetagProductData', {
+      status: 'found',
+      title: result.productName.slice(0, 30),
+      price: result.price,
+      commission: result.commission
+    });
+    return result;
+  } catch (err) {
+    console.error('[AddLiveTag API Error]', err.message);
+    logger.warning('fetchAddlivetagProductData', 'Request failed', { error: err.message });
+    return null;
+  }
+}
+
+/**
  * Fetch conversion report from Shopee Open API for Cron auto-sync.
  */
 async function fetchShopeeConversionReport(appId, appSecret, limit = 50) {
@@ -296,6 +393,16 @@ async function convertShopeeLink(cleanInfo, config = {}) {
     );
   }
 
+  // Fallback to AddLiveTag Data API
+  if (!productMeta && (config.addlivetagApiKey || process.env.ADDLIVETAG_API_KEY)) {
+    productMeta = await fetchAddlivetagProductData({
+      platform: 'shopee',
+      itemId: cleanInfo.itemId,
+      url: cleanInfo.cleanUrl,
+      apiKey: config.addlivetagApiKey || process.env.ADDLIVETAG_API_KEY
+    });
+  }
+
   logger.logLeave('convertShopeeLink', { usedMethod });
   return {
     affiliateUrl,
@@ -311,5 +418,6 @@ module.exports = {
   buildShopeeRedirectLink,
   generateShopeeOpenApiLink,
   fetchShopeeProductOffer,
+  fetchAddlivetagProductData,
   fetchShopeeConversionReport
 };

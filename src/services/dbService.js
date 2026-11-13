@@ -138,6 +138,9 @@ function getDefaultSettings() {
     shopeeAffiliateId: process.env.SHOPEE_AFFILIATE_ID || '17346310715',
     shopeeAppId: process.env.SHOPEE_APP_ID || '',
     shopeeAppSecret: process.env.SHOPEE_APP_SECRET || '',
+    addlivetagApiKey:
+      process.env.ADDLIVETAG_API_KEY ||
+      'b426eeae7cc0b156969f923935e661362aa3b13d09dba032',
     tiktokMode: process.env.TIKTOK_MODE || 'deeplink',
     tiktokAppKey: process.env.TIKTOK_APP_KEY || '',
     tiktokAppSecret: process.env.TIKTOK_APP_SECRET || '',
@@ -227,6 +230,11 @@ function ensureDbLoaded() {
     }
     if (process.env.ACCESSTRADE_API_KEY) {
       memoryCache.settings.accesstradeApiKey = envSettings.accesstradeApiKey;
+    }
+    if (process.env.ADDLIVETAG_API_KEY) {
+      memoryCache.settings.addlivetagApiKey = envSettings.addlivetagApiKey;
+    } else if (!memoryCache.settings.addlivetagApiKey) {
+      memoryCache.settings.addlivetagApiKey = envSettings.addlivetagApiKey;
     }
     if (!memoryCache.settings.postbackToken) {
       memoryCache.settings.postbackToken = envSettings.postbackToken;

@@ -21,7 +21,8 @@ const {
 const { convertTextLinks } = require('./converterService');
 const {
   fetchShopeeConversionReport,
-  fetchShopeeProductOffer
+  fetchShopeeProductOffer,
+  fetchAddlivetagProductData
 } = require('./shopeeService');
 const { fetchAccessTradeOrders } = require('./tiktokService');
 const {
@@ -815,8 +816,13 @@ function registerCashbackRoutes(app) {
         const cleanInfo = cleanShopeeUrl(resolvedUrl, htmlSnippet);
         const appId = s.shopeeAppId || process.env.SHOPEE_APP_ID || '';
         const appSecret = s.shopeeAppSecret || process.env.SHOPEE_APP_SECRET || '';
+        const addlivetagKey =
+          s.addlivetagApiKey ||
+          process.env.ADDLIVETAG_API_KEY ||
+          'b426eeae7cc0b156969f923935e661362aa3b13d09dba032';
 
         let productMeta = null;
+        // Priority 1: Official Shopee Open API if credentials configured
         if (cleanInfo.itemId && appId && appSecret) {
           productMeta = await fetchShopeeProductOffer(
             cleanInfo.itemId,
@@ -826,20 +832,34 @@ function registerCashbackRoutes(app) {
           );
         }
 
+        // Priority 2: AddLiveTag Data API (via user's provided API key)
+        if (!productMeta && addlivetagKey) {
+          productMeta = await fetchAddlivetagProductData({
+            platform: 'shopee',
+            itemId: cleanInfo.itemId,
+            url: cleanInfo.cleanUrl || resolvedUrl,
+            apiKey: addlivetagKey
+          });
+        }
+
         if (productMeta) {
           const price = Number(productMeta.price || productMeta.priceMin || 0);
           const commRate = Number(productMeta.commissionRate || 0);
-          const grossCommission = (price * commRate) / 100;
+          const grossCommission =
+            productMeta.commission > 0
+              ? Number(productMeta.commission)
+              : (price * commRate) / 100;
           const split = calculateCommissionSplit(grossCommission, cbPct, taxRate);
 
           logger.logLeave('POST /api/preview', {
             platform: 'shopee',
-            hasOffer: Boolean(productMeta.commissionRate)
+            hasOffer: Boolean(grossCommission || commRate),
+            source: productMeta.dataSource || 'openapi'
           });
           return res.json({
             found: true,
             platform: 'shopee',
-            hasOffer: Boolean(productMeta.commissionRate),
+            hasOffer: Boolean(grossCommission || commRate),
             productName: productMeta.productName || 'Đang cập nhật thông tin sản phẩm',
             imageUrl: productMeta.imageUrl || '',
             price,
@@ -851,7 +871,8 @@ function registerCashbackRoutes(app) {
             ratingStar: productMeta.ratingStar || 5,
             sales: productMeta.sales || 0,
             cashbackPercent: cbPct,
-            cleanUrl: cleanInfo.cleanUrl
+            cleanUrl: cleanInfo.cleanUrl,
+            dataSource: productMeta.dataSource || 'shopee'
           });
         }
 
@@ -876,6 +897,50 @@ function registerCashbackRoutes(app) {
 
       if (platform === 'tiktok') {
         const cleanInfo = cleanTikTokUrl(resolvedUrl, htmlSnippet);
+        const addlivetagKey =
+          s.addlivetagApiKey ||
+          process.env.ADDLIVETAG_API_KEY ||
+          'b426eeae7cc0b156969f923935e661362aa3b13d09dba032';
+
+        let productMeta = null;
+        if (addlivetagKey) {
+          productMeta = await fetchAddlivetagProductData({
+            platform: 'tiktok',
+            url: resolvedUrl,
+            apiKey: addlivetagKey
+          });
+        }
+
+        if (productMeta) {
+          const price = Number(productMeta.price || 0);
+          const commRate = Number(productMeta.commissionRate || 0);
+          const grossCommission =
+            productMeta.commission > 0
+              ? Number(productMeta.commission)
+              : (price * commRate) / 100;
+          const split = calculateCommissionSplit(grossCommission, cbPct, taxRate);
+
+          logger.logLeave('POST /api/preview', {
+            platform: 'tiktok',
+            hasOffer: Boolean(grossCommission || commRate),
+            source: 'addlivetag'
+          });
+          return res.json({
+            found: true,
+            platform: 'tiktok',
+            hasOffer: Boolean(grossCommission || commRate),
+            productName: productMeta.productName || cleanInfo.titleHint || 'Sản phẩm TikTok Shop',
+            imageUrl: productMeta.imageUrl || cleanInfo.imageUrl || '',
+            price,
+            commissionRate: commRate,
+            estimatedCashback: split.userCashbackAmount,
+            shopName: productMeta.shopName || '',
+            cashbackPercent: cbPct,
+            cleanUrl: cleanInfo.cleanUrl,
+            dataSource: 'addlivetag'
+          });
+        }
+
         logger.logLeave('POST /api/preview', { platform: 'tiktok' });
         return res.json({
           found: true,
@@ -906,42 +971,65 @@ function registerCashbackRoutes(app) {
     const s = db.settings;
     const appId = s.shopeeAppId || process.env.SHOPEE_APP_ID || '';
     const appSecret = s.shopeeAppSecret || process.env.SHOPEE_APP_SECRET || '';
+    const addlivetagKey =
+      s.addlivetagApiKey ||
+      process.env.ADDLIVETAG_API_KEY ||
+      'b426eeae7cc0b156969f923935e661362aa3b13d09dba032';
 
     const hasAppId = Boolean(appId);
     const hasAppSecret = Boolean(appSecret);
+    const hasAddlivetagKey = Boolean(addlivetagKey);
 
-    if (!hasAppId || !hasAppSecret) {
-      logger.logLeave('GET /api/test-shopee-offer', { status: 'no_credentials' });
-      return res.json({
-        ok: false,
-        status: 'no_credentials',
-        message:
-          'Chưa cấu hình SHOPEE_APP_ID hoặc SHOPEE_APP_SECRET. Hãy nhập trong Cài đặt Admin hoặc Vercel Environment Variables.',
-        hasAppId,
-        hasAppSecret,
-        testedItem: { itemId, shopId }
-      });
+    let openApiResult = null;
+    let openApiError = null;
+    if (hasAppId && hasAppSecret) {
+      try {
+        openApiResult = await fetchShopeeProductOffer(itemId, appId, appSecret, shopId);
+      } catch (err) {
+        openApiError = err.message;
+      }
     }
 
-    try {
-      const meta = await fetchShopeeProductOffer(itemId, appId, appSecret, shopId);
-      logger.logLeave('GET /api/test-shopee-offer', { status: meta ? 'found' : 'not_found' });
-      return res.json({
-        ok: Boolean(meta),
-        status: meta ? 'found' : 'not_found',
-        hasAppId,
-        hasAppSecret,
-        meta,
-        testedItem: { itemId, shopId }
-      });
-    } catch (err) {
-      logger.error('GET /api/test-shopee-offer', 'Test offer error', { error: err.message });
-      return res.status(500).json({
-        ok: false,
-        error: err.message,
-        testedItem: { itemId, shopId }
-      });
+    let addlivetagResult = null;
+    let addlivetagError = null;
+    if (hasAddlivetagKey) {
+      try {
+        addlivetagResult = await fetchAddlivetagProductData({
+          platform: 'shopee',
+          itemId,
+          apiKey: addlivetagKey
+        });
+      } catch (err) {
+        addlivetagError = err.message;
+      }
     }
+
+    logger.logLeave('GET /api/test-shopee-offer', {
+      hasOpenApi: Boolean(openApiResult),
+      hasAddlivetag: Boolean(addlivetagResult)
+    });
+
+    return res.json({
+      ok: Boolean(openApiResult || addlivetagResult),
+      hasAppId,
+      hasAppSecret,
+      hasAddlivetagKey,
+      openApi: {
+        status: openApiResult
+          ? 'found'
+          : hasAppId && hasAppSecret
+          ? 'not_found'
+          : 'no_credentials',
+        meta: openApiResult,
+        error: openApiError
+      },
+      addlivetag: {
+        status: addlivetagResult ? 'found' : 'not_found',
+        meta: addlivetagResult,
+        error: addlivetagError
+      },
+      testedItem: { itemId, shopId }
+    });
   });
 
   // 8. Convert Link (Generates opaque random click_id -> maps to userId in db.clicks)
@@ -978,6 +1066,10 @@ function registerCashbackRoutes(app) {
           process.env.TIKTOK_DEEPLINK_TEMPLATE ||
           s.tiktokDeepLinkTemplate ||
           DEFAULT_TIKTOK_DEEPLINK,
+        addlivetagApiKey:
+          s.addlivetagApiKey ||
+          process.env.ADDLIVETAG_API_KEY ||
+          'b426eeae7cc0b156969f923935e661362aa3b13d09dba032',
         shortenerProvider: s.shortenerProvider || 'none'
       };
 
@@ -991,8 +1083,11 @@ function registerCashbackRoutes(app) {
           item.affiliateUrl
         )}`;
 
-        if (item.price > 0 && item.commissionRate > 0) {
-          const estGross = Math.round((item.price * item.commissionRate) / 100);
+        if (item.commission > 0 || (item.price > 0 && item.commissionRate > 0)) {
+          const estGross =
+            item.commission > 0
+              ? Number(item.commission)
+              : Math.round((item.price * item.commissionRate) / 100);
           const estSplit = calculateCommissionSplit(estGross, cashbackPercent, taxDeductPercent);
           item.estimatedCashback = estSplit.userCashbackAmount;
         } else {
@@ -1204,6 +1299,7 @@ function registerCashbackRoutes(app) {
       tiktokAppSecret: maskSecret(db.settings.tiktokAppSecret),
       tiktokAccessToken: maskSecret(db.settings.tiktokAccessToken),
       accesstradeApiKey: maskSecret(db.settings.accesstradeApiKey),
+      addlivetagApiKey: maskSecret(db.settings.addlivetagApiKey),
       postbackUrlTemplate
     };
 
@@ -1282,7 +1378,8 @@ function registerCashbackRoutes(app) {
       'shopeeAppSecret',
       'tiktokAppSecret',
       'tiktokAccessToken',
-      'accesstradeApiKey'
+      'accesstradeApiKey',
+      'addlivetagApiKey'
     ];
     for (const sKey of secretKeys) {
       if (body[sKey] && body[sKey] !== '********') {

@@ -7,7 +7,7 @@ const {
   cleanShopeeUrl,
   cleanTikTokUrl
 } = require('./urlResolver');
-const { convertShopeeLink } = require('./shopeeService');
+const { convertShopeeLink, fetchAddlivetagProductData } = require('./shopeeService');
 const { convertTikTokLink } = require('./tiktokService');
 
 function generateClickId() {
@@ -52,6 +52,7 @@ async function processSingleUrl(originalUrl, config = {}) {
         imageUrl: meta.imageUrl || '',
         price: meta.price || 0,
         commissionRate: meta.commissionRate || 0,
+        commission: meta.commission || 0,
         affiliateUrl: conv.affiliateUrl,
         fullAffiliateUrl: conv.fullAffiliateUrl,
         usedMethod: conv.usedMethod,
@@ -66,6 +67,15 @@ async function processSingleUrl(originalUrl, config = {}) {
       const cleanInfo = cleanTikTokUrl(resolvedUrl, htmlSnippet);
       const conv = await convertTikTokLink(cleanInfo, perClickConfig);
 
+      let tiktokMeta = null;
+      if (config.addlivetagApiKey || process.env.ADDLIVETAG_API_KEY) {
+        tiktokMeta = await fetchAddlivetagProductData({
+          platform: 'tiktok',
+          url: resolvedUrl,
+          apiKey: config.addlivetagApiKey || process.env.ADDLIVETAG_API_KEY
+        });
+      }
+
       const itemResult = {
         originalUrl,
         resolvedUrl,
@@ -74,10 +84,11 @@ async function processSingleUrl(originalUrl, config = {}) {
         linkType: cleanInfo.linkType,
         productId: conv.productId,
         clickId,
-        productName: cleanInfo.titleHint || 'Sản phẩm TikTok Shop',
-        imageUrl: cleanInfo.imageUrl || '',
-        price: 0,
-        commissionRate: 0,
+        productName: tiktokMeta?.productName || cleanInfo.titleHint || 'Sản phẩm TikTok Shop',
+        imageUrl: tiktokMeta?.imageUrl || cleanInfo.imageUrl || '',
+        price: tiktokMeta?.price || 0,
+        commissionRate: tiktokMeta?.commissionRate || 0,
+        commission: tiktokMeta?.commission || 0,
         affiliateUrl: conv.affiliateUrl,
         fullAffiliateUrl: conv.fullAffiliateUrl,
         usedMethod: conv.usedMethod,
