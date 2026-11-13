@@ -454,6 +454,7 @@ function ensureDbLoaded() {
 let internalSaveQueue = Promise.resolve();
 let pendingSavePromise = null;
 let pendingSaveData = null;
+let currentDbVersion = 1;
 
 async function performSaveDb(data) {
   if (!data) return;
@@ -678,6 +679,11 @@ async function initPostgresIfConfigured() {
         CREATE INDEX IF NOT EXISTS idx_ledger_user_id ON ledger(user_id);
         CREATE INDEX IF NOT EXISTS idx_orders_user_id ON orders(user_id);
         CREATE INDEX IF NOT EXISTS idx_withdrawals_user_id ON withdrawals(user_id);
+
+        -- Safe idempotent schema migrations for OCC and withdrawals
+        ALTER TABLE hoantienshop_state ADD COLUMN IF NOT EXISTS version BIGINT DEFAULT 1;
+        UPDATE hoantienshop_state SET version = 1 WHERE version IS NULL;
+        ALTER TABLE withdrawals ADD COLUMN IF NOT EXISTS processed_at TIMESTAMPTZ;
       `);
 
       // Relational-authoritative state synchronization from Postgres
@@ -685,12 +691,21 @@ async function initPostgresIfConfigured() {
       memoryCache = loadedState;
       pgSchemaReady = true;
 
-      // Update hoantienshop_state snapshot so it stays 100% consistent
-      await client.query(
-        `INSERT INTO hoantienshop_state (id, payload, updated_at) VALUES ('main', $1, NOW())
-         ON CONFLICT (id) DO UPDATE SET payload = EXCLUDED.payload, updated_at = NOW()`,
-        [JSON.stringify(loadedState)]
-      );
+      // Update hoantienshop_state snapshot so it stays 100% consistent with accurate version
+      const stateCheck = await client.query("SELECT version FROM hoantienshop_state WHERE id = 'main'");
+      if (stateCheck.rows.length === 0) {
+        await client.query(
+          `INSERT INTO hoantienshop_state (id, payload, version, updated_at) VALUES ('main', $1, 1, NOW())`,
+          [JSON.stringify(loadedState)]
+        );
+        currentDbVersion = 1;
+      } else {
+        currentDbVersion = Number(stateCheck.rows[0].version || 1);
+        await client.query(
+          `UPDATE hoantienshop_state SET payload = $1, updated_at = NOW() WHERE id = 'main'`,
+          [JSON.stringify(loadedState)]
+        );
+      }
 
       // Persist authoritative state to disk cache
       try {
@@ -730,20 +745,28 @@ async function loadAuthoritativeStateFromPostgres(client) {
   const ledgerRes = await client.query('SELECT * FROM ledger ORDER BY created_at ASC');
   const withdrawalsRes = await client.query('SELECT * FROM withdrawals ORDER BY created_at DESC');
   const clicksRes = await client.query('SELECT * FROM clicks ORDER BY created_at DESC LIMIT 5000');
-  const stateRes = await client.query("SELECT payload FROM hoantienshop_state WHERE id = 'main'");
+  const stateRes = await client.query("SELECT payload, version FROM hoantienshop_state WHERE id = 'main'");
+
+  if (stateRes.rows.length > 0 && stateRes.rows[0].version) {
+    currentDbVersion = Number(stateRes.rows[0].version);
+  }
 
   const initial = getInitialData();
   let settings = initial.settings;
   let payloadUsers = [];
+  let payloadOrders = [];
+  let payloadLedger = [];
+  let payloadWithdrawals = [];
 
   if (stateRes.rows.length > 0 && stateRes.rows[0].payload) {
     const p = stateRes.rows[0].payload;
     if (p.settings && typeof p.settings === 'object') {
       settings = { ...settings, ...p.settings };
     }
-    if (Array.isArray(p.users)) {
-      payloadUsers = p.users;
-    }
+    if (Array.isArray(p.users)) payloadUsers = p.users;
+    if (Array.isArray(p.orders)) payloadOrders = p.orders;
+    if (Array.isArray(p.ledger)) payloadLedger = p.ledger;
+    if (Array.isArray(p.withdrawals)) payloadWithdrawals = p.withdrawals;
   }
 
   let finalUsers = [];
@@ -773,7 +796,8 @@ async function loadAuthoritativeStateFromPostgres(client) {
     for (const u of tableUsers) {
       userMap.set(u.id, u);
     }
-    for (const u of payloadUsers) {
+    const memoryUsers = memoryCache && Array.isArray(memoryCache.users) ? memoryCache.users : [];
+    for (const u of [...payloadUsers, ...memoryUsers]) {
       if (u && u.id && !userMap.has(u.id)) {
         userMap.set(u.id, u);
       }
@@ -785,70 +809,111 @@ async function loadAuthoritativeStateFromPostgres(client) {
     finalUsers = initial.users;
   }
 
-  const finalOrders = ordersRes.rows.length > 0
-    ? ordersRes.rows.map((row) => ({
-        orderSn: row.order_sn,
-        platform: row.platform || 'shopee',
-        clickId: row.click_id || null,
-        userId: row.user_id || null,
-        userCode: row.user_code || 'GUEST',
-        productName: row.product_name || '',
-        orderAmount: Math.round(Number(row.order_amount || 0)),
-        grossCommission: Math.round(Number(row.gross_commission || 0)),
-        taxAmount: Math.round(Number(row.tax_amount || 0)),
-        netCommission: Math.round(Number(row.net_commission || 0)),
-        cashbackRate: Number(row.cashback_rate || 70),
-        userCashbackAmount: Math.round(Number(row.user_cashback_amount || 0)),
-        adminShareAmount: Math.round(Number(row.admin_share_amount || 0)),
-        status: row.status || 'pending',
-        createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
-        updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : new Date().toISOString()
-      }))
-    : (stateRes.rows[0]?.payload?.orders || []);
+  const tableOrders = ordersRes.rows.map((row) => ({
+    orderSn: row.order_sn,
+    platform: row.platform || 'shopee',
+    clickId: row.click_id || null,
+    userId: row.user_id || null,
+    userCode: row.user_code || 'GUEST',
+    productName: row.product_name || '',
+    orderAmount: Math.round(Number(row.order_amount || 0)),
+    grossCommission: Math.round(Number(row.gross_commission || 0)),
+    taxAmount: Math.round(Number(row.tax_amount || 0)),
+    netCommission: Math.round(Number(row.net_commission || 0)),
+    cashbackRate: Number(row.cashback_rate || 70),
+    userCashbackAmount: Math.round(Number(row.user_cashback_amount || 0)),
+    adminShareAmount: Math.round(Number(row.admin_share_amount || 0)),
+    status: row.status || 'pending',
+    createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
+    updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : new Date().toISOString()
+  }));
 
-  const finalLedger = ledgerRes.rows.length > 0
-    ? ledgerRes.rows.map((row) => ({
-        id: row.id,
-        userId: row.user_id,
-        type: row.type,
-        amount: Math.round(Number(row.amount || 0)),
-        refId: row.ref_id,
-        note: row.note || '',
-        createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString()
-      }))
-    : (stateRes.rows[0]?.payload?.ledger || []);
+  const orderMap = new Map();
+  for (const o of tableOrders) {
+    orderMap.set(o.orderSn, o);
+  }
+  const memoryOrders = memoryCache && Array.isArray(memoryCache.orders) ? memoryCache.orders : [];
+  for (const o of [...payloadOrders, ...memoryOrders]) {
+    if (o && o.orderSn && !orderMap.has(o.orderSn)) {
+      orderMap.set(o.orderSn, o);
+    }
+  }
+  const finalOrders = Array.from(orderMap.values());
 
-  const finalWithdrawals = withdrawalsRes.rows.length > 0
-    ? withdrawalsRes.rows.map((row) => ({
-        id: row.id,
-        userId: row.user_id,
-        userCode: row.user_code || '',
-        userName: row.user_name || '',
-        userPhone: row.user_phone || '',
-        amount: Math.round(Number(row.amount || 0)),
-        method: row.method || 'bank',
-        bankName: row.bank_name || '',
-        bankAccount: row.bank_account || '',
-        bankOwner: row.bank_owner || '',
-        status: row.status || 'pending',
-        createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
-        processedAt: row.processed_at ? new Date(row.processed_at).toISOString() : (row.updated_at ? new Date(row.updated_at).toISOString() : null)
-      }))
-    : (stateRes.rows[0]?.payload?.withdrawals || []);
+  const tableLedger = ledgerRes.rows.map((row) => ({
+    id: row.id,
+    userId: row.user_id,
+    type: row.type,
+    amount: Math.round(Number(row.amount || 0)),
+    refId: row.ref_id,
+    note: row.note || '',
+    createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString()
+  }));
 
-  const finalClicks = clicksRes.rows.length > 0
-    ? clicksRes.rows.map((row) => ({
-        clickId: row.click_id,
-        userId: row.user_id || null,
-        userCode: row.user_code || 'GUEST',
-        platform: row.platform || 'shopee',
-        originalUrl: row.original_url || '',
-        cleanUrl: row.clean_url || '',
-        productId: row.product_id || '',
-        affiliateUrl: row.affiliate_url || '',
-        createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString()
-      }))
-    : (stateRes.rows[0]?.payload?.clicks || memoryCache?.clicks || []);
+  const ledgerMap = new Map();
+  for (const l of tableLedger) {
+    ledgerMap.set(l.refId || l.id, l);
+  }
+  const memoryLedger = memoryCache && Array.isArray(memoryCache.ledger) ? memoryCache.ledger : [];
+  for (const l of [...payloadLedger, ...memoryLedger]) {
+    const key = l?.refId || l?.id;
+    if (key && !ledgerMap.has(key)) {
+      ledgerMap.set(key, l);
+    }
+  }
+  const finalLedger = Array.from(ledgerMap.values());
+
+  const tableWithdrawals = withdrawalsRes.rows.map((row) => ({
+    id: row.id,
+    userId: row.user_id,
+    userCode: row.user_code || '',
+    userName: row.user_name || '',
+    userPhone: row.user_phone || '',
+    amount: Math.round(Number(row.amount || 0)),
+    method: row.method || 'bank',
+    bankName: row.bank_name || '',
+    bankAccount: row.bank_account || '',
+    bankOwner: row.bank_owner || '',
+    status: row.status || 'pending',
+    createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
+    processedAt: row.processed_at ? new Date(row.processed_at).toISOString() : (row.updated_at ? new Date(row.updated_at).toISOString() : null)
+  }));
+
+  const withdrawalMap = new Map();
+  for (const w of tableWithdrawals) {
+    withdrawalMap.set(w.id, w);
+  }
+  const memoryWithdrawals = memoryCache && Array.isArray(memoryCache.withdrawals) ? memoryCache.withdrawals : [];
+  for (const w of [...payloadWithdrawals, ...memoryWithdrawals]) {
+    if (w && w.id && !withdrawalMap.has(w.id)) {
+      withdrawalMap.set(w.id, w);
+    }
+  }
+  const finalWithdrawals = Array.from(withdrawalMap.values());
+
+  const tableClicks = clicksRes.rows.map((row) => ({
+    clickId: row.click_id,
+    userId: row.user_id || null,
+    userCode: row.user_code || 'GUEST',
+    platform: row.platform || 'shopee',
+    originalUrl: row.original_url || '',
+    cleanUrl: row.clean_url || '',
+    productId: row.product_id || '',
+    affiliateUrl: row.affiliate_url || '',
+    createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString()
+  }));
+
+  const clickMap = new Map();
+  for (const c of tableClicks) {
+    clickMap.set(c.clickId, c);
+  }
+  const memoryClicks = memoryCache && Array.isArray(memoryCache.clicks) ? memoryCache.clicks : [];
+  for (const c of memoryClicks) {
+    if (c && c.clickId && !clickMap.has(c.clickId)) {
+      clickMap.set(c.clickId, c);
+    }
+  }
+  const finalClicks = Array.from(clickMap.values()).slice(-5000);
 
   return {
     settings,
@@ -860,150 +925,341 @@ async function loadAuthoritativeStateFromPostgres(client) {
   };
 }
 
-async function syncSnapshotToPostgres(data) {
+// ================= MULTI-ROW BATCH POSTGRES SYNC HELPERS =================
+
+function chunkArray(items, size) {
+  if (!Array.isArray(items) || items.length === 0) return [];
+  const chunks = [];
+  for (let i = 0; i < items.length; i += size) {
+    chunks.push(items.slice(i, i + size));
+  }
+  return chunks;
+}
+
+async function batchSyncLedger(client, ledger) {
+  if (!Array.isArray(ledger) || ledger.length === 0) return;
+  const chunks = chunkArray(ledger, 50);
+  for (const chunk of chunks) {
+    const valuePlaceholders = [];
+    const params = [];
+    let pIdx = 1;
+
+    for (const l of chunk) {
+      if (!l || !l.id || !l.refId) continue;
+      valuePlaceholders.push(`($${pIdx}, $${pIdx + 1}, $${pIdx + 2}, $${pIdx + 3}, $${pIdx + 4}, $${pIdx + 5}, $${pIdx + 6})`);
+      params.push(
+        l.id,
+        l.userId,
+        l.type,
+        Math.round(Number(l.amount || 0)),
+        l.refId,
+        l.note || '',
+        l.createdAt ? new Date(l.createdAt) : new Date()
+      );
+      pIdx += 7;
+    }
+
+    if (valuePlaceholders.length === 0) continue;
+
+    const query = `
+      INSERT INTO ledger (id, user_id, type, amount, ref_id, note, created_at)
+      VALUES ${valuePlaceholders.join(', ')}
+      ON CONFLICT (ref_id) DO NOTHING
+    `;
+    await client.query(query, params);
+  }
+}
+
+async function batchSyncUsers(client, users) {
+  if (!Array.isArray(users) || users.length === 0) return;
+  const chunks = chunkArray(users, 25);
+  for (const chunk of chunks) {
+    const valuePlaceholders = [];
+    const params = [];
+    let pIdx = 1;
+
+    for (const u of chunk) {
+      if (!u || !u.id) continue;
+      valuePlaceholders.push(
+        `($${pIdx}, $${pIdx + 1}, $${pIdx + 2}, $${pIdx + 3}, $${pIdx + 4}, $${pIdx + 5}, $${pIdx + 6}, $${pIdx + 7}, $${pIdx + 8}, $${pIdx + 9}, $${pIdx + 10}, $${pIdx + 11}, $${pIdx + 12}, $${pIdx + 13}, $${pIdx + 14}, $${pIdx + 15}, $${pIdx + 16})`
+      );
+      params.push(
+        u.id,
+        u.code,
+        u.name || '',
+        u.phone,
+        u.email || '',
+        u.passwordHash,
+        u.role || 'user',
+        Number(u.tokenVersion || 1),
+        u.referredBy || null,
+        Math.round(Number(u.balanceAvailable || 0)),
+        Math.round(Number(u.balancePending || 0)),
+        Math.round(Number(u.totalEarned || 0)),
+        Math.round(Number(u.totalWithdrawn || 0)),
+        u.bankName || '',
+        u.bankAccount || '',
+        u.bankOwner || '',
+        Boolean(u.accountLocked)
+      );
+      pIdx += 17;
+    }
+
+    if (valuePlaceholders.length === 0) continue;
+
+    const query = `
+      INSERT INTO users (
+        id, code, name, phone, email, password_hash, role, token_version,
+        referred_by, balance_available, balance_pending, total_earned,
+        total_withdrawn, bank_name, bank_account, bank_owner, account_locked
+      )
+      VALUES ${valuePlaceholders.join(', ')}
+      ON CONFLICT (id) DO UPDATE SET
+        code = EXCLUDED.code,
+        name = EXCLUDED.name,
+        phone = EXCLUDED.phone,
+        email = EXCLUDED.email,
+        password_hash = EXCLUDED.password_hash,
+        role = EXCLUDED.role,
+        token_version = EXCLUDED.token_version,
+        referred_by = EXCLUDED.referred_by,
+        balance_available = (SELECT COALESCE(SUM(l.amount), 0) FROM ledger l WHERE l.user_id = users.id),
+        balance_pending = EXCLUDED.balance_pending,
+        total_earned = EXCLUDED.total_earned,
+        total_withdrawn = EXCLUDED.total_withdrawn,
+        bank_name = EXCLUDED.bank_name,
+        bank_account = EXCLUDED.bank_account,
+        bank_owner = EXCLUDED.bank_owner,
+        account_locked = EXCLUDED.account_locked
+    `;
+    await client.query(query, params);
+  }
+}
+
+async function batchSyncWithdrawals(client, withdrawals) {
+  if (!Array.isArray(withdrawals) || withdrawals.length === 0) return;
+  const chunks = chunkArray(withdrawals, 30);
+  for (const chunk of chunks) {
+    const valuePlaceholders = [];
+    const params = [];
+    let pIdx = 1;
+
+    for (const w of chunk) {
+      if (!w || !w.id) continue;
+      valuePlaceholders.push(
+        `($${pIdx}, $${pIdx + 1}, $${pIdx + 2}, $${pIdx + 3}, $${pIdx + 4}, $${pIdx + 5}, $${pIdx + 6}, $${pIdx + 7}, $${pIdx + 8}, $${pIdx + 9}, $${pIdx + 10}, $${pIdx + 11})`
+      );
+      params.push(
+        w.id,
+        w.userId,
+        w.userCode || '',
+        w.userName || '',
+        w.userPhone || '',
+        Math.round(Number(w.amount || 0)),
+        w.method || 'bank',
+        w.bankName || '',
+        w.bankAccount || '',
+        w.bankOwner || '',
+        w.status || 'pending',
+        w.createdAt ? new Date(w.createdAt) : new Date()
+      );
+      pIdx += 12;
+    }
+
+    if (valuePlaceholders.length === 0) continue;
+
+    const query = `
+      INSERT INTO withdrawals (
+        id, user_id, user_code, user_name, user_phone, amount,
+        method, bank_name, bank_account, bank_owner, status, created_at
+      )
+      VALUES ${valuePlaceholders.join(', ')}
+      ON CONFLICT (id) DO UPDATE SET
+        status = CASE 
+          WHEN withdrawals.status IN ('paid', 'rejected') THEN withdrawals.status 
+          ELSE EXCLUDED.status 
+        END,
+        processed_at = CASE 
+          WHEN withdrawals.status IN ('paid', 'rejected') THEN withdrawals.processed_at 
+          WHEN EXCLUDED.status IN ('paid', 'rejected') THEN NOW() 
+          ELSE withdrawals.processed_at 
+        END
+    `;
+    await client.query(query, params);
+  }
+}
+
+async function batchSyncOrders(client, orders) {
+  if (!Array.isArray(orders) || orders.length === 0) return;
+  const chunks = chunkArray(orders, 30);
+  for (const chunk of chunks) {
+    const valuePlaceholders = [];
+    const params = [];
+    let pIdx = 1;
+
+    for (const o of chunk) {
+      if (!o || !o.orderSn) continue;
+      valuePlaceholders.push(
+        `($${pIdx}, $${pIdx + 1}, $${pIdx + 2}, $${pIdx + 3}, $${pIdx + 4}, $${pIdx + 5}, $${pIdx + 6}, $${pIdx + 7}, $${pIdx + 8}, $${pIdx + 9}, $${pIdx + 10}, $${pIdx + 11}, $${pIdx + 12}, $${pIdx + 13}, $${pIdx + 14})`
+      );
+      params.push(
+        o.orderSn,
+        o.platform || 'shopee',
+        o.clickId || null,
+        o.userId || null,
+        o.userCode || 'GUEST',
+        o.productName || '',
+        Math.round(Number(o.orderAmount || 0)),
+        Math.round(Number(o.grossCommission || 0)),
+        Math.round(Number(o.taxAmount || 0)),
+        Math.round(Number(o.netCommission || 0)),
+        Math.round(Number(o.userCashbackAmount || 0)),
+        Math.round(Number(o.adminShareAmount || 0)),
+        o.status || 'pending',
+        o.createdAt ? new Date(o.createdAt) : new Date(),
+        o.updatedAt ? new Date(o.updatedAt) : new Date()
+      );
+      pIdx += 15;
+    }
+
+    if (valuePlaceholders.length === 0) continue;
+
+    const query = `
+      INSERT INTO orders (
+        order_sn, platform, click_id, user_id, user_code, product_name,
+        order_amount, gross_commission, tax_amount, net_commission,
+        user_cashback_amount, admin_share_amount, status, created_at, updated_at
+      )
+      VALUES ${valuePlaceholders.join(', ')}
+      ON CONFLICT (order_sn) DO UPDATE SET
+        user_id = COALESCE(orders.user_id, EXCLUDED.user_id),
+        user_code = CASE WHEN orders.user_code = 'GUEST' THEN EXCLUDED.user_code ELSE orders.user_code END,
+        gross_commission = EXCLUDED.gross_commission,
+        tax_amount = EXCLUDED.tax_amount,
+        net_commission = EXCLUDED.net_commission,
+        user_cashback_amount = CASE 
+          WHEN orders.user_cashback_amount > 0 AND EXCLUDED.user_cashback_amount = 0 THEN orders.user_cashback_amount 
+          ELSE EXCLUDED.user_cashback_amount 
+        END,
+        admin_share_amount = EXCLUDED.admin_share_amount,
+        status = EXCLUDED.status,
+        updated_at = NOW()
+    `;
+    await client.query(query, params);
+  }
+}
+
+async function batchSyncClicks(client, clicks) {
+  if (!Array.isArray(clicks) || clicks.length === 0) return;
+  const recentClicks = clicks.slice(-500);
+  const chunks = chunkArray(recentClicks, 50);
+  for (const chunk of chunks) {
+    const valuePlaceholders = [];
+    const params = [];
+    let pIdx = 1;
+
+    for (const c of chunk) {
+      if (!c || !c.clickId) continue;
+      valuePlaceholders.push(
+        `($${pIdx}, $${pIdx + 1}, $${pIdx + 2}, $${pIdx + 3}, $${pIdx + 4}, $${pIdx + 5}, $${pIdx + 6}, $${pIdx + 7}, $${pIdx + 8})`
+      );
+      params.push(
+        c.clickId,
+        c.userId || null,
+        c.userCode || 'GUEST',
+        c.platform || 'shopee',
+        c.originalUrl || '',
+        c.cleanUrl || '',
+        c.productId || '',
+        c.affiliateUrl || '',
+        c.createdAt ? new Date(c.createdAt) : new Date()
+      );
+      pIdx += 9;
+    }
+
+    if (valuePlaceholders.length === 0) continue;
+
+    const query = `
+      INSERT INTO clicks (
+        click_id, user_id, user_code, platform, original_url,
+        clean_url, product_id, affiliate_url, created_at
+      )
+      VALUES ${valuePlaceholders.join(', ')}
+      ON CONFLICT (click_id) DO NOTHING
+    `;
+    await client.query(query, params);
+  }
+}
+
+/**
+ * High-performance batched state synchronization with Optimistic Concurrency Control (OCC).
+ * Serializes batches in chunks, checks version on hoantienshop_state, and automatically
+ * reloads and retries on concurrent modification conflicts.
+ */
+async function syncSnapshotToPostgres(data, { attempt = 1, maxRetries = 3 } = {}) {
   if (!pgPool || !pgSchemaReady) return;
   const client = await pgPool.connect();
   try {
     await client.query('BEGIN');
 
-    // 1. Sync users
-    for (const u of data.users || []) {
-      await client.query(
-        `INSERT INTO users (id, code, name, phone, email, password_hash, role, token_version, referred_by, balance_available, balance_pending, total_earned, total_withdrawn, bank_name, bank_account, bank_owner, account_locked)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
-         ON CONFLICT (id) DO UPDATE SET
-           code = EXCLUDED.code,
-           name = EXCLUDED.name,
-           phone = EXCLUDED.phone,
-           email = EXCLUDED.email,
-           password_hash = EXCLUDED.password_hash,
-           role = EXCLUDED.role,
-           token_version = EXCLUDED.token_version,
-           balance_available = EXCLUDED.balance_available,
-           balance_pending = EXCLUDED.balance_pending,
-           total_earned = EXCLUDED.total_earned,
-           total_withdrawn = EXCLUDED.total_withdrawn,
-           bank_name = EXCLUDED.bank_name,
-           bank_account = EXCLUDED.bank_account,
-           bank_owner = EXCLUDED.bank_owner,
-           account_locked = EXCLUDED.account_locked`,
-        [
-          u.id,
-          u.code,
-          u.name || '',
-          u.phone,
-          u.email || '',
-          u.passwordHash,
-          u.role || 'user',
-          Number(u.tokenVersion || 1),
-          u.referredBy || null,
-          Math.round(Number(u.balanceAvailable || 0)),
-          Math.round(Number(u.balancePending || 0)),
-          Math.round(Number(u.totalEarned || 0)),
-          Math.round(Number(u.totalWithdrawn || 0)),
-          u.bankName || '',
-          u.bankAccount || '',
-          u.bankOwner || '',
-          Boolean(u.accountLocked)
-        ]
-      );
-    }
+    // 1. Sync ledger first so users balance recalculation subquery sees latest entries
+    await batchSyncLedger(client, data.ledger);
 
-    // 2. Append-only INSERT into ledger (never UPDATE/DELETE)
-    for (const l of data.ledger || []) {
-      await client.query(
-        `INSERT INTO ledger (id, user_id, type, amount, ref_id, note)
-         VALUES ($1,$2,$3,$4,$5,$6)
-         ON CONFLICT (ref_id) DO NOTHING`,
-        [l.id, l.userId, l.type, Math.round(Number(l.amount || 0)), l.refId, l.note || '']
-      );
-    }
+    // 2. Sync users with calculated balance from authoritative ledger
+    await batchSyncUsers(client, data.users);
 
-    // 3. Sync withdrawals
-    for (const w of data.withdrawals || []) {
-      await client.query(
-        `INSERT INTO withdrawals (id, user_id, user_code, user_name, user_phone, amount, method, bank_name, bank_account, bank_owner, status)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
-         ON CONFLICT (id) DO UPDATE SET
-           status = EXCLUDED.status,
-           processed_at = CASE WHEN EXCLUDED.status IN ('paid','rejected') THEN NOW() ELSE withdrawals.processed_at END`,
-        [
-          w.id,
-          w.userId,
-          w.userCode || '',
-          w.userName || '',
-          w.userPhone || '',
-          Math.round(Number(w.amount || 0)),
-          w.method || 'bank',
-          w.bankName || '',
-          w.bankAccount || '',
-          w.bankOwner || '',
-          w.status || 'pending'
-        ]
-      );
-    }
+    // 3. Sync withdrawals with protected terminal statuses (paid/rejected)
+    await batchSyncWithdrawals(client, data.withdrawals);
 
-    // 4. Sync orders
-    for (const o of data.orders || []) {
-      await client.query(
-        `INSERT INTO orders (order_sn, platform, click_id, user_id, user_code, product_name, order_amount, gross_commission, tax_amount, net_commission, user_cashback_amount, admin_share_amount, status)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
-         ON CONFLICT (order_sn) DO UPDATE SET
-           user_id = COALESCE(orders.user_id, EXCLUDED.user_id),
-           user_code = CASE WHEN orders.user_code = 'GUEST' THEN EXCLUDED.user_code ELSE orders.user_code END,
-           gross_commission = EXCLUDED.gross_commission,
-           tax_amount = EXCLUDED.tax_amount,
-           net_commission = EXCLUDED.net_commission,
-           user_cashback_amount = EXCLUDED.user_cashback_amount,
-           admin_share_amount = EXCLUDED.admin_share_amount,
-           status = EXCLUDED.status,
-           updated_at = NOW()`,
-        [
-          o.orderSn,
-          o.platform || 'shopee',
-          o.clickId || null,
-          o.userId || null,
-          o.userCode || 'GUEST',
-          o.productName || '',
-          Math.round(Number(o.orderAmount || 0)),
-          Math.round(Number(o.grossCommission || 0)),
-          Math.round(Number(o.taxAmount || 0)),
-          Math.round(Number(o.netCommission || 0)),
-          Math.round(Number(o.userCashbackAmount || 0)),
-          Math.round(Number(o.adminShareAmount || 0)),
-          o.status || 'pending'
-        ]
-      );
-    }
+    // 4. Sync orders preserving custom cashback & attribution
+    await batchSyncOrders(client, data.orders);
 
     // 5. Sync clicks (keep latest 500)
-    for (const c of (data.clicks || []).slice(-500)) {
-      if (!c.clickId) continue;
-      await client.query(
-        `INSERT INTO clicks (click_id, user_id, user_code, platform, original_url, clean_url, product_id, affiliate_url, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-         ON CONFLICT (click_id) DO NOTHING`,
-        [
-          c.clickId,
-          c.userId || null,
-          c.userCode || 'GUEST',
-          c.platform || 'shopee',
-          c.originalUrl || '',
-          c.cleanUrl || '',
-          c.productId || '',
-          c.affiliateUrl || '',
-          c.createdAt || new Date().toISOString()
-        ]
-      );
-    }
+    await batchSyncClicks(client, data.clicks);
 
-    // 6. Update state snapshot with timestamp
-    await client.query(
-      `INSERT INTO hoantienshop_state (id, payload, updated_at) VALUES ('main', $1, NOW())
-       ON CONFLICT (id) DO UPDATE SET payload = EXCLUDED.payload, updated_at = NOW()`,
-      [JSON.stringify(data)]
+    // 6. Optimistic Concurrency Control on hoantienshop_state
+    const updateRes = await client.query(
+      `UPDATE hoantienshop_state
+       SET payload = $1, version = version + 1, updated_at = NOW()
+       WHERE id = 'main' AND version = $2
+       RETURNING version`,
+      [JSON.stringify(data), currentDbVersion]
     );
 
+    if (updateRes.rowCount === 0) {
+      const checkRes = await client.query("SELECT version FROM hoantienshop_state WHERE id = 'main'");
+      if (checkRes.rows.length === 0) {
+        const insertRes = await client.query(
+          `INSERT INTO hoantienshop_state (id, payload, version, updated_at)
+           VALUES ('main', $1, 1, NOW())
+           RETURNING version`,
+          [JSON.stringify(data)]
+        );
+        currentDbVersion = Number(insertRes.rows[0]?.version || 1);
+        await client.query('COMMIT');
+        return;
+      }
+
+      const dbVersion = Number(checkRes.rows[0].version);
+      logger.warning('syncSnapshotToPostgres', 'Xung đột phiên bản DB (Optimistic Concurrency Conflict)', {
+        localVersion: currentDbVersion,
+        dbVersion,
+        attempt
+      });
+
+      await client.query('ROLLBACK');
+
+      if (attempt <= maxRetries) {
+        await reloadStateFromPostgres();
+        const backoffMs = attempt * 50 + Math.floor(Math.random() * 50);
+        await new Promise((resolve) => setTimeout(resolve, backoffMs));
+        return syncSnapshotToPostgres(memoryCache, { attempt: attempt + 1, maxRetries });
+      } else {
+        throw new Error(`Đồng bộ Postgres thất bại do xung đột phiên bản sau ${maxRetries} lần thử.`);
+      }
+    }
+
+    currentDbVersion = Number(updateRes.rows[0].version);
     await client.query('COMMIT');
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
@@ -1512,11 +1768,16 @@ function recalculateAllWallets({ persist = true } = {}) {
   return auditLedgerIntegrity({ autoRepair: false });
 }
 
+function getCurrentDbVersion() {
+  return currentDbVersion;
+}
+
 function getDatabaseStatus() {
   const audit = auditLedgerIntegrity({ autoRepair: false });
   return {
     mode: pgPool ? 'postgres' : IS_VERCEL ? 'ephemeral_tmp' : 'local_json',
     isPersistentOnCloud: Boolean(pgPool && pgSchemaReady),
+    version: currentDbVersion,
     ledgerAudit: audit
   };
 }
@@ -1539,5 +1800,6 @@ module.exports = {
   getDatabaseStatus,
   reloadStateFromPostgres,
   getDefaultPostbackToken,
-  withUserLock
+  withUserLock,
+  getCurrentDbVersion
 };

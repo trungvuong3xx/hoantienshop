@@ -206,10 +206,25 @@ function upsertNetworkOrder(db, {
     if (!existing.clickId && cleanSub) {
       existing.clickId = cleanSub;
     }
-    // Attach matchedUser if order was previously GUEST/unassigned; preserve existing userId if claimed
-    if (!existing.userId && matchedUser) {
-      existing.userId = matchedUser.id;
-      existing.userCode = matchedUser.code;
+    // Attribution resolution: Verified tracking click (matchedUser) takes precedence
+    if (matchedUser) {
+      if (!existing.userId || existing.submittedByUserId) {
+        existing.userId = matchedUser.id;
+        existing.userCode = matchedUser.code;
+        if (existing.submittedByUserId) {
+          if (existing.submittedByUserId === matchedUser.id) {
+            existing.claimPending = false;
+            existing.claimVerified = true;
+          } else {
+            existing.claimPending = false;
+            existing.claimRejected = true;
+            existing.claimRejectReason = 'Mã đơn đã được ghi nhận cho tài khoản mua hàng thực tế qua liên kết tiếp thị.';
+          }
+        }
+      }
+    } else if (existing.submittedByUserId && !existing.userId) {
+      // Sàn báo đơn không có tracking click (GUEST purchase): giữ chờ Admin đối soát
+      existing.claimPending = true;
     }
     existing.updatedAt = new Date().toISOString();
     return existing;
@@ -261,29 +276,39 @@ async function runShopeeAutoSync() {
   let syncedCount = 0;
 
   for (const node of reportNodes) {
-    const rawSubId = String(node.utmContent || '').split('-')[0].trim();
-    const grossComm = Number(node.netCommission || node.totalCommission || 0);
-    const subOrders = Array.isArray(node.orders) ? node.orders : [];
+    if (!node || typeof node !== 'object') continue;
+    try {
+      const rawSubId = String(node.utmContent || '').split('-')[0].trim();
+      const grossComm = Number(node.netCommission || node.totalCommission || 0);
+      const subOrders = Array.isArray(node.orders) ? node.orders : [];
 
-    for (const ord of subOrders) {
-      const orderSn = String(ord.orderId || '').trim().toUpperCase();
-      if (!orderSn) continue;
+      for (const ord of subOrders) {
+        if (!ord || typeof ord !== 'object') continue;
+        try {
+          const orderSn = String(ord.orderId || '').trim().toUpperCase();
+          if (!orderSn) continue;
 
-      const status = normalizeNetworkStatus(ord.orderStatus);
-      const firstItem = ord.items?.[0];
-      const productName = firstItem?.itemName || `Đơn Shopee #${orderSn}`;
-      const orderAmount = Number(firstItem?.itemPrice || 0);
+          const status = normalizeNetworkStatus(ord.orderStatus);
+          const firstItem = Array.isArray(ord.items) && ord.items.length > 0 ? ord.items[0] : null;
+          const productName = firstItem?.itemName || `Đơn Shopee #${orderSn}`;
+          const orderAmount = Number(firstItem?.itemPrice || 0);
 
-      upsertNetworkOrder(db, {
-        orderSn,
-        rawSubId,
-        grossCommission: grossComm,
-        orderAmount,
-        status,
-        platform: 'shopee',
-        productName
-      });
-      syncedCount++;
+          upsertNetworkOrder(db, {
+            orderSn,
+            rawSubId,
+            grossCommission: grossComm,
+            orderAmount,
+            status,
+            platform: 'shopee',
+            productName
+          });
+          syncedCount++;
+        } catch (itemErr) {
+          logger.warning('runShopeeAutoSync', 'Bỏ qua đơn Shopee hỏng định dạng', { error: itemErr.message });
+        }
+      }
+    } catch (nodeErr) {
+      logger.warning('runShopeeAutoSync', 'Lỗi xử lý node báo cáo Shopee', { error: nodeErr.message });
     }
   }
 
@@ -311,41 +336,46 @@ async function runAccessTradeAutoSync() {
   let syncedCount = 0;
 
   for (const row of rows) {
-    const orderSn = String(
-      row.order_id || row.conversion_id || row.transaction_id || ''
-    )
-      .trim()
-      .toUpperCase();
-    if (!orderSn) continue;
+    if (!row || typeof row !== 'object') continue;
+    try {
+      const orderSn = String(
+        row.order_id || row.conversion_id || row.transaction_id || ''
+      )
+        .trim()
+        .toUpperCase();
+      if (!orderSn) continue;
 
-    const rawSubId = String(row.sub1 || row.utm_source || '').trim();
-    const grossComm = Number(
-      row.pub_commission ?? row.reward ?? row.commission ?? 0
-    );
-    const orderAmount = Number(
-      row.billing ?? row.total_amount ?? row.amount ?? 0
-    );
-    const status = normalizeNetworkStatus(
-      row.status ?? row.order_status ?? row.approval_status
-    );
-    const merchantRaw = String(row.merchant || '').toLowerCase();
-    const platform = merchantRaw.includes('shopee') ? 'shopee' : 'tiktok';
-    const firstProd = Array.isArray(row.products) ? row.products[0] : null;
-    const productName =
-      firstProd?.name ||
-      row.product_name ||
-      `Đơn ${platform === 'tiktok' ? 'TikTok' : 'Shopee'} #${orderSn}`;
+      const rawSubId = String(row.sub1 || row.utm_source || '').trim();
+      const grossComm = Number(
+        row.pub_commission ?? row.reward ?? row.commission ?? 0
+      );
+      const orderAmount = Number(
+        row.billing ?? row.total_amount ?? row.amount ?? 0
+      );
+      const status = normalizeNetworkStatus(
+        row.status ?? row.order_status ?? row.approval_status
+      );
+      const merchantRaw = String(row.merchant || '').toLowerCase();
+      const platform = merchantRaw.includes('shopee') ? 'shopee' : 'tiktok';
+      const firstProd = Array.isArray(row.products) && row.products.length > 0 ? row.products[0] : null;
+      const productName =
+        firstProd?.name ||
+        row.product_name ||
+        `Đơn ${platform === 'tiktok' ? 'TikTok' : 'Shopee'} #${orderSn}`;
 
-    upsertNetworkOrder(db, {
-      orderSn,
-      rawSubId,
-      grossCommission: grossComm,
-      orderAmount,
-      status,
-      platform,
-      productName
-    });
-    syncedCount++;
+      upsertNetworkOrder(db, {
+        orderSn,
+        rawSubId,
+        grossCommission: grossComm,
+        orderAmount,
+        status,
+        platform,
+        productName
+      });
+      syncedCount++;
+    } catch (rowErr) {
+      logger.warning('runAccessTradeAutoSync', 'Bỏ qua bản ghi AccessTrade hỏng định dạng', { error: rowErr.message });
+    }
   }
 
   db.settings.lastAutoSyncAt = new Date().toISOString();
@@ -779,13 +809,18 @@ function registerCashbackRoutes(app) {
     }
 
     // Never trust client for orderAmount or commission; set 0 until network postback/report confirms
+    // Secure attribution: Keep userId null and mark claimPending so a user cannot hijack other buyers' orders
     const newOrd = {
       id: `ord_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`,
       orderSn: cleanSn,
       platform: String(platform || '').toLowerCase() === 'tiktok' ? 'tiktok' : 'shopee',
       clickId: null,
-      userCode: user.code,
-      userId: user.id,
+      userCode: 'PENDING_VERIFY',
+      userId: null,
+      submittedByUserId: user.id,
+      submittedByUserCode: user.code,
+      claimPending: true,
+      claimRequestedAt: new Date().toISOString(),
       productName: String(productName || `Đơn hàng #${cleanSn}`).trim().slice(0, 100),
       orderAmount: 0,
       grossCommission: 0,
@@ -803,11 +838,12 @@ function registerCashbackRoutes(app) {
 
     db.orders.unshift(newOrd);
     await saveDb(db);
-    logger.logLeave('POST /api/user/submit-order', { orderSn: cleanSn, created: true });
+    logger.logLeave('POST /api/user/submit-order', { orderSn: cleanSn, created: true, claimPending: true });
     return res.json({
       order: newOrd,
       autoMatched: false,
-      message: 'Đã ghi nhận mã đơn hàng. Tiền hoàn sẽ tự động cập nhật khi sàn đối soát hoàn tất!'
+      claimPending: true,
+      message: 'Đã ghi nhận mã đơn hàng. Tiền hoàn sẽ tự động cập nhật khi sàn đối soát hoàn tất và xác nhận liên kết tiếp thị!'
     });
   });
 
@@ -912,10 +948,7 @@ function registerCashbackRoutes(app) {
         const cleanInfo = cleanShopeeUrl(resolvedUrl, htmlSnippet);
         const appId = s.shopeeAppId || process.env.SHOPEE_APP_ID || '';
         const appSecret = s.shopeeAppSecret || process.env.SHOPEE_APP_SECRET || '';
-        const addlivetagKey =
-          s.addlivetagApiKey ||
-          process.env.ADDLIVETAG_API_KEY ||
-          'b426eeae7cc0b156969f923935e661362aa3b13d09dba032';
+        const addlivetagKey = (s.addlivetagApiKey || process.env.ADDLIVETAG_API_KEY || '').trim();
 
         let productMeta = null;
         // Priority 1: Official Shopee Open API if credentials configured
@@ -993,10 +1026,7 @@ function registerCashbackRoutes(app) {
 
       if (platform === 'tiktok') {
         const cleanInfo = cleanTikTokUrl(resolvedUrl, htmlSnippet);
-        const addlivetagKey =
-          s.addlivetagApiKey ||
-          process.env.ADDLIVETAG_API_KEY ||
-          'b426eeae7cc0b156969f923935e661362aa3b13d09dba032';
+        const addlivetagKey = (s.addlivetagApiKey || process.env.ADDLIVETAG_API_KEY || '').trim();
 
         let productMeta = null;
         if (addlivetagKey) {
@@ -1067,10 +1097,7 @@ function registerCashbackRoutes(app) {
     const s = db.settings;
     const appId = s.shopeeAppId || process.env.SHOPEE_APP_ID || '';
     const appSecret = s.shopeeAppSecret || process.env.SHOPEE_APP_SECRET || '';
-    const addlivetagKey =
-      s.addlivetagApiKey ||
-      process.env.ADDLIVETAG_API_KEY ||
-      'b426eeae7cc0b156969f923935e661362aa3b13d09dba032';
+    const addlivetagKey = (s.addlivetagApiKey || process.env.ADDLIVETAG_API_KEY || '').trim();
 
     const hasAppId = Boolean(appId);
     const hasAppSecret = Boolean(appSecret);
@@ -1162,10 +1189,7 @@ function registerCashbackRoutes(app) {
           process.env.TIKTOK_DEEPLINK_TEMPLATE ||
           s.tiktokDeepLinkTemplate ||
           DEFAULT_TIKTOK_DEEPLINK,
-        addlivetagApiKey:
-          s.addlivetagApiKey ||
-          process.env.ADDLIVETAG_API_KEY ||
-          'b426eeae7cc0b156969f923935e661362aa3b13d09dba032',
+        addlivetagApiKey: (s.addlivetagApiKey || process.env.ADDLIVETAG_API_KEY || '').trim(),
         shortenerProvider: s.shortenerProvider || 'none'
       };
 
@@ -1206,7 +1230,7 @@ function registerCashbackRoutes(app) {
       }
 
       db.clicks = db.clicks.slice(0, 1000);
-      saveDb(db);
+      await saveDb(db);
 
       logger.logLeave('POST /api/convert', { total: result.summary.total });
       return res.json({
@@ -1286,9 +1310,21 @@ function registerCashbackRoutes(app) {
     const platform = merchantRaw.includes('shopee') ? 'shopee' : 'tiktok';
     const productName = src.product_name || src.productName || '';
 
+    const cleanSn = String(orderSn).trim().toUpperCase();
+    const existing = db.orders.find((o) => String(o.orderSn || '').toUpperCase() === cleanSn);
+    if (
+      existing &&
+      existing.status === status &&
+      Math.round(Number(existing.grossCommission || 0)) === Math.round(grossCommission) &&
+      Math.round(Number(existing.orderAmount || 0)) === Math.round(orderAmount)
+    ) {
+      logger.logLeave('AccessTradePostback', { orderSn: cleanSn, idempotent: true });
+      return res.json({ status: 'ok', orderSn: cleanSn, idempotent: true });
+    }
+
     try {
       const order = upsertNetworkOrder(db, {
-        orderSn,
+        orderSn: cleanSn,
         rawSubId,
         grossCommission,
         orderAmount,
@@ -1409,13 +1445,12 @@ function registerCashbackRoutes(app) {
     const proto = req.headers['x-forwarded-proto'] || req.protocol || 'https';
     const host = req.headers['x-forwarded-host'] || req.headers.host || 'hoantienshop.vercel.app';
     const postbackToken = process.env.POSTBACK_SECRET || getDefaultPostbackToken();
-    const postbackUrlTemplate = `${proto}://${host}/api/webhooks/accesstrade?token=${encodeURIComponent(
-      postbackToken
-    )}&order_id={order_id}&sub1={sub1}&pub_commission={pub_commission}&billing={billing}&status={status}&merchant={merchant}`;
+    const postbackUrlTemplate = `${proto}://${host}/api/webhooks/accesstrade?token={SECRET_POSTBACK_TOKEN}&order_id={order_id}&sub1={sub1}&pub_commission={pub_commission}&billing={billing}&status={status}&merchant={merchant}`;
 
-    // Mask secrets before returning to client
+    // Mask secrets before returning to client (including postbackToken)
     const safeSettings = {
       ...db.settings,
+      postbackToken: maskSecret(db.settings.postbackToken || postbackToken),
       shopeeAppSecret: maskSecret(db.settings.shopeeAppSecret),
       tiktokAppSecret: maskSecret(db.settings.tiktokAppSecret),
       tiktokAccessToken: maskSecret(db.settings.tiktokAccessToken),
@@ -1435,6 +1470,12 @@ function registerCashbackRoutes(app) {
       )
     }));
 
+    const rawLimit = Number(req.query.limit);
+    const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(200, Math.round(rawLimit)) : 50;
+    const rawPage = Number(req.query.page);
+    const page = Number.isFinite(rawPage) && rawPage > 0 ? Math.round(rawPage) : 1;
+    const offset = (page - 1) * limit;
+
     return res.json({
       dbStatus: getDatabaseStatus(),
       stats: {
@@ -1447,11 +1488,31 @@ function registerCashbackRoutes(app) {
         pendingWithdrawals: db.withdrawals.filter((w) => w.status === 'pending').length
       },
       settings: safeSettings,
-      orders: db.orders,
-      withdrawals: withdrawalsWithQr,
-      users: db.users.map(sanitizeUser),
-      clicks: db.clicks.slice(0, 50)
+      orders: db.orders.slice(offset, offset + limit),
+      withdrawals: withdrawalsWithQr.slice(offset, offset + limit),
+      users: db.users.slice(offset, offset + limit).map(sanitizeUser),
+      clicks: db.clicks.slice(0, 50),
+      pagination: {
+        page,
+        limit,
+        totalOrders: db.orders.length,
+        totalUsers: db.users.length,
+        totalWithdrawals: db.withdrawals.length
+      }
     });
+  });
+
+  // Reveal raw postback URL on explicit admin request
+  app.get('/api/admin/reveal-postback-url', (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    const db = ensureDbLoaded();
+    const proto = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+    const host = req.headers['x-forwarded-host'] || req.headers.host || 'hoantienshop.vercel.app';
+    const postbackToken = process.env.POSTBACK_SECRET || db.settings.postbackToken || getDefaultPostbackToken();
+    const fullUrl = `${proto}://${host}/api/webhooks/accesstrade?token=${encodeURIComponent(
+      postbackToken
+    )}&order_id={order_id}&sub1={sub1}&pub_commission={pub_commission}&billing={billing}&status={status}&merchant={merchant}`;
+    return res.json({ postbackUrl: fullUrl });
   });
 
   app.post('/api/admin/sync-shopee', async (req, res) => {
@@ -1472,7 +1533,7 @@ function registerCashbackRoutes(app) {
     const db = ensureDbLoaded();
     const body = req.body || {};
 
-    const plainKeys = [
+    const textKeys = [
       'siteName',
       'shopeeMode',
       'shopeeAffiliateId',
@@ -1481,17 +1542,46 @@ function registerCashbackRoutes(app) {
       'tiktokAppKey',
       'tiktokDeepLinkTemplate',
       'shortenerProvider',
-      'cashbackPercent',
-      'taxDeductPercent',
-      'referralBonusPercent',
-      'minWithdrawAmount',
       'supportZalo'
     ];
 
-    for (const key of plainKeys) {
+    for (const key of textKeys) {
       if (body[key] !== undefined) {
-        db.settings[key] = body[key];
+        db.settings[key] = String(body[key] || '').trim();
       }
+    }
+
+    // Strict finite numeric validation to prevent NaN contamination
+    if (body.cashbackPercent !== undefined) {
+      const v = Number(body.cashbackPercent);
+      if (!Number.isFinite(v) || v < 1 || v > 100) {
+        return res.status(400).json({ error: 'Tỷ lệ hoàn tiền (cashbackPercent) phải là số từ 1% đến 100%.' });
+      }
+      db.settings.cashbackPercent = Math.round(v);
+    }
+
+    if (body.taxDeductPercent !== undefined) {
+      const v = Number(body.taxDeductPercent);
+      if (!Number.isFinite(v) || v < 0 || v > 50) {
+        return res.status(400).json({ error: 'Thuế khấu trừ (taxDeductPercent) phải là số từ 0% đến 50%.' });
+      }
+      db.settings.taxDeductPercent = Math.round(v);
+    }
+
+    if (body.minWithdrawAmount !== undefined) {
+      const v = Number(body.minWithdrawAmount);
+      if (!Number.isFinite(v) || v < 10000 || v > 100000000) {
+        return res.status(400).json({ error: 'Hạn mức rút tiền tối thiểu phải là số từ 10.000đ đến 100.000.000đ.' });
+      }
+      db.settings.minWithdrawAmount = Math.round(v);
+    }
+
+    if (body.referralBonusPercent !== undefined) {
+      const v = Number(body.referralBonusPercent);
+      if (!Number.isFinite(v) || v < 0 || v > 20) {
+        return res.status(400).json({ error: 'Thưởng giới thiệu (referralBonusPercent) phải là số từ 0% đến 20%.' });
+      }
+      db.settings.referralBonusPercent = Math.round(v);
     }
 
     // Only update secret fields if not masked placeholder
@@ -1507,10 +1597,6 @@ function registerCashbackRoutes(app) {
         db.settings[sKey] = String(body[sKey]).trim();
       }
     }
-
-    db.settings.cashbackPercent = Math.min(100, Math.max(1, Number(db.settings.cashbackPercent || 70)));
-    db.settings.taxDeductPercent = Math.min(50, Math.max(0, Number(db.settings.taxDeductPercent ?? 10)));
-    db.settings.minWithdrawAmount = Math.max(10000, Number(db.settings.minWithdrawAmount || 50000));
 
     if (body.newAdminPassword && String(body.newAdminPassword).trim().length >= 6) {
       const adminUser = db.users.find((u) => u.role === 'admin');
@@ -1607,7 +1693,16 @@ function registerCashbackRoutes(app) {
 
       if (hasCustomCashback) {
         const rawCustom = Number(userCashbackAmount);
-        targetOrder.userCashbackAmount = Number.isFinite(rawCustom) && rawCustom >= 0 ? Math.round(rawCustom) : 0;
+        if (!Number.isFinite(rawCustom) || rawCustom < 0) {
+          return res.status(400).json({ error: 'Tiền hoàn tùy chỉnh phải là số hợp lệ không âm.' });
+        }
+        const effectiveNet = hasTotalCommission ? split.netCommission : Number(targetOrder.netCommission || targetOrder.grossCommission || 0);
+        if (rawCustom > effectiveNet) {
+          return res.status(400).json({
+            error: `Tiền hoàn tùy chỉnh (${Math.round(rawCustom).toLocaleString('vi-VN')}đ) không được vượt quá hoa hồng thực nhận sau thuế (${effectiveNet.toLocaleString('vi-VN')}đ).`
+          });
+        }
+        targetOrder.userCashbackAmount = Math.round(rawCustom);
         targetOrder.hasCustomCashback = true;
       } else if (hasTotalCommission) {
         targetOrder.userCashbackAmount = split.userCashbackAmount;
@@ -1628,7 +1723,15 @@ function registerCashbackRoutes(app) {
       let isCustom = false;
       if (hasCustomCashback) {
         const rawCustom = Number(userCashbackAmount);
-        finalCashback = Number.isFinite(rawCustom) && rawCustom >= 0 ? Math.round(rawCustom) : 0;
+        if (!Number.isFinite(rawCustom) || rawCustom < 0) {
+          return res.status(400).json({ error: 'Tiền hoàn tùy chỉnh phải là số hợp lệ không âm.' });
+        }
+        if (rawCustom > split.netCommission) {
+          return res.status(400).json({
+            error: `Tiền hoàn tùy chỉnh (${Math.round(rawCustom).toLocaleString('vi-VN')}đ) không được vượt quá hoa hồng thực nhận sau thuế (${split.netCommission.toLocaleString('vi-VN')}đ).`
+          });
+        }
+        finalCashback = Math.round(rawCustom);
         isCustom = true;
       }
 
