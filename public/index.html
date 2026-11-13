@@ -3,8 +3,14 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="referrer" content="no-referrer" />
+  <meta name="referrer" content="strict-origin-when-cross-origin" />
   <title>Hoàn Tiền Sàn — Hoàn Tiền Mua Sắm Shopee & TikTok Shop</title>
+  <meta name="description" content="Hoàn Tiền Sàn — Nền tảng nhận hoàn tiền tự động lên đến 70% hoa hồng khi mua sắm trên Shopee và TikTok Shop. Minh bạch, nhanh chóng, rút tiền miễn phí." />
+  <meta property="og:title" content="Hoàn Tiền Sàn — Mua Sắm Hoàn Tiền Shopee & TikTok Shop" />
+  <meta property="og:description" content="Dán link sản phẩm Shopee hoặc TikTok Shop để nhận tiền hoàn trực tiếp vào ví sau khi nhận hàng." />
+  <meta property="og:type" content="website" />
+  <meta property="og:image" content="/icon.svg" />
+  <link rel="canonical" href="https://hoantiensan.online/" />
   <link rel="manifest" href="/manifest.webmanifest" />
   <meta name="theme-color" content="#EE4D2D" />
   <meta name="mobile-web-app-capable" content="yes" />
@@ -26,7 +32,6 @@
           <div class="brand-icon">💸</div>
           <div>
             <span class="brand-name" id="navSiteName">Hoàn Tiền Sàn</span>
-            <span class="preview-badge" style="display:inline-block;margin-left:6px;padding:2px 8px;font-size:10px;font-weight:700;background:rgba(245,158,11,0.15);color:#d97706;border:1px solid rgba(245,158,11,0.3);border-radius:99px;vertical-align:middle;">PREVIEW TEST</span>
           </div>
         </a>
 
@@ -59,14 +64,14 @@
     <section id="view-home" class="view-section active">
       <div class="hero-card">
         <div class="hero-pill">
-          Tiền hoàn được chia sẻ lên đến <strong id="heroCashbackRate">70%</strong> từ hoa hồng của sàn
+          Tiền hoàn được chia sẻ lên đến <strong id="heroCashbackRate">70%</strong> hoa hồng sàn thực nhận (sau thuế)
         </div>
         <h1 class="hero-title">
           Mua Sắm <span class="text-shopee">Shopee</span>, <span class="text-tiktok">TikTok</span><br />
           Nhận Lại Tiền Hoàn Dễ Dàng Nhanh Chóng
         </h1>
         <p class="hero-desc">
-          Dán link sản phẩm bất kỳ từ Shopee hoặc TikTok Shop để lấy link mua hàng, mở link mua hàng được hệ thống tạo sau đó mua hàng như bình thường, tiền hoàn sẽ được cộng vào ví từ 3 - 7 ngày tính từ lúc đơn hàng được giao thành công!
+          Dán link sản phẩm bất kỳ từ Shopee hoặc TikTok Shop để lấy link mua hàng, mở link mua hàng được hệ thống tạo sau đó mua hàng như bình thường, tiền hoàn sẽ được cộng vào ví từ 7 - 14 ngày tính từ lúc đơn hàng được giao thành công và hoàn tất kỳ đối soát của sàn!
         </p>
 
         <div class="platform-badges">
@@ -156,7 +161,7 @@
             <p>Sàn ghi nhận đơn hàng tạm tính và tự động đồng bộ hiển thị trong lịch sử ví của bạn.</p>
           </div>
           <div class="step-card">
-            <div class="step-badge step-3">Bước 3: Thực nhận • 7 ngày</div>
+            <div class="step-badge step-3">Bước 3: Thực nhận • 7 - 14 ngày</div>
             <h3>Có thể rút về tài khoản</h3>
             <p>Sau khi đơn hàng giao thành công và hoàn tất kỳ đối soát, tiền khả dụng sẽ được cộng vào ví và có thể rút ngay về Ngân hàng hoặc MoMo.</p>
           </div>
@@ -394,36 +399,60 @@
             <h3>Rút Tiền Về Tài Khoản</h3>
             <p class="panel-sub">Hạn mức rút tối thiểu: <strong id="minWithdrawLabel">50.000đ</strong>. Miễn phí rút tiền qua Ngân hàng (VietQR) hoặc MoMo.</p>
 
-            <div class="form-stack">
+            <form id="withdrawFormBox" class="form-stack" onsubmit="return false;">
               <div class="form-group">
-                <label>Phương thức nhận tiền</label>
+                <label for="wdMethod">Phương thức nhận tiền</label>
                 <select id="wdMethod">
-                  <option value="bank">Chuyển khoản Ngân hàng</option>
+                  <option value="bank">Chuyển khoản Ngân hàng (VietQR)</option>
                   <option value="momo">Ví điện tử MoMo</option>
                 </select>
               </div>
               <div class="form-group">
-                <label>Tên Ngân hàng (hoặc MoMo)</label>
-                <input type="text" id="wdBankName" placeholder="VD: Vietcombank, MBBank, Techcombank..." />
+                <label for="wdBankName">Ngân hàng (hoặc MoMo)</label>
+                <select id="wdBankName" style="width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;background:#fff;">
+                  <option value="">-- Chọn ngân hàng nhận tiền --</option>
+                  <option value="Vietcombank">Vietcombank (VCB - 970436)</option>
+                  <option value="MBBank">MBBank (MB - 970422)</option>
+                  <option value="Techcombank">Techcombank (TCB - 970407)</option>
+                  <option value="VietinBank">VietinBank (CTG - 970415)</option>
+                  <option value="BIDV">BIDV (BIDV - 970418)</option>
+                  <option value="ACB">ACB (ACB - 970416)</option>
+                  <option value="VPBank">VPBank (VPB - 970432)</option>
+                  <option value="TPBank">TPBank (TPB - 970423)</option>
+                  <option value="VIB">VIB (VIB - 970441)</option>
+                  <option value="Sacombank">Sacombank (STB - 970403)</option>
+                  <option value="HDBank">HDBank (HDB - 970437)</option>
+                  <option value="Agribank">Agribank (VBA - 970405)</option>
+                  <option value="MSB">MSB (MSB - 970426)</option>
+                  <option value="SHB">SHB (SHB - 970443)</option>
+                  <option value="SeABank">SeABank (SEAB - 970440)</option>
+                  <option value="OCB">OCB (OCB - 970448)</option>
+                  <option value="Cake">Cake by VPBank (CAKE - 546034)</option>
+                  <option value="Timo">Timo by BVBank (TIMO - 963388)</option>
+                  <option value="MoMo">Ví điện tử MoMo</option>
+                </select>
               </div>
               <div class="form-group">
-                <label>Số tài khoản / SĐT MoMo</label>
-                <input type="text" id="wdBankAccount" placeholder="Nhập chính xác số tài khoản..." />
+                <label for="wdBankAccount">Số tài khoản / SĐT MoMo</label>
+                <input type="text" id="wdBankAccount" inputmode="numeric" maxlength="32" placeholder="Nhập chính xác số tài khoản..." required />
               </div>
               <div class="form-group">
-                <label>Tên chủ tài khoản (Không dấu)</label>
-                <input type="text" id="wdBankOwner" placeholder="VD: NGUYEN VAN A" />
+                <label for="wdBankOwner">Tên chủ tài khoản (Không dấu)</label>
+                <input type="text" id="wdBankOwner" maxlength="60" placeholder="VD: NGUYEN VAN A" style="text-transform:uppercase;" required />
               </div>
               <div class="form-group">
-                <label>Số tiền muốn rút (VNĐ)</label>
-                <input type="number" id="wdAmount" placeholder="VD: 50000" step="1000" />
+                <div style="display:flex;justify-content:space-between;align-items:center;">
+                  <label for="wdAmount">Số tiền muốn rút (VNĐ)</label>
+                  <button type="button" class="btn btn-ghost btn-xs" id="btnMaxWithdraw" style="color:#059669;font-weight:700;padding:0 4px;">Rút tối đa</button>
+                </div>
+                <input type="number" id="wdAmount" inputmode="numeric" min="50000" step="1000" placeholder="VD: 50000" required />
               </div>
               <div class="form-group hidden" id="wdPasswordConfirmGroup">
-                <label style="color:#d97706;">🔐 Xác nhận mật khẩu đăng nhập (Do bạn đổi số tài khoản mới)</label>
-                <input type="password" id="wdCurrentPassword" placeholder="Nhập mật khẩu hiện tại để xác nhận đổi STK..." />
+                <label for="wdCurrentPassword" style="color:#d97706;">🔐 Xác nhận mật khẩu đăng nhập (Do bạn đổi số tài khoản mới)</label>
+                <input type="password" id="wdCurrentPassword" autocomplete="current-password" placeholder="Nhập mật khẩu hiện tại để xác nhận đổi STK..." />
               </div>
-              <button type="button" class="btn btn-success" id="submitWithdrawBtn">Gửi Yêu Cầu Rút Tiền</button>
-            </div>
+              <button type="submit" class="btn btn-success" id="submitWithdrawBtn">Gửi Yêu Cầu Rút Tiền</button>
+            </form>
 
             <h4 style="margin-top:18px;">Lịch sử rút tiền</h4>
             <div class="table-responsive">
