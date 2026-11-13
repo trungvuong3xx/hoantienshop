@@ -887,6 +887,8 @@ async function loadUserDashboard() {
       refInputEl.value = `${window.location.origin}/?ref=${encodeURIComponent(currentUser.code)}`;
     }
 
+    loadUserReferrals();
+
     if (currentUser.bankName && document.getElementById('wdBankName')) {
       document.getElementById('wdBankName').value = currentUser.bankName;
     }
@@ -989,9 +991,109 @@ async function loadUserDashboard() {
   }
 }
 
+// ================= REFERRAL PROGRAM =================
+async function loadUserReferrals() {
+  if (!authToken || !currentUser) return;
+  try {
+    const data = await apiFetch('/api/user/referrals');
+    if (!data) return;
+
+    const setTxt = (id, txt) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = txt;
+    };
+
+    const refLink = `${window.location.origin}/?ref=${encodeURIComponent(data.referralCode || currentUser.code || '')}`;
+    const refInput = document.getElementById('userReferralLinkInput');
+    if (refInput) refInput.value = refLink;
+
+    setTxt('userRefCount', data.stats?.totalFriends || 0);
+    setTxt('refTotalFriends', `${data.stats?.totalFriends || 0} người`);
+    setTxt('refCompletedFriends', `${data.stats?.completedFriends || 0} người`);
+    setTxt('refPendingFriends', `${data.stats?.pendingFriends || 0} người`);
+    setTxt('refBonusEarned', fmtVnd(data.stats?.totalBountyEarned || 0));
+
+    const tbody = document.getElementById('refFriendsTableBody');
+    if (tbody) {
+      const list = data.friends || [];
+      if (list.length === 0) {
+        tbody.innerHTML =
+          '<tr><td colspan="5" class="text-center" style="padding:14px;color:#64748b;">Chưa có bạn bè nào đăng ký qua link của bạn. Hãy sao chép link và chia sẻ ngay!</td></tr>';
+      } else {
+        tbody.innerHTML = list
+          .map((f, i) => {
+            const isDone = f.status === 'completed';
+            const badge = isDone
+              ? '<span class="status-badge status-approved">✅ Đã có đơn</span>'
+              : '<span class="status-badge status-pending">⏳ Chờ đơn đầu</span>';
+            const bonusText = isDone
+              ? `<strong style="color:#16a34a;">+${fmtVnd(f.bonusEarned)}</strong>`
+              : '<span style="color:#94a3b8;">0đ</span>';
+            const dStr = f.createdAt ? new Date(f.createdAt).toLocaleDateString('vi-VN') : '-';
+            return `
+            <tr>
+              <td>${i + 1}</td>
+              <td><strong>${escapeHtml(f.maskedPhone)}</strong></td>
+              <td>${dStr}</td>
+              <td>${badge}</td>
+              <td>${bonusText}</td>
+            </tr>
+          `;
+          })
+          .join('');
+      }
+    }
+  } catch (err) {
+    console.warn('loadUserReferrals error:', err);
+  }
+}
+
 on('copyRefLinkBtn', 'click', () => {
   const val = document.getElementById('userReferralLinkInput')?.value;
-  if (val) copyText(val, 'Đã sao chép liên kết giới thiệu bạn bè!');
+  if (val) copyText(val, 'Đã sao chép link giới thiệu! Nhận 5.000đ khi bạn bè hoàn thành đơn đầu tiên.');
+});
+
+on('shareZaloBtn', 'click', () => {
+  const refLink = document.getElementById('userReferralLinkInput')?.value;
+  if (!refLink) return;
+  const title = 'Mua Shopee & TikTok hoàn tiền đến 70%';
+  const text = `Tớ đang dùng Hoàn Tiền Sàn mua sắm Shopee & TikTok được hoàn đến 70% hoa hồng! Bấm vào đây đăng ký cùng tớ nhé: ${refLink}`;
+
+  if (navigator.share) {
+    navigator.share({ title, text, url: refLink }).catch(() => {});
+  } else {
+    const zaloUrl = `https://zalo.me/share?url=${encodeURIComponent(refLink)}&title=${encodeURIComponent(text)}`;
+    window.open(zaloUrl, '_blank', 'noopener,noreferrer');
+  }
+});
+
+on('showRefQrBtn', 'click', () => {
+  const refLink = document.getElementById('userReferralLinkInput')?.value;
+  if (!refLink) return;
+  const qrModal = document.getElementById('refQrModal');
+  const qrImg = document.getElementById('refQrImg');
+  const qrCodeText = document.getElementById('refQrCodeText');
+
+  if (qrImg) {
+    qrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(refLink)}`;
+  }
+  if (qrCodeText && currentUser) {
+    qrCodeText.textContent = currentUser.code || '';
+  }
+  qrModal?.classList.remove('hidden');
+});
+
+on('closeRefQrModalBtn', 'click', () => {
+  document.getElementById('refQrModal')?.classList.add('hidden');
+});
+on('closeRefQrModalActionBtn', 'click', () => {
+  document.getElementById('refQrModal')?.classList.add('hidden');
+});
+
+on('toggleRefFriendsBtn', 'click', () => {
+  const panel = document.getElementById('refFriendsPanel');
+  if (!panel) return;
+  panel.classList.toggle('hidden');
 });
 
 on('refreshWalletBtn', 'click', loadUserDashboard);
@@ -1185,6 +1287,7 @@ async function loadAdminDashboard() {
     setVal('admTaxDeductPercent', s.taxDeductPercent ?? 10);
     setVal('admCashbackPercent', s.cashbackPercent ?? 70);
     setVal('admMinWithdraw', s.minWithdrawAmount ?? 50000);
+    setVal('admReferralBounty', s.referralBountyAmount ?? 5000);
     setVal('admShortener', s.shortenerProvider || 'none');
     setVal('admSupportZalo', s.supportZalo || '');
 
@@ -1379,6 +1482,7 @@ on('saveAdminSettingsBtn', 'click', async () => {
         taxDeductPercent: numOr(document.getElementById('admTaxDeductPercent')?.value, 10),
         cashbackPercent: numOr(document.getElementById('admCashbackPercent')?.value, 70),
         minWithdrawAmount: numOr(document.getElementById('admMinWithdraw')?.value, 50000),
+        referralBountyAmount: numOr(document.getElementById('admReferralBounty')?.value, 5000),
         shortenerProvider: document.getElementById('admShortener')?.value || 'none',
         supportZalo: document.getElementById('admSupportZalo')?.value?.trim() || '',
         newAdminPassword: document.getElementById('admNewPass')?.value?.trim() || ''

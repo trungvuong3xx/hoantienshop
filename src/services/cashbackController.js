@@ -556,6 +556,7 @@ function registerCashbackRoutes(app) {
       cashbackPercent: Number(s.cashbackPercent || 70),
       taxDeductPercent: Number(s.taxDeductPercent ?? 10),
       referralBonusPercent: Number(s.referralBonusPercent ?? 5),
+      referralBountyAmount: Number(s.referralBountyAmount ?? 5000),
       minWithdrawAmount: Number(s.minWithdrawAmount || 50000),
       supportZalo: s.supportZalo || '',
       turnstileSiteKey: process.env.TURNSTILE_SITE_KEY || '',
@@ -592,13 +593,13 @@ function registerCashbackRoutes(app) {
         return res.status(400).json({ error: 'Số điện thoại này đã được đăng ký.' });
       }
 
-      // Validate 1-level referrer if provided
+      // Validate 1-level referrer if provided (prevent self-referral)
       let validReferrerCode = null;
       if (refCode && typeof refCode === 'string') {
         const refUser = db.users.find(
           (u) => u.code.toUpperCase() === refCode.trim().toUpperCase()
         );
-        if (refUser) {
+        if (refUser && refUser.phone !== cleanPhone) {
           validReferrerCode = refUser.code;
         }
       }
@@ -725,6 +726,82 @@ function registerCashbackRoutes(app) {
       withdrawals: userWithdrawals,
       ledger: userLedger,
       referralCount
+    });
+  });
+
+  // 4.1. User Referral Network & Bounty Stats (5.000đ on referee 1st approved order)
+  app.get('/api/user/referrals', (req, res) => {
+    logger.logEnter('GET /api/user/referrals');
+    const user = getAuthUser(req);
+    if (!user) {
+      return res.status(401).json({ error: 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.' });
+    }
+
+    const db = ensureDbLoaded();
+    recalculateUserWallet(user.id);
+
+    const bountyAmount = Math.max(0, Math.round(Number(db.settings.referralBountyAmount ?? 5000)));
+    const userCodeUpper = String(user.code || '').toUpperCase();
+
+    const refereeUsers = db.users.filter(
+      (u) => u.referredBy && String(u.referredBy).toUpperCase() === userCodeUpper && u.id !== user.id
+    );
+
+    let completedFriends = 0;
+    let pendingFriends = 0;
+    let totalBountyEarned = 0;
+
+    const friends = refereeUsers
+      .map((r) => {
+        const refereeOrders = db.orders.filter(
+          (o) =>
+            (o.userId === r.id ||
+              (o.userCode && String(o.userCode).toUpperCase() === String(r.code).toUpperCase())) &&
+            o.status === 'approved'
+        );
+        const isCompleted = refereeOrders.length > 0;
+        if (isCompleted) {
+          completedFriends++;
+          totalBountyEarned += bountyAmount;
+        } else {
+          pendingFriends++;
+        }
+
+        const maskedPhone =
+          r.phone && r.phone.length >= 7
+            ? `${r.phone.slice(0, 3)}***${r.phone.slice(-3)}`
+            : r.phone || r.code;
+
+        return {
+          id: r.id,
+          code: r.code,
+          maskedPhone,
+          name: r.name ? (r.name.length > 3 ? r.name.slice(0, 1) + '***' : r.name) : 'Bạn mới',
+          createdAt: r.createdAt,
+          status: isCompleted ? 'completed' : 'pending',
+          orderCount: refereeOrders.length,
+          bonusEarned: isCompleted ? bountyAmount : 0
+        };
+      })
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+    logger.logLeave('GET /api/user/referrals', {
+      userCode: user.code,
+      totalFriends: refereeUsers.length,
+      completedFriends,
+      totalBountyEarned
+    });
+
+    return res.json({
+      referralCode: user.code,
+      bountyAmount,
+      stats: {
+        totalFriends: refereeUsers.length,
+        completedFriends,
+        pendingFriends,
+        totalBountyEarned
+      },
+      friends
     });
   });
 
@@ -1612,6 +1689,14 @@ function registerCashbackRoutes(app) {
         return res.status(400).json({ error: 'Thưởng giới thiệu (referralBonusPercent) phải là số từ 0% đến 20%.' });
       }
       db.settings.referralBonusPercent = Math.round(v);
+    }
+
+    if (body.referralBountyAmount !== undefined) {
+      const v = Number(body.referralBountyAmount);
+      if (!Number.isFinite(v) || v < 0 || v > 1000000) {
+        return res.status(400).json({ error: 'Thưởng giới thiệu đơn đầu (referralBountyAmount) phải từ 0đ đến 1.000.000đ.' });
+      }
+      db.settings.referralBountyAmount = Math.round(v);
     }
 
     // Only update secret fields if not masked placeholder

@@ -257,6 +257,7 @@ function getDefaultSettings() {
   const rawCb = Number(process.env.CASHBACK_PERCENT);
   const rawTax = Number(process.env.TAX_DEDUCT_PERCENT);
   const rawMinWd = Number(process.env.MIN_WITHDRAW);
+  const rawBounty = Number(process.env.REFERRAL_BOUNTY_AMOUNT);
 
   cachedDefaultSettings = {
     siteName: process.env.SITE_NAME || 'Hoàn Tiền Sàn',
@@ -267,6 +268,7 @@ function getDefaultSettings() {
     cashbackPercent: Number.isFinite(rawCb) ? Math.min(100, Math.max(0, rawCb)) : 70,
     taxDeductPercent: Number.isFinite(rawTax) ? Math.min(50, Math.max(0, rawTax)) : 10,
     referralBonusPercent: 0,
+    referralBountyAmount: Number.isFinite(rawBounty) && rawBounty >= 0 ? rawBounty : 5000,
     minWithdrawAmount: Number.isFinite(rawMinWd) && rawMinWd >= 0 ? rawMinWd : 50000,
     supportZalo: process.env.SUPPORT_ZALO || '',
     lastAutoSyncAt: null,
@@ -1453,6 +1455,58 @@ function recalculateUserWallet(userId, { persist = false } = {}) {
         if (entry) {
           userLedger.push(entry);
           ledgerByRefId.set(refundRef, entry);
+        }
+      }
+    }
+  }
+
+  // 3.5. Reconcile referral bounties (5.000đ when an invited friend completes their 1st approved order)
+  const bountyAmount = Math.max(0, Math.round(Number(db.settings.referralBountyAmount ?? 5000)));
+  if (bountyAmount > 0 && user.code) {
+    const refereeUsers = db.users.filter(
+      (u) => u.referredBy && String(u.referredBy).toUpperCase() === userCodeUpper && u.id !== user.id
+    );
+
+    for (const referee of refereeUsers) {
+      const refereeOrders = db.orders.filter(
+        (o) =>
+          (o.userId === referee.id ||
+            (o.userCode && String(o.userCode).toUpperCase() === String(referee.code).toUpperCase())) &&
+          o.status === 'approved'
+      );
+      const hasApprovedOrder = refereeOrders.length > 0;
+      const bountyRefId = `ref_bounty_${referee.id}`;
+      const revokeRefId = `ref_bounty_revoke_${referee.id}`;
+
+      const hadBounty = ledgerByRefId.has(bountyRefId);
+      const hadRevoke = ledgerByRefId.has(revokeRefId);
+
+      if (hasApprovedOrder && !hadBounty) {
+        const refereeDisplay = referee.phone
+          ? `${referee.phone.slice(0, 3)}***${referee.phone.slice(-3)}`
+          : referee.code;
+        const entry = appendLedgerEntry(
+          user.id,
+          'referral_bonus',
+          bountyAmount,
+          bountyRefId,
+          `Thưởng giới thiệu bạn bè (${refereeDisplay} hoàn tất đơn đầu tiên) (+${bountyAmount.toLocaleString('vi-VN')} đ)`
+        );
+        if (entry) {
+          userLedger.push(entry);
+          ledgerByRefId.set(bountyRefId, entry);
+        }
+      } else if (!hasApprovedOrder && hadBounty && !hadRevoke) {
+        const entry = appendLedgerEntry(
+          user.id,
+          'order_revocation',
+          -bountyAmount,
+          revokeRefId,
+          `Thu hồi thưởng giới thiệu (Đơn hàng bạn bè bị hủy/đổi trả) (-${bountyAmount.toLocaleString('vi-VN')} đ)`
+        );
+        if (entry) {
+          userLedger.push(entry);
+          ledgerByRefId.set(revokeRefId, entry);
         }
       }
     }
