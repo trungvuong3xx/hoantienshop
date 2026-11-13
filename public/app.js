@@ -371,6 +371,12 @@ async function initPublicConfig() {
     if (rateEl) rateEl.textContent = `${publicConfig.cashbackPercent}%`;
     const minLabel = document.getElementById('minWithdrawLabel');
     if (minLabel) minLabel.textContent = fmtVnd(publicConfig.minWithdrawAmount);
+    document.querySelectorAll('[data-config="cashbackPercent"]').forEach((el) => {
+      el.textContent = `${publicConfig.cashbackPercent}%`;
+    });
+    document.querySelectorAll('[data-config="minWithdrawAmount"]').forEach((el) => {
+      el.textContent = fmtVnd(publicConfig.minWithdrawAmount);
+    });
   } catch (err) {
     console.warn('Init public config notice:', err);
   }
@@ -466,6 +472,12 @@ async function handleDoRegister() {
     return;
   }
 
+  const agree = document.getElementById('regTermsAgree');
+  if (agree && !agree.checked) {
+    showToast('Vui lòng đồng ý với Điều khoản dịch vụ & Chính sách bảo mật.');
+    return;
+  }
+
   if (btn) {
     btn.disabled = true;
     btn.textContent = 'Đang tạo tài khoản...';
@@ -491,7 +503,20 @@ async function handleDoRegister() {
 
 on('doRegisterBtn', 'click', handleDoRegister);
 
-// Allow Enter key submit inside login and register inputs
+// Allow Enter key / form submit inside login and register inputs
+on('loginFormBox', 'submit', (e) => {
+  e.preventDefault();
+  handleDoLogin();
+});
+on('registerFormBox', 'submit', (e) => {
+  e.preventDefault();
+  handleDoRegister();
+});
+on('withdrawFormBox', 'submit', (e) => {
+  e.preventDefault();
+  document.getElementById('submitWithdrawBtn')?.click();
+});
+
 ['loginIdentifier', 'loginPassword'].forEach((id) => {
   on(id, 'keydown', (e) => {
     if (e.key === 'Enter') handleDoLogin();
@@ -651,8 +676,9 @@ function renderInstantPreviewCard(data) {
   const price = data.price > 0 ? fmtVnd(data.price) : 'Đang cập nhật';
   const estCashback = data.estimatedCashback > 0 ? `+${fmtVnd(data.estimatedCashback)}` : null;
 
-  const thumbHtml = data.imageUrl
-    ? `<img src="${escapeHtml(data.imageUrl)}" alt="${title}" class="ip-thumb" referrerpolicy="no-referrer" />`
+  const safeThumbUrl = safeHttpsUrl(data.imageUrl);
+  const thumbHtml = safeThumbUrl
+    ? `<img src="${safeThumbUrl}" alt="${title}" class="ip-thumb" referrerpolicy="no-referrer" />`
     : `<div class="ip-thumb ip-thumb-fallback">🛍️</div>`;
 
   const cashbackPill = estCashback
@@ -1238,6 +1264,20 @@ on('submitWithdrawBtn', 'click', async () => {
   }
 });
 
+on('btnMaxWithdraw', 'click', () => {
+  const available = currentUser?.balanceAvailable || 0;
+  const minAmount = numOr(publicConfig.minWithdrawAmount, 50000);
+  if (available < minAmount) {
+    showToast(`Số dư khả dụng (${fmtVnd(available)}) chưa đủ hạn mức rút tối thiểu (${fmtVnd(minAmount)}).`);
+    return;
+  }
+  const amtInput = document.getElementById('wdAmount');
+  if (amtInput) {
+    amtInput.value = Math.floor(available);
+    showToast(`Đã điền số dư tối đa: ${fmtVnd(Math.floor(available))}`);
+  }
+});
+
 // ================= ADMIN DASHBOARD =================
 let latestAdminUsers = [];
 let latestAdminOrders = [];
@@ -1791,6 +1831,20 @@ function openUserManageModal(user) {
 
 on('closeUserManageModalBtn', 'click', () => {
   userManageModal?.classList.add('hidden');
+});
+
+on('btnGenerateRandomPwd', 'click', () => {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%';
+  let pwd = '';
+  for (let i = 0; i < 12; i++) {
+    pwd += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  const input = document.getElementById('manageNewPassword');
+  if (input) {
+    input.value = pwd;
+    input.type = 'text';
+    showToast('Đã tạo mật khẩu ngẫu nhiên: ' + pwd);
+  }
 });
 
 on('btnResetUserPassword', 'click', async () => {
@@ -2381,6 +2435,26 @@ async function initBoot() {
     switchView(initialHash, false);
   }
 }
+
+// Global Escape key listener to close active modals
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    const modalIds = [
+      'authModal',
+      'userManageModal',
+      'orderEditModal',
+      'vietQrModal',
+      'refQrModal',
+      'pwaGuideModal'
+    ];
+    for (const mId of modalIds) {
+      const el = document.getElementById(mId);
+      if (el && !el.classList.contains('hidden')) {
+        el.classList.add('hidden');
+      }
+    }
+  }
+});
 
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', initBoot);

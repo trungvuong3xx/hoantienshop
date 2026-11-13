@@ -399,7 +399,7 @@
             <h3>Rút Tiền Về Tài Khoản</h3>
             <p class="panel-sub">Hạn mức rút tối thiểu: <strong id="minWithdrawLabel">50.000đ</strong>. Miễn phí rút tiền qua Ngân hàng (VietQR) hoặc MoMo.</p>
 
-            <form id="withdrawFormBox" class="form-stack" onsubmit="return false;">
+            <form id="withdrawFormBox" class="form-stack">
               <div class="form-group">
                 <label for="wdMethod">Phương thức nhận tiền</label>
                 <select id="wdMethod">
@@ -538,7 +538,8 @@
           </div>
           <div class="faq-item">
             <h4>2. Chính sách Bảo vệ Dữ liệu Cá nhân (Tuân thủ Nghị định 13/2023/NĐ-CP)</h4>
-            <p>Chúng tôi chỉ thu thập các thông tin tối thiểu cần thiết để định danh ví hoàn tiền và thực hiện chuyển khoản chi trả cho bạn, bao gồm: Họ tên, Số điện thoại đăng nhập và Thông tin tài khoản nhận tiền hoàn (Ngân hàng/MoMo) do chính bạn cung cấp khi rút tiền. Chúng tôi tuyệt đối không yêu cầu mật khẩu Shopee/TikTok và không chia sẻ dữ liệu của bạn cho bất kỳ bên thứ ba nào.</p>
+            <p>Chúng tôi chỉ thu thập các thông tin tối thiểu cần thiết để định danh ví hoàn tiền và thực hiện chuyển khoản chi trả cho bạn, bao gồm: Họ tên, Số điện thoại và Thông tin tài khoản nhận tiền hoàn (Ngân hàng/MoMo) do chính bạn cung cấp khi tạo yêu cầu rút tiền. Chúng tôi tuyệt đối không yêu cầu mật khẩu Shopee/TikTok hay mã OTP ngân hàng.</p>
+            <p style="margin-top:6px;font-size:13px;color:#475569;">Nhằm vận hành các dịch vụ kỹ thuật, hệ thống sử dụng một số đối tác hạ tầng thiết yếu: dịch vụ VietQR để tạo mã chuyển tiền chính xác, Cloudflare để chống tấn công/gian lận tự động, và mạng lưới CDN chính thức của Shopee/TikTok để tải ảnh sản phẩm. Người dùng có toàn quyền yêu cầu tra cứu, điều chỉnh hoặc xóa dữ liệu tài khoản bất kỳ lúc nào qua kênh hỗ trợ của chúng tôi.</p>
           </div>
           <div class="faq-item">
             <h4>3. Quy định Chống Gian lận & Rút tiền</h4>
@@ -809,11 +810,11 @@
   </main>
 
   <!-- User Management Modal for Admin -->
-  <div id="userManageModal" class="modal-backdrop hidden">
+  <div id="userManageModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="userManageModalTitle">
     <div class="modal-box" style="max-width: 500px;">
       <div class="modal-head">
         <h3 id="userManageModalTitle">Quản Lý Thành Viên</h3>
-        <button type="button" class="close-btn" id="closeUserManageModalBtn">✕</button>
+        <button type="button" class="close-btn" id="closeUserManageModalBtn" aria-label="Đóng">✕</button>
       </div>
 
       <div class="modal-body-form" style="gap: 16px;">
@@ -829,7 +830,8 @@
         <div style="border-top: 1px dashed #cbd5e1; padding-top: 12px;">
           <h4 style="margin: 0 0 8px 0; font-size: 14px;">1. Đổi / Cấp Lại Mật Khẩu</h4>
           <div style="display: flex; gap: 8px;">
-            <input type="text" id="manageNewPassword" placeholder="Nhập mật khẩu mới (VD: 123456)..." style="flex: 1;" />
+            <input type="password" id="manageNewPassword" autocomplete="new-password" minlength="6" maxlength="64" placeholder="Nhập mật khẩu mới (tối thiểu 6 ký tự)..." style="flex: 1;" />
+            <button type="button" class="btn btn-outline btn-sm" id="btnGenerateRandomPwd" title="Tạo mật khẩu ngẫu nhiên an toàn">🎲 Tạo ngẫu nhiên</button>
             <button type="button" class="btn btn-primary btn-sm" id="btnResetUserPassword">Lưu Mật Khẩu</button>
           </div>
         </div>
@@ -861,23 +863,23 @@
   </div>
 
   <!-- Order Edit Modal for Admin -->
-  <div id="orderEditModal" class="modal-backdrop hidden">
+  <div id="orderEditModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="orderEditModalTitle">
     <div class="modal-box" style="max-width: 520px;">
       <div class="modal-head">
-        <h3>✏️ Chỉnh Sửa Chi Tiết Đơn Hàng</h3>
-        <button type="button" class="close-btn" id="closeOrderEditModalBtn">✕</button>
+        <h3 id="orderEditModalTitle">✏️ Chỉnh Sửa Chi Tiết Đơn Hàng</h3>
+        <button type="button" class="close-btn" id="closeOrderEditModalBtn" aria-label="Đóng">✕</button>
       </div>
 
       <div class="modal-body-form" style="gap: 12px;">
         <input type="hidden" id="editOrdId" />
         <div class="form-group">
-          <label>Mã Đơn Hàng (orderSn)</label>
+          <label for="editOrdSn">Mã Đơn Hàng (orderSn)</label>
           <input type="text" id="editOrdSn" readonly style="background:#f1f5f9;font-weight:700;color:#1e293b;" />
         </div>
         <div class="grid-2">
           <div class="form-group">
-            <label>Mã Khách Hàng (hoặc SĐT)</label>
-            <input type="text" id="editOrdUserCode" placeholder="VD: GUEST hoặc mã khách" />
+            <label for="editOrdUserCode">Mã Khách Hàng (hoặc SĐT)</label>
+            <input type="text" id="editOrdUserCode" placeholder="Mã khách hàng hoặc SĐT..." />
           </div>
           <div class="form-group">
             <label>Sàn Thương Mại</label>
@@ -938,11 +940,11 @@
   </footer>
 
   <!-- Auth Modal -->
-  <div id="authModal" class="modal-backdrop hidden">
+  <div id="authModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="authModalTitle">
     <div class="modal-box">
       <div class="modal-head">
         <h3 id="authModalTitle">Đăng nhập tài khoản</h3>
-        <button type="button" class="close-btn" id="closeAuthModalBtn">✕</button>
+        <button type="button" class="close-btn" id="closeAuthModalBtn" aria-label="Đóng">✕</button>
       </div>
 
       <div class="auth-tabs">
@@ -951,50 +953,58 @@
       </div>
 
       <!-- Login Form -->
-      <div id="loginFormBox" class="modal-body-form">
+      <form id="loginFormBox" class="modal-body-form">
         <div class="form-group">
-          <label>Số điện thoại hoặc Email</label>
-          <input type="text" id="loginIdentifier" placeholder="Nhập số điện thoại của bạn..." />
+          <label for="loginIdentifier">Số điện thoại hoặc Email</label>
+          <input type="text" id="loginIdentifier" name="username" autocomplete="username" maxlength="80" placeholder="Nhập số điện thoại hoặc email..." required />
         </div>
         <div class="form-group">
-          <label>Mật khẩu</label>
-          <input type="password" id="loginPassword" placeholder="Nhập mật khẩu..." />
+          <label for="loginPassword">Mật khẩu</label>
+          <input type="password" id="loginPassword" name="password" autocomplete="current-password" maxlength="64" placeholder="Nhập mật khẩu..." required />
         </div>
-        <button type="button" class="btn btn-primary btn-full" id="doLoginBtn">Đăng Nhập</button>
-      </div>
+        <div id="loginTurnstile" class="cf-turnstile" style="margin: 6px 0;"></div>
+        <button type="submit" class="btn btn-primary btn-full" id="doLoginBtn">Đăng Nhập</button>
+      </form>
 
       <!-- Register Form -->
-      <div id="registerFormBox" class="modal-body-form hidden">
+      <form id="registerFormBox" class="modal-body-form hidden">
         <div class="form-group">
-          <label>Họ và tên</label>
-          <input type="text" id="regName" placeholder="Nhập họ tên của bạn" />
+          <label for="regName">Họ và tên</label>
+          <input type="text" id="regName" name="name" autocomplete="name" maxlength="60" placeholder="Nhập họ tên của bạn" required />
         </div>
         <div class="form-group">
-          <label>Số điện thoại</label>
-          <input type="text" id="regPhone" placeholder="Nhập số điện thoại..." />
+          <label for="regPhone">Số điện thoại</label>
+          <input type="tel" id="regPhone" name="tel" autocomplete="tel" inputmode="numeric" pattern="[0-9]{9,15}" maxlength="15" placeholder="Nhập số điện thoại (VD: 0912345678)..." required />
         </div>
         <div class="form-group">
-          <label>Mật khẩu (tối thiểu 6 ký tự)</label>
-          <input type="password" id="regPassword" placeholder="Tạo mật khẩu..." />
+          <label for="regPassword">Mật khẩu (tối thiểu 6 ký tự)</label>
+          <input type="password" id="regPassword" name="new-password" autocomplete="new-password" minlength="6" maxlength="64" placeholder="Tạo mật khẩu..." required />
         </div>
         <div class="form-group">
-          <label>Mã người giới thiệu <span style="font-weight:400;color:#64748b;font-size:12px;">(Không bắt buộc)</span></label>
-          <input type="text" id="regRefCode" placeholder="Nhập mã giới thiệu nếu có (VD: HTS1234)..." style="text-transform:uppercase;" />
+          <label for="regRefCode">Mã người giới thiệu <span style="font-weight:400;color:#64748b;font-size:12px;">(Không bắt buộc)</span></label>
+          <input type="text" id="regRefCode" name="refcode" autocomplete="off" maxlength="32" placeholder="Nhập mã giới thiệu nếu có (VD: HTS1234)..." style="text-transform:uppercase;" />
           <div id="regRefNotice" class="hidden" style="margin-top:5px;font-size:12.5px;color:#16a34a;font-weight:600;">
             🎉 Đã áp dụng mã giới thiệu của bạn bè!
           </div>
         </div>
-        <button type="button" class="btn btn-primary btn-full" id="doRegisterBtn">Đăng Ký Tài Khoản</button>
-      </div>
+        <div class="form-group" style="margin: 10px 0;">
+          <label style="display:flex;align-items:flex-start;gap:8px;font-size:12.5px;color:#475569;font-weight:normal;cursor:pointer;">
+            <input type="checkbox" id="regTermsAgree" required style="margin-top:3px;cursor:pointer;" checked />
+            <span>Tôi đã đọc và đồng ý với <a href="#terms" data-nav="terms" style="color:#ee4d2d;text-decoration:underline;">Điều khoản dịch vụ & Chính sách bảo mật</a> của Hoàn Tiền Sàn (NĐ 13/2023).</span>
+          </label>
+        </div>
+        <div id="registerTurnstile" class="cf-turnstile" style="margin: 6px 0;"></div>
+        <button type="submit" class="btn btn-primary btn-full" id="doRegisterBtn">Đăng Ký Tài Khoản</button>
+      </form>
     </div>
   </div>
 
   <!-- VietQR Modal for Admin Payout -->
-  <div id="vietQrModal" class="modal-backdrop hidden">
+  <div id="vietQrModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="vietQrModalTitle">
     <div class="modal-box" style="text-align:center;padding-bottom:20px;">
       <div class="modal-head">
-        <h3>Quét Mã VietQR Chuyển Khoản</h3>
-        <button type="button" class="close-btn" id="closeVietQrModalBtn">✕</button>
+        <h3 id="vietQrModalTitle">Quét Mã VietQR Chuyển Khoản</h3>
+        <button type="button" class="close-btn" id="closeVietQrModalBtn" aria-label="Đóng">✕</button>
       </div>
       <div style="padding:20px;">
         <img id="vietQrModalImg" src="" alt="VietQR" style="max-width:260px;width:100%;border-radius:12px;border:1px solid #e2e8f0;" />
@@ -1004,11 +1014,11 @@
   </div>
 
   <!-- Referral QR Code Modal -->
-  <div id="refQrModal" class="modal-backdrop hidden">
+  <div id="refQrModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="refQrModalTitle">
     <div class="modal-box" style="text-align:center;max-width:360px;">
       <div class="modal-head">
-        <h3>Mã QR Giới Thiệu Của Bạn</h3>
-        <button type="button" class="close-btn" id="closeRefQrModalBtn">✕</button>
+        <h3 id="refQrModalTitle">Mã QR Giới Thiệu Của Bạn</h3>
+        <button type="button" class="close-btn" id="closeRefQrModalBtn" aria-label="Đóng">✕</button>
       </div>
       <div style="padding:16px 0;">
         <p style="font-size:13px;color:#64748b;margin-top:0;">Quét mã này bằng Camera điện thoại hoặc Zalo để mở link đăng ký:</p>
@@ -1041,14 +1051,14 @@
   </div>
 
   <!-- PWA Install Guide Modal for iOS & Browsers without direct prompt -->
-  <div id="pwaGuideModal" class="modal-backdrop hidden">
+  <div id="pwaGuideModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="pwaGuideModalTitle">
     <div class="modal-box pwa-guide-box">
       <div class="modal-head">
         <div style="display:flex;align-items:center;gap:8px;">
           <span style="font-size:22px;">📲</span>
-          <h3>Ghim App Ra Màn Hình Chính</h3>
+          <h3 id="pwaGuideModalTitle">Ghim App Ra Màn Hình Chính</h3>
         </div>
-        <button type="button" class="close-btn" id="closePwaGuideBtn">✕</button>
+        <button type="button" class="close-btn" id="closePwaGuideBtn" aria-label="Đóng">✕</button>
       </div>
       <div class="pwa-guide-content" id="pwaGuideContent">
         <!-- Dynamic guide steps for iOS or Android/Desktop -->
@@ -1060,8 +1070,8 @@
   </div>
 
   <!-- Toast -->
-  <div id="toast" class="toast hidden"></div>
+  <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
 
-  <script src="/app.js"></script>
+  <script src="/app.js" defer></script>
 </body>
 </html>
