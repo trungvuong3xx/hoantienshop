@@ -8,8 +8,3 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim());
 });
-
-self.addEventListener('fetch', (event) => {
-  // Let the browser fetch network resources directly
-  // This minimal fetch handler satisfies browser PWA install criteria
-});

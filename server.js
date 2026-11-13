@@ -59,15 +59,26 @@ app.use(
 );
 
 // CORS origin whitelist
-const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'https://hoantienshop.vercel.app,http://localhost:3456')
-  .split(',')
+const defaultOrigins = [
+  'https://hoantiensan.online',
+  'https://www.hoantiensan.online',
+  'https://hoantienshop.vercel.app',
+  'http://localhost:3456'
+];
+const allowedOrigins = (process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : defaultOrigins)
   .map((o) => o.trim())
   .filter(Boolean);
 
 app.use(
   cors({
     origin(origin, callback) {
-      if (!origin || allowedOrigins.includes(origin) || origin.endsWith('.vercel.app')) {
+      if (
+        !origin ||
+        allowedOrigins.includes(origin) ||
+        origin.endsWith('.vercel.app') ||
+        origin.endsWith('.hoantiensan.online') ||
+        origin === 'https://hoantiensan.online'
+      ) {
         return callback(null, true);
       }
       return callback(new Error('Origin not allowed by CORS'));
@@ -95,6 +106,15 @@ registerCashbackRoutes(app);
 
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// Global error handling middleware (format JSON errors cleanly)
+app.use((err, req, res, next) => {
+  logger.error('server', 'Unhandled error', { message: err.message });
+  if (err.message && err.message.includes('CORS')) {
+    return res.status(403).json({ error: err.message });
+  }
+  return res.status(500).json({ error: err.message || 'Internal Server Error' });
 });
 
 if (require.main === module) {
