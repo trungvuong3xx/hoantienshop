@@ -34,6 +34,7 @@ body {
   color: var(--text-main);
   line-height: 1.55;
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   flex-direction: column;
 }
@@ -178,9 +179,10 @@ body {
 
   .nav-auth .btn,
   .nav-user .btn {
-    padding: 5px 10px;
-    font-size: 12.5px;
-    height: 32px;
+    padding: 6px 14px;
+    font-size: 13px;
+    min-height: 38px;
+    height: 38px;
   }
 
   .nav-links {
@@ -549,16 +551,28 @@ body {
   border: 1px solid var(--border);
   color: var(--text-sub);
   font-family: inherit;
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 600;
   padding: 6px 12px;
+  min-height: 36px;
   border-radius: 8px;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
 }
 
-.btn-paste-inline:hover {
-  background: #e2e8f0;
-  color: var(--text-main);
+@media (hover: hover) {
+  .btn-paste-inline:hover {
+    background: #e2e8f0;
+    color: var(--text-main);
+  }
+}
+
+.btn-paste-inline:active {
+  background: #cbd5e1;
+  transform: scale(0.96);
 }
 
 .btn-clear-inline {
@@ -567,9 +581,15 @@ body {
   background: none;
   border: none;
   color: var(--text-muted);
-  font-size: 15px;
+  font-size: 16px;
   cursor: pointer;
   padding: 4px;
+  min-width: 36px;
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
 }
 
 /* ==================== INSTANT PREVIEW CARD ==================== */
@@ -935,10 +955,17 @@ body {
   white-space: nowrap;
 }
 
-.btn-copy-inline:hover {
-  border-color: var(--shopee);
-  color: var(--shopee);
-  background: #fff5f2;
+@media (hover: hover) {
+  .btn-copy-inline:hover {
+    border-color: var(--shopee);
+    color: var(--shopee);
+    background: #fff5f2;
+  }
+}
+
+.btn-copy-inline:active {
+  background: #f1f5f9;
+  transform: scale(0.97);
 }
 
 .guest-card-note {
@@ -978,7 +1005,7 @@ body {
 .ref-link-group {
   display: flex;
   gap: 8px;
-  min-width: 280px;
+  min-width: 0;
   flex: 1;
   max-width: 420px;
 }
@@ -1352,26 +1379,14 @@ select:focus {
   white-space: nowrap;
 }
 
-.btn-cta:hover:not(:disabled) {
-  background: var(--shopee-dark);
-}
-
 .btn-primary {
   background: var(--shopee);
   color: #fff;
 }
 
-.btn-primary:hover:not(:disabled) {
-  background: var(--shopee-dark);
-}
-
 .btn-success {
   background: var(--emerald);
   color: #fff;
-}
-
-.btn-success:hover:not(:disabled) {
-  background: var(--emerald-dark);
 }
 
 .btn-outline {
@@ -1380,18 +1395,9 @@ select:focus {
   border-color: var(--border);
 }
 
-.btn-outline:hover {
-  background: var(--bg-soft);
-}
-
 .btn-ghost {
   background: var(--bg-soft);
   color: var(--text-sub);
-}
-
-.btn-ghost:hover {
-  background: #e2e8f0;
-  color: var(--text-main);
 }
 
 .btn-sm {
@@ -1413,18 +1419,10 @@ select:focus {
   border-color: #f59e0b;
 }
 
-.btn-warning:hover:not(:disabled) {
-  background: #d97706;
-}
-
 .btn-secondary {
   background: #64748b;
   color: #ffffff;
   border-color: #64748b;
-}
-
-.btn-secondary:hover:not(:disabled) {
-  background: #475569;
 }
 
 .btn-danger {
@@ -1433,8 +1431,44 @@ select:focus {
   border-color: #dc2626;
 }
 
-.btn-danger:hover:not(:disabled) {
-  background: #b91c1c;
+@media (hover: hover) {
+  .btn-cta:hover:not(:disabled) {
+    background: var(--shopee-dark);
+  }
+
+  .btn-primary:hover:not(:disabled) {
+    background: var(--shopee-dark);
+  }
+
+  .btn-success:hover:not(:disabled) {
+    background: var(--emerald-dark);
+  }
+
+  .btn-outline:hover {
+    background: var(--bg-soft);
+  }
+
+  .btn-ghost:hover {
+    background: #e2e8f0;
+    color: var(--text-main);
+  }
+
+  .btn-warning:hover:not(:disabled) {
+    background: #d97706;
+  }
+
+  .btn-secondary:hover:not(:disabled) {
+    background: #475569;
+  }
+
+  .btn-danger:hover:not(:disabled) {
+    background: #b91c1c;
+  }
+}
+
+.btn:active:not(:disabled) {
+  transform: scale(0.98);
+  opacity: 0.9;
 }
 
 .text-danger {
@@ -1576,9 +1610,27 @@ select:focus {
 .close-btn {
   background: none;
   border: none;
-  font-size: 18px;
+  font-size: 20px;
   cursor: pointer;
   color: var(--text-muted);
+  min-width: 38px;
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  transition: all 0.15s ease;
+}
+
+@media (hover: hover) {
+  .close-btn:hover {
+    background: var(--bg-soft);
+    color: var(--text-main);
+  }
+}
+
+.close-btn:active {
+  background: #e2e8f0;
 }
 
 .auth-tabs {
@@ -1616,7 +1668,7 @@ select:focus {
 /* Toast */
 .toast {
   position: fixed;
-  bottom: 24px;
+  bottom: calc(24px + env(safe-area-inset-bottom, 0px));
   right: 24px;
   background: #0f172a;
   color: #fff;
@@ -1631,7 +1683,7 @@ select:focus {
 /* ==================== PWA INSTALL FLOATING BANNER ==================== */
 .pwa-install-banner {
   position: fixed;
-  bottom: 24px;
+  bottom: calc(24px + env(safe-area-inset-bottom, 0px));
   right: 24px;
   max-width: 400px;
   width: calc(100% - 48px);
@@ -1807,11 +1859,56 @@ select:focus {
 }
 
 @media (max-width: 640px) {
+  /* iOS Safari Auto-Zoom Fix (< 16px triggers zoom on focus) */
+  input,
+  select,
+  textarea,
+  .search-input-group input,
+  .aff-single-input,
+  .modal-box input,
+  .form-group input,
+  .form-group select {
+    font-size: 16px !important;
+  }
+
+  /* Touch targets minimum size */
+  .btn:not(.btn-xs) {
+    min-height: 40px;
+  }
+
+  .nav-btn {
+    min-height: 36px;
+    display: inline-flex;
+    align-items: center;
+  }
+
+  /* Safe Area positioning on iPhone */
   .pwa-install-banner {
-    bottom: 16px;
+    bottom: calc(16px + env(safe-area-inset-bottom, 0px));
     left: 14px;
     right: 14px;
     width: auto;
     max-width: none;
+  }
+
+  .toast {
+    bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+    left: 14px;
+    right: 14px;
+    text-align: center;
+    width: auto;
+    max-width: none;
+  }
+}
+
+/* Accessibility: Reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
