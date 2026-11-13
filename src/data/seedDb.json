@@ -25,11 +25,11 @@
   "users": [
     {
       "id": "usr_admin",
-      "code": "ADMIN",
+      "code": "TRUNGVUONG3X",
       "name": "Quản Trị Viên (Chủ Shop)",
-      "phone": "admin",
-      "email": "admin@hoantienshop.vn",
-      "passwordHash": "scrypt$6d06326d1b3901b2d922590c861e2d52$a9fce75e92f1cfc253d6def4bcadc01e7617ecf02f2233686e3e92be310212eb6dbc2e2805a4b24e50d43f9ed589c5e05b330495f48a2a245d2407626a808178",
+      "phone": "trungvuong3x",
+      "email": "trungvuong3x@hoantiensan.online",
+      "passwordHash": "scrypt$e577945eeef79b24110c723a11142295$410f56f617dfc087dcd49377d0d5ce37da3b92b290f795f4a7b6a8b999b093572fd552321e241a69970a81ccfcc5f3f824bf7ee54d409a5be47499308b851907",
       "role": "admin",
       "balanceAvailable": 22050,
       "balancePending": 0,
@@ -39,7 +39,8 @@
       "bankAccount": "",
       "bankOwner": "TRUNG VUONG",
       "createdAt": "2026-11-11T03:51:32.662Z",
-      "hasNegativeBalance": false
+      "hasNegativeBalance": false,
+      "tokenVersion": 3
     },
     {
       "id": "usr_1794458605769_1fd080",

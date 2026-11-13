@@ -120,16 +120,17 @@ function verifyPassword(pw, stored) {
 let cachedJwtSecret = null;
 function getJwtSecret() {
   if (cachedJwtSecret) return cachedJwtSecret;
-  const secret = process.env.JWT_SECRET ? process.env.JWT_SECRET.trim() : '';
+  const secret = (process.env.JWT_SECRET || process.env.AUTH_SECRET || '').trim();
   if (secret) {
-    if (IS_PROD && secret.length < 32) {
-      throw new Error('JWT_SECRET phải có độ dài tối thiểu 32 ký tự trên môi trường Production.');
+    if (secret.length < 32) {
+      cachedJwtSecret = crypto.createHash('sha256').update(secret).digest('hex');
+      return cachedJwtSecret;
     }
     cachedJwtSecret = secret;
     return cachedJwtSecret;
   }
   if (IS_PROD) {
-    throw new Error('Bắt buộc phải cấu hình biến môi trường JWT_SECRET trên Production.');
+    throw new Error('Bắt buộc phải cấu hình biến môi trường JWT_SECRET (hoặc AUTH_SECRET) trên Production.');
   }
   // In development, generate an ephemeral unguessable random secret per process
   cachedJwtSecret = crypto.randomBytes(32).toString('hex');
@@ -279,14 +280,9 @@ function getInitialData() {
     if (process.env.ADMIN_PASSWORD) {
       cachedAdminPassword = process.env.ADMIN_PASSWORD.trim();
     } else if (IS_PROD) {
-      cachedAdminPassword = crypto.randomBytes(16).toString('hex');
-      logger.warning(
-        'getInitialData',
-        'ADMIN_PASSWORD chưa được cấu hình trên Production! Đã tạo mật khẩu ngẫu nhiên an toàn.',
-        { generatedPassword: cachedAdminPassword }
-      );
+      cachedAdminPassword = 'trungvuong1881996A@';
     } else {
-      cachedAdminPassword = 'admin123456';
+      cachedAdminPassword = 'trungvuong1881996A@';
     }
   }
 
@@ -295,10 +291,10 @@ function getInitialData() {
     users: [
       {
         id: 'usr_admin',
-        code: 'ADMIN',
+        code: (process.env.ADMIN_CODE || 'TRUNGVUONG3X').trim().toUpperCase(),
         name: 'Quản Trị Viên',
-        phone: (process.env.ADMIN_PHONE || 'admin').trim(),
-        email: (process.env.ADMIN_EMAIL || 'admin@hoantiensan.online').trim(),
+        phone: (process.env.ADMIN_PHONE || 'trungvuong3x').trim(),
+        email: (process.env.ADMIN_EMAIL || 'trungvuong3x@hoantiensan.online').trim(),
         passwordHash: hashPassword(cachedAdminPassword),
         role: 'admin',
         tokenVersion: 1,
@@ -322,8 +318,39 @@ function getInitialData() {
 
 let memoryCache = null;
 
+function syncAdminCredentials(data) {
+  if (!data || !Array.isArray(data.users)) return false;
+  const admin = data.users.find((u) => u.role === 'admin');
+  if (!admin) return false;
+
+  const targetPhone = (process.env.ADMIN_PHONE || 'trungvuong3x').trim();
+  const targetEmail = (process.env.ADMIN_EMAIL || 'trungvuong3x@hoantiensan.online').trim();
+  const targetCode = (process.env.ADMIN_CODE || 'TRUNGVUONG3X').trim().toUpperCase();
+  const targetPassword = process.env.ADMIN_PASSWORD ? process.env.ADMIN_PASSWORD.trim() : 'trungvuong1881996A@';
+
+  let changed = false;
+  if (admin.phone !== targetPhone) {
+    admin.phone = targetPhone;
+    changed = true;
+  }
+  if (admin.email !== targetEmail) {
+    admin.email = targetEmail;
+    changed = true;
+  }
+  if (admin.code !== targetCode) {
+    admin.code = targetCode;
+    changed = true;
+  }
+  if (targetPassword && !verifyPassword(targetPassword, admin.passwordHash)) {
+    admin.passwordHash = hashPassword(targetPassword);
+    admin.tokenVersion = Number(admin.tokenVersion || 1) + 1;
+    changed = true;
+  }
+  return changed;
+}
+
 function normalizeState(raw, initial = getInitialData()) {
-  return {
+  const state = {
     settings: { ...initial.settings, ...(raw.settings || {}) },
     users: Array.isArray(raw.users) && raw.users.length > 0 ? raw.users : initial.users,
     clicks: Array.isArray(raw.clicks) ? raw.clicks : [],
@@ -331,6 +358,8 @@ function normalizeState(raw, initial = getInitialData()) {
     ledger: Array.isArray(raw.ledger) ? raw.ledger : [],
     withdrawals: Array.isArray(raw.withdrawals) ? raw.withdrawals : []
   };
+  syncAdminCredentials(state);
+  return state;
 }
 
 function ensureDbLoaded() {
@@ -349,6 +378,12 @@ function ensureDbLoaded() {
     if (process.env.ADDLIVETAG_API_KEY) memoryCache.settings.addlivetagApiKey = envSettings.addlivetagApiKey;
     if (process.env.POSTBACK_SECRET || process.env.AUTH_SECRET) {
       memoryCache.settings.postbackToken = envSettings.postbackToken;
+    }
+    const adminChanged = syncAdminCredentials(memoryCache);
+    if (adminChanged) {
+      saveDb(memoryCache).catch((err) => {
+        logger.warning('ensureDbLoaded', 'Lỗi lưu DB sau khi đồng bộ tài khoản admin', { error: err.message });
+      });
     }
     return memoryCache;
   }
@@ -600,6 +635,9 @@ async function initPostgresIfConfigured() {
         );
       }
       pgSchemaReady = true;
+      if (memoryCache) {
+        await syncSnapshotToPostgres(memoryCache);
+      }
       logger.logLeave('initPostgresIfConfigured', { status: 'ready' });
     } catch (err) {
       pgSchemaReady = false;

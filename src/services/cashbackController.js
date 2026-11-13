@@ -508,110 +508,120 @@ function registerCashbackRoutes(app) {
   });
 
   // 2. Auth: Register (scrypt + 1-level referral + Turnstile check)
-  app.post('/api/auth/register', authLimiter, async (req, res) => {
+  app.post('/api/auth/register', authLimiter, async (req, res, next) => {
     logger.logEnter('POST /api/auth/register');
-    const { name, phone, email, password, refCode, turnstileToken } = req.body || {};
+    try {
+      const { name, phone, email, password, refCode, turnstileToken } = req.body || {};
 
-    const turnstileOk = await verifyTurnstileIfEnabled(turnstileToken, getClientIp(req));
-    if (!turnstileOk) {
-      return res.status(400).json({ error: 'Xác thực chống bot không hợp lệ. Vui lòng thử lại.' });
-    }
-
-    const cleanPhone = String(phone || '').trim().replace(/\s+/g, '');
-    if (!/^[0-9+]{8,15}$/.test(cleanPhone) || !password || String(password).length < 6) {
-      return res.status(400).json({
-        error: 'Vui lòng nhập Số điện thoại hợp lệ (8-15 số) và Mật khẩu tối thiểu 6 ký tự.'
-      });
-    }
-
-    const db = ensureDbLoaded();
-    const exists = db.users.find(
-      (u) =>
-        u.phone === cleanPhone ||
-        (email && u.email && u.email.toLowerCase() === String(email).trim().toLowerCase())
-    );
-    if (exists) {
-      return res.status(400).json({ error: 'Số điện thoại này đã được đăng ký.' });
-    }
-
-    // Validate 1-level referrer if provided
-    let validReferrerCode = null;
-    if (refCode && typeof refCode === 'string') {
-      const refUser = db.users.find(
-        (u) => u.code.toUpperCase() === refCode.trim().toUpperCase()
-      );
-      if (refUser) {
-        validReferrerCode = refUser.code;
+      const turnstileOk = await verifyTurnstileIfEnabled(turnstileToken, getClientIp(req));
+      if (!turnstileOk) {
+        return res.status(400).json({ error: 'Xác thực chống bot không hợp lệ. Vui lòng thử lại.' });
       }
+
+      const cleanPhone = String(phone || '').trim().replace(/\s+/g, '');
+      if (!/^[0-9+]{8,15}$/.test(cleanPhone) || !password || String(password).length < 6) {
+        return res.status(400).json({
+          error: 'Vui lòng nhập Số điện thoại hợp lệ (8-15 số) và Mật khẩu tối thiểu 6 ký tự.'
+        });
+      }
+
+      const db = ensureDbLoaded();
+      const exists = db.users.find(
+        (u) =>
+          u.phone === cleanPhone ||
+          (email && u.email && u.email.toLowerCase() === String(email).trim().toLowerCase())
+      );
+      if (exists) {
+        return res.status(400).json({ error: 'Số điện thoại này đã được đăng ký.' });
+      }
+
+      // Validate 1-level referrer if provided
+      let validReferrerCode = null;
+      if (refCode && typeof refCode === 'string') {
+        const refUser = db.users.find(
+          (u) => u.code.toUpperCase() === refCode.trim().toUpperCase()
+        );
+        if (refUser) {
+          validReferrerCode = refUser.code;
+        }
+      }
+
+      const newUser = {
+        id: `usr_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`,
+        code: generateUserCode(cleanPhone, db.users),
+        name: String(name || cleanPhone).trim().slice(0, 60),
+        phone: cleanPhone,
+        email: String(email || '').trim().slice(0, 80),
+        passwordHash: hashPassword(password),
+        role: 'user',
+        tokenVersion: 1,
+        referredBy: validReferrerCode,
+        balanceAvailable: 0,
+        balancePending: 0,
+        totalEarned: 0,
+        totalWithdrawn: 0,
+        bankName: '',
+        bankAccount: '',
+        bankOwner: '',
+        createdAt: new Date().toISOString()
+      };
+
+      db.users.push(newUser);
+      await saveDb(db);
+
+      const token = createToken(newUser);
+      setAuthCookie(res, token);
+      logger.logLeave('POST /api/auth/register', { userCode: newUser.code });
+      return res.json({ token, user: sanitizeUser(newUser) });
+    } catch (err) {
+      logger.error('POST /api/auth/register', 'Lỗi đăng ký tài khoản', { error: err.message });
+      next(err);
     }
-
-    const newUser = {
-      id: `usr_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`,
-      code: generateUserCode(cleanPhone, db.users),
-      name: String(name || cleanPhone).trim().slice(0, 60),
-      phone: cleanPhone,
-      email: String(email || '').trim().slice(0, 80),
-      passwordHash: hashPassword(password),
-      role: 'user',
-      tokenVersion: 1,
-      referredBy: validReferrerCode,
-      balanceAvailable: 0,
-      balancePending: 0,
-      totalEarned: 0,
-      totalWithdrawn: 0,
-      bankName: '',
-      bankAccount: '',
-      bankOwner: '',
-      createdAt: new Date().toISOString()
-    };
-
-    db.users.push(newUser);
-    await saveDb(db);
-
-    const token = createToken(newUser);
-    setAuthCookie(res, token);
-    logger.logLeave('POST /api/auth/register', { userCode: newUser.code });
-    return res.json({ token, user: sanitizeUser(newUser) });
   });
 
   // 3. Auth: Login (timingSafeEqual + automatic upgrade to scrypt + HttpOnly cookie)
-  app.post('/api/auth/login', authLimiter, async (req, res) => {
+  app.post('/api/auth/login', authLimiter, async (req, res, next) => {
     logger.logEnter('POST /api/auth/login');
-    const { identifier, password, turnstileToken } = req.body || {};
-    if (!identifier || !password) {
-      return res.status(400).json({ error: 'Vui lòng nhập Số điện thoại và Mật khẩu.' });
+    try {
+      const { identifier, password, turnstileToken } = req.body || {};
+      if (!identifier || !password) {
+        return res.status(400).json({ error: 'Vui lòng nhập Số điện thoại và Mật khẩu.' });
+      }
+
+      const turnstileOk = await verifyTurnstileIfEnabled(turnstileToken, getClientIp(req));
+      if (!turnstileOk) {
+        return res.status(400).json({ error: 'Xác thực chống bot không hợp lệ.' });
+      }
+
+      const cleanId = String(identifier).trim().toLowerCase();
+      const db = ensureDbLoaded();
+
+      const user = db.users.find(
+        (u) =>
+          u.phone.toLowerCase() === cleanId ||
+          (u.email && u.email.toLowerCase() === cleanId) ||
+          u.code.toLowerCase() === cleanId
+      );
+
+      if (!user || !verifyPassword(password, user.passwordHash)) {
+        return res.status(401).json({ error: 'Thông tin đăng nhập không chính xác.' });
+      }
+
+      // Automatically upgrade legacy hash to scrypt
+      if (!String(user.passwordHash).startsWith('scrypt$')) {
+        user.passwordHash = hashPassword(password);
+        await saveDb(db);
+      }
+
+      recalculateUserWallet(user.id);
+      const token = createToken(user);
+      setAuthCookie(res, token);
+      logger.logLeave('POST /api/auth/login', { userCode: user.code, role: user.role });
+      return res.json({ token, user: sanitizeUser(user) });
+    } catch (err) {
+      logger.error('POST /api/auth/login', 'Lỗi đăng nhập', { error: err.message });
+      next(err);
     }
-
-    const turnstileOk = await verifyTurnstileIfEnabled(turnstileToken, getClientIp(req));
-    if (!turnstileOk) {
-      return res.status(400).json({ error: 'Xác thực chống bot không hợp lệ.' });
-    }
-
-    const cleanId = String(identifier).trim().toLowerCase();
-    const db = ensureDbLoaded();
-
-    const user = db.users.find(
-      (u) =>
-        u.phone.toLowerCase() === cleanId ||
-        (u.email && u.email.toLowerCase() === cleanId) ||
-        u.code.toLowerCase() === cleanId
-    );
-
-    if (!user || !verifyPassword(password, user.passwordHash)) {
-      return res.status(401).json({ error: 'Thông tin đăng nhập không chính xác.' });
-    }
-
-    // Automatically upgrade legacy hash to scrypt
-    if (!String(user.passwordHash).startsWith('scrypt$')) {
-      user.passwordHash = hashPassword(password);
-      await saveDb(db);
-    }
-
-    recalculateUserWallet(user.id);
-    const token = createToken(user);
-    setAuthCookie(res, token);
-    logger.logLeave('POST /api/auth/login', { userCode: user.code, role: user.role });
-    return res.json({ token, user: sanitizeUser(user) });
   });
 
   app.post('/api/auth/logout', (req, res) => {
