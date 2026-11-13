@@ -41,7 +41,7 @@ const helmet = require('helmet');
 const cors = require('cors');
 const logger = require('./src/utils/logger');
 const { registerCashbackRoutes } = require('./src/services/cashbackController');
-const { ensureDbLoaded, getDatabaseStatus } = require('./src/services/dbService');
+const { ensureDbLoaded, getDatabaseStatus, initPostgresIfConfigured } = require('./src/services/dbService');
 
 const app = express();
 const PORT = process.env.PORT || 3456;
@@ -121,6 +121,23 @@ app.use((req, res, next) => {
 
 // Serve frontend static assets
 app.use(express.static(path.join(__dirname, 'public')));
+
+// Ensure Postgres is ready before serving API or health checks
+app.use(async (req, res, next) => {
+  if (req.path.startsWith('/api') || req.path.startsWith('/go')) {
+    try {
+      await initPostgresIfConfigured();
+    } catch (err) {
+      logger.error('server', 'Postgres startup error', { error: err.message });
+      if (process.env.DATABASE_URL || process.env.POSTGRES_URL) {
+        return res.status(503).json({
+          error: 'Cơ sở dữ liệu đang đồng bộ hoặc khởi động. Vui lòng tải lại trang sau vài giây.'
+        });
+      }
+    }
+  }
+  next();
+});
 
 // Readiness and liveness health check
 app.get('/api/health', (req, res) => {
@@ -210,6 +227,10 @@ app.use((err, req, res, next) => {
 });
 
 if (require.main === module) {
+  initPostgresIfConfigured().catch((err) => {
+    logger.error('server', 'Khởi tạo kết nối Postgres nền thất bại', { error: err.message });
+  });
+
   const server = app.listen(PORT, () => {
     logger.log('server', `HoanTienShop Web App running at http://localhost:${PORT}`, {
       port: PORT

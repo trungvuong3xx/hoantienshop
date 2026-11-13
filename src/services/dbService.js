@@ -425,7 +425,7 @@ function ensureDbLoaded() {
     const initial = getInitialData();
     memoryCache = normalizeState(parsed, initial);
 
-    if (sourcePath === SEED_DB_PATH) {
+    if (sourcePath === SEED_DB_PATH && !pgPool) {
       saveDb(memoryCache).catch((err) => {
         logger.warning('ensureDbLoaded', 'Không thể lưu bản khởi tạo từ seed', { error: err.message });
       });
@@ -434,9 +434,11 @@ function ensureDbLoaded() {
   }
 
   memoryCache = getInitialData();
-  saveDb(memoryCache).catch((err) => {
-    logger.warning('ensureDbLoaded', 'Không thể lưu bản khởi tạo mới', { error: err.message });
-  });
+  if (!pgPool) {
+    saveDb(memoryCache).catch((err) => {
+      logger.warning('ensureDbLoaded', 'Không thể lưu bản khởi tạo mới', { error: err.message });
+    });
+  }
   return memoryCache;
 }
 
@@ -622,23 +624,32 @@ async function initPostgresIfConfigured() {
         FOR EACH ROW EXECUTE FUNCTION ledger_immutable();
       `);
 
-      const res = await client.query(`SELECT payload FROM hoantienshop_state WHERE id = 'main'`);
-      if (res.rows.length > 0 && res.rows[0].payload) {
-        const p = res.rows[0].payload;
-        const initial = getInitialData();
-        memoryCache = normalizeState(p, initial);
-      } else {
-        const current = ensureDbLoaded();
-        await client.query(
-          `INSERT INTO hoantienshop_state (id, payload, updated_at) VALUES ('main', $1, NOW()) ON CONFLICT (id) DO NOTHING`,
-          [JSON.stringify(current)]
-        );
-      }
+      // Relational-authoritative state synchronization from Postgres
+      const loadedState = await loadAuthoritativeStateFromPostgres(client);
+      memoryCache = loadedState;
       pgSchemaReady = true;
-      if (memoryCache) {
-        await syncSnapshotToPostgres(memoryCache);
-      }
-      logger.logLeave('initPostgresIfConfigured', { status: 'ready' });
+
+      // Update hoantienshop_state snapshot so it stays 100% consistent
+      await client.query(
+        `INSERT INTO hoantienshop_state (id, payload, updated_at) VALUES ('main', $1, NOW())
+         ON CONFLICT (id) DO UPDATE SET payload = EXCLUDED.payload, updated_at = NOW()`,
+        [JSON.stringify(loadedState)]
+      );
+
+      // Persist authoritative state to disk cache
+      try {
+        const dir = path.dirname(LOCAL_DB_PATH);
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        const tmpPath = `${LOCAL_DB_PATH}.tmp.${process.pid}.${Date.now()}`;
+        fs.writeFileSync(tmpPath, JSON.stringify(loadedState), 'utf8');
+        fs.renameSync(tmpPath, LOCAL_DB_PATH);
+      } catch (_) {}
+
+      logger.logLeave('initPostgresIfConfigured', {
+        status: 'ready',
+        usersCount: memoryCache.users.length,
+        ordersCount: memoryCache.orders.length
+      });
     } catch (err) {
       pgSchemaReady = false;
       logger.error('initPostgresIfConfigured', 'Khởi tạo Postgres thất bại', { error: err.message });
@@ -649,6 +660,147 @@ async function initPostgresIfConfigured() {
   })();
 
   return dbInitPromise;
+}
+
+/**
+ * Loads and reconstructs full state from relational Postgres tables.
+ * Relational tables (users, orders, ledger, withdrawals, clicks) take absolute precedence
+ * over the snapshot payload blob, preventing user loss on restarts.
+ */
+async function loadAuthoritativeStateFromPostgres(client) {
+  const usersRes = await client.query('SELECT * FROM users ORDER BY created_at ASC');
+  const ordersRes = await client.query('SELECT * FROM orders ORDER BY created_at DESC');
+  const ledgerRes = await client.query('SELECT * FROM ledger ORDER BY created_at ASC');
+  const withdrawalsRes = await client.query('SELECT * FROM withdrawals ORDER BY created_at DESC');
+  const clicksRes = await client.query('SELECT * FROM clicks ORDER BY created_at DESC LIMIT 5000');
+  const stateRes = await client.query("SELECT payload FROM hoantienshop_state WHERE id = 'main'");
+
+  const initial = getInitialData();
+  let settings = initial.settings;
+  let payloadUsers = [];
+
+  if (stateRes.rows.length > 0 && stateRes.rows[0].payload) {
+    const p = stateRes.rows[0].payload;
+    if (p.settings && typeof p.settings === 'object') {
+      settings = { ...settings, ...p.settings };
+    }
+    if (Array.isArray(p.users)) {
+      payloadUsers = p.users;
+    }
+  }
+
+  let finalUsers = [];
+  if (usersRes.rows.length > 0) {
+    const tableUsers = usersRes.rows.map((row) => ({
+      id: row.id,
+      code: row.code,
+      name: row.name || '',
+      phone: row.phone,
+      email: row.email || '',
+      passwordHash: row.password_hash,
+      role: row.role || 'user',
+      tokenVersion: Number(row.token_version || 1),
+      referredBy: row.referred_by || null,
+      balanceAvailable: Math.round(Number(row.balance_available || 0)),
+      balancePending: Math.round(Number(row.balance_pending || 0)),
+      totalEarned: Math.round(Number(row.total_earned || 0)),
+      totalWithdrawn: Math.round(Number(row.total_withdrawn || 0)),
+      bankName: row.bank_name || '',
+      bankAccount: row.bank_account || '',
+      bankOwner: row.bank_owner || '',
+      accountLocked: Boolean(row.account_locked),
+      createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString()
+    }));
+
+    const userMap = new Map();
+    for (const u of tableUsers) {
+      userMap.set(u.id, u);
+    }
+    for (const u of payloadUsers) {
+      if (u && u.id && !userMap.has(u.id)) {
+        userMap.set(u.id, u);
+      }
+    }
+    finalUsers = Array.from(userMap.values());
+  } else if (payloadUsers.length > 0) {
+    finalUsers = payloadUsers;
+  } else {
+    finalUsers = initial.users;
+  }
+
+  const finalOrders = ordersRes.rows.length > 0
+    ? ordersRes.rows.map((row) => ({
+        orderSn: row.order_sn,
+        platform: row.platform || 'shopee',
+        clickId: row.click_id || null,
+        userId: row.user_id || null,
+        userCode: row.user_code || 'GUEST',
+        productName: row.product_name || '',
+        orderAmount: Math.round(Number(row.order_amount || 0)),
+        grossCommission: Math.round(Number(row.gross_commission || 0)),
+        taxAmount: Math.round(Number(row.tax_amount || 0)),
+        netCommission: Math.round(Number(row.net_commission || 0)),
+        cashbackRate: Number(row.cashback_rate || 70),
+        userCashbackAmount: Math.round(Number(row.user_cashback_amount || 0)),
+        adminShareAmount: Math.round(Number(row.admin_share_amount || 0)),
+        status: row.status || 'pending',
+        createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
+        updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : new Date().toISOString()
+      }))
+    : (stateRes.rows[0]?.payload?.orders || []);
+
+  const finalLedger = ledgerRes.rows.length > 0
+    ? ledgerRes.rows.map((row) => ({
+        id: row.id,
+        userId: row.user_id,
+        type: row.type,
+        amount: Math.round(Number(row.amount || 0)),
+        refId: row.ref_id,
+        note: row.note || '',
+        createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString()
+      }))
+    : (stateRes.rows[0]?.payload?.ledger || []);
+
+  const finalWithdrawals = withdrawalsRes.rows.length > 0
+    ? withdrawalsRes.rows.map((row) => ({
+        id: row.id,
+        userId: row.user_id,
+        userCode: row.user_code || '',
+        userName: row.user_name || '',
+        userPhone: row.user_phone || '',
+        amount: Math.round(Number(row.amount || 0)),
+        method: row.method || 'bank',
+        bankName: row.bank_name || '',
+        bankAccount: row.bank_account || '',
+        bankOwner: row.bank_owner || '',
+        status: row.status || 'pending',
+        createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
+        processedAt: row.processed_at ? new Date(row.processed_at).toISOString() : (row.updated_at ? new Date(row.updated_at).toISOString() : null)
+      }))
+    : (stateRes.rows[0]?.payload?.withdrawals || []);
+
+  const finalClicks = clicksRes.rows.length > 0
+    ? clicksRes.rows.map((row) => ({
+        clickId: row.click_id,
+        userId: row.user_id || null,
+        userCode: row.user_code || 'GUEST',
+        platform: row.platform || 'shopee',
+        originalUrl: row.original_url || '',
+        cleanUrl: row.clean_url || '',
+        productId: row.product_id || '',
+        affiliateUrl: row.affiliate_url || '',
+        createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString()
+      }))
+    : (stateRes.rows[0]?.payload?.clicks || memoryCache?.clicks || []);
+
+  return {
+    settings,
+    users: finalUsers,
+    clicks: finalClicks,
+    orders: finalOrders,
+    ledger: finalLedger,
+    withdrawals: finalWithdrawals
+  };
 }
 
 async function syncSnapshotToPostgres(data) {
@@ -767,7 +919,28 @@ async function syncSnapshotToPostgres(data) {
       );
     }
 
-    // 5. Update state snapshot with timestamp
+    // 5. Sync clicks (keep latest 500)
+    for (const c of (data.clicks || []).slice(-500)) {
+      if (!c.clickId) continue;
+      await client.query(
+        `INSERT INTO clicks (click_id, user_id, user_code, platform, original_url, clean_url, product_id, affiliate_url, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         ON CONFLICT (click_id) DO NOTHING`,
+        [
+          c.clickId,
+          c.userId || null,
+          c.userCode || 'GUEST',
+          c.platform || 'shopee',
+          c.originalUrl || '',
+          c.cleanUrl || '',
+          c.productId || '',
+          c.affiliateUrl || '',
+          c.createdAt || new Date().toISOString()
+        ]
+      );
+    }
+
+    // 6. Update state snapshot with timestamp
     await client.query(
       `INSERT INTO hoantienshop_state (id, payload, updated_at) VALUES ('main', $1, NOW())
        ON CONFLICT (id) DO UPDATE SET payload = EXCLUDED.payload, updated_at = NOW()`,
@@ -788,21 +961,16 @@ async function reloadStateFromPostgres() {
   try {
     const client = await pgPool.connect();
     try {
-      const res = await client.query(`SELECT payload FROM hoantienshop_state WHERE id = 'main'`);
-      if (res.rows.length > 0 && res.rows[0].payload) {
-        const p = res.rows[0].payload;
-        const initial = getInitialData();
-        const fresh = normalizeState(p, initial);
-        if (memoryCache) {
-          Object.assign(memoryCache.settings, fresh.settings);
-          memoryCache.users = fresh.users;
-          memoryCache.clicks = fresh.clicks;
-          memoryCache.orders = fresh.orders;
-          memoryCache.ledger = fresh.ledger;
-          memoryCache.withdrawals = fresh.withdrawals;
-        } else {
-          memoryCache = fresh;
-        }
+      const fresh = await loadAuthoritativeStateFromPostgres(client);
+      if (memoryCache) {
+        Object.assign(memoryCache.settings, fresh.settings);
+        memoryCache.users = fresh.users;
+        memoryCache.clicks = fresh.clicks;
+        memoryCache.orders = fresh.orders;
+        memoryCache.ledger = fresh.ledger;
+        memoryCache.withdrawals = fresh.withdrawals;
+      } else {
+        memoryCache = fresh;
       }
     } finally {
       client.release();
