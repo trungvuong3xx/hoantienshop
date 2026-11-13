@@ -269,12 +269,23 @@
             </div>
           </div>
 
-          <!-- Link & Action Buttons -->
-          <div style="display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; align-items: center;">
-            <div style="flex: 1; min-width: 240px; position: relative;">
-              <input type="text" id="userReferralLinkInput" readonly style="width: 100%; background: #ffffff; border: 1px solid #fdba74; border-radius: 8px; padding: 10px 12px; font-weight: 600; font-size: 13.5px; color: #1e293b; box-sizing: border-box;" value="" placeholder="Đang tải link giới thiệu..." />
+          <!-- Prominent Referral Code Box -->
+          <div style="display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; align-items: center; background: #ffffff; padding: 12px 14px; border-radius: 10px; border: 1.5px solid #fed7aa;">
+            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; flex: 1;">
+              <span style="font-size: 13px; color: #64748b; font-weight: 600;">Mã giới thiệu của bạn:</span>
+              <span id="userMyRefCodeDisplay" style="font-family: monospace; font-size: 17px; font-weight: 800; color: #ea580c; background: #ffedd5; padding: 4px 10px; border-radius: 6px; border: 1px dashed #f97316; letter-spacing: 1px;">...</span>
             </div>
-            <button type="button" class="btn btn-primary" id="copyRefLinkBtn" style="white-space: nowrap; background: #ea580c; border-color: #ea580c;">
+            <button type="button" class="btn btn-sm btn-primary" id="copyRefCodeBtn" style="white-space: nowrap; background: #ea580c; border-color: #ea580c;">
+              🔑 Sao Chép Mã
+            </button>
+          </div>
+
+          <!-- Link & Action Buttons -->
+          <div style="display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; align-items: center;">
+            <div style="flex: 1; min-width: 240px; position: relative;">
+              <input type="text" id="userReferralLinkInput" readonly style="width: 100%; background: #ffffff; border: 1px solid #fdba74; border-radius: 8px; padding: 10px 12px; font-weight: 600; font-size: 13px; color: #1e293b; box-sizing: border-box;" value="" placeholder="Đang tải link giới thiệu..." />
+            </div>
+            <button type="button" class="btn btn-outline" id="copyRefLinkBtn" style="white-space: nowrap; border-color: #f97316; color: #c2410c; background: #ffffff;">
               📋 Sao Chép Link
             </button>
             <button type="button" class="btn btn-outline" id="shareZaloBtn" style="white-space: nowrap; border-color: #0068ff; color: #0068ff; background: #ffffff;">
@@ -936,6 +947,13 @@
         <div class="form-group">
           <label>Mật khẩu (tối thiểu 6 ký tự)</label>
           <input type="password" id="regPassword" placeholder="Tạo mật khẩu..." />
+        </div>
+        <div class="form-group">
+          <label>Mã người giới thiệu <span style="font-weight:400;color:#64748b;font-size:12px;">(Không bắt buộc)</span></label>
+          <input type="text" id="regRefCode" placeholder="Nhập mã giới thiệu nếu có (VD: HTS1234)..." style="text-transform:uppercase;" />
+          <div id="regRefNotice" class="hidden" style="margin-top:5px;font-size:12.5px;color:#16a34a;font-weight:600;">
+            🎉 Đã áp dụng mã giới thiệu của bạn bè!
+          </div>
         </div>
         <button type="button" class="btn btn-primary btn-full" id="doRegisterBtn">Đăng Ký Tài Khoản</button>
       </div>

@@ -393,8 +393,10 @@ function openAuthModal(tab = 'login') {
 
   const savedRef = safeStorage.get('hoantienshop_ref', sessionStorage);
   const regRefInput = document.getElementById('regRefCode');
+  const regRefNotice = document.getElementById('regRefNotice');
   if (savedRef && regRefInput && !regRefInput.value) {
-    regRefInput.value = savedRef;
+    regRefInput.value = savedRef.toUpperCase();
+    regRefNotice?.classList.remove('hidden');
   }
 }
 
@@ -500,6 +502,19 @@ on('doRegisterBtn', 'click', handleDoRegister);
     if (e.key === 'Enter') handleDoRegister();
   });
 });
+
+const regRefCodeInput = document.getElementById('regRefCode');
+if (regRefCodeInput) {
+  regRefCodeInput.addEventListener('input', () => {
+    regRefCodeInput.value = regRefCodeInput.value.toUpperCase();
+    const notice = document.getElementById('regRefNotice');
+    if (regRefCodeInput.value.trim()) {
+      notice?.classList.remove('hidden');
+    } else {
+      notice?.classList.add('hidden');
+    }
+  });
+}
 
 on('logoutBtn', 'click', () => {
   clearSession();
@@ -1003,7 +1018,10 @@ async function loadUserReferrals() {
       if (el) el.textContent = txt;
     };
 
-    const refLink = `${window.location.origin}/?ref=${encodeURIComponent(data.referralCode || currentUser.code || '')}`;
+    const myCode = (data.referralCode || currentUser.code || '').toUpperCase();
+    setTxt('userMyRefCodeDisplay', myCode || '...');
+
+    const refLink = `${window.location.origin}/?ref=${encodeURIComponent(myCode)}`;
     const refInput = document.getElementById('userReferralLinkInput');
     if (refInput) refInput.value = refLink;
 
@@ -1047,6 +1065,13 @@ async function loadUserReferrals() {
     console.warn('loadUserReferrals error:', err);
   }
 }
+
+on('copyRefCodeBtn', 'click', () => {
+  const code = document.getElementById('userMyRefCodeDisplay')?.textContent?.trim() || currentUser?.code;
+  if (code && code !== '...') {
+    copyText(code, `Đã sao chép mã giới thiệu: ${code}!`);
+  }
+});
 
 on('copyRefLinkBtn', 'click', () => {
   const val = document.getElementById('userReferralLinkInput')?.value;
