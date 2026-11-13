@@ -2,104 +2,423 @@ const dns = require('dns').promises;
 const net = require('net');
 const logger = require('../utils/logger');
 
-const USER_AGENT =
+// Top-level configurable constants
+const DEFAULT_USER_AGENT =
+  process.env.RESOLVER_USER_AGENT ||
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 
-const URL_REGEX = /https?:\/\/[^\s<>"')\]}]+/gi;
+const DEFAULT_TOTAL_TIMEOUT_MS = 8000;
+const DEFAULT_HOP_TIMEOUT_MS = 4000;
+const DEFAULT_DNS_TIMEOUT_MS = 2500;
+const DEFAULT_MAX_HOPS = 4;
+const MAX_HTML_BYTES = 16384;
+const MAX_TEXT_INPUT_LENGTH = 30000;
+const MAX_EXTRACTED_URLS = 15;
 
-// Strict domain whitelist for SSRF & Open Redirect prevention
-const ALLOWED_DOMAINS = ['shopee.vn', 'shp.ee', 'shope.ee', 'tiktok.com'];
+const RESOLVE_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+const MAX_RESOLVE_CACHE_SIZE = 500;
+const resolveCache = new Map();
 
-function isAllowedHost(hostname) {
-  if (!hostname || typeof hostname !== 'string') return false;
-  const h = hostname.toLowerCase().trim();
-  return ALLOWED_DOMAINS.some((d) => h === d || h.endsWith('.' + d));
+// Platform domain & host configuration
+const PLATFORM_CONFIG = {
+  shopee: {
+    canonicalHosts: new Set([
+      'shopee.vn',
+      'www.shopee.vn',
+      'affiliate.shopee.vn'
+    ]),
+    shortenerHosts: new Set([
+      's.shopee.vn',
+      'vn.shp.ee',
+      'shp.ee',
+      'shope.ee'
+    ]),
+    cdnHosts: [
+      'cf.shopee.vn',
+      'susercontent.com',
+      'shopeemobile.com'
+    ]
+  },
+  tiktok: {
+    canonicalHosts: new Set([
+      'tiktok.com',
+      'www.tiktok.com',
+      'shop.tiktok.com',
+      'm.tiktok.com'
+    ]),
+    shortenerHosts: new Set([
+      'vt.tiktok.com',
+      'vm.tiktok.com'
+    ]),
+    cdnHosts: [
+      'tiktokcdn.com',
+      'ibyteimg.com',
+      'byteoversea.com'
+    ]
+  }
+};
+
+const ALL_ALLOWED_HOSTS = new Set([
+  ...PLATFORM_CONFIG.shopee.canonicalHosts,
+  ...PLATFORM_CONFIG.shopee.shortenerHosts,
+  ...PLATFORM_CONFIG.tiktok.canonicalHosts,
+  ...PLATFORM_CONFIG.tiktok.shortenerHosts
+]);
+
+// Custom Error Class
+class UrlResolveError extends Error {
+  constructor(code, message, details = {}) {
+    super(message || code);
+    this.name = 'UrlResolveError';
+    this.code = code;
+    this.details = details;
+  }
 }
+
+// Net BlockList for Private & Special IP ranges (SSRF prevention)
+const blockList = new net.BlockList();
+
+// IPv4 subnets
+blockList.addSubnet('0.0.0.0', 8, 'ipv4');
+blockList.addSubnet('10.0.0.0', 8, 'ipv4');
+blockList.addSubnet('100.64.0.0', 10, 'ipv4');
+blockList.addSubnet('127.0.0.0', 8, 'ipv4');
+blockList.addSubnet('169.254.0.0', 16, 'ipv4');
+blockList.addSubnet('172.16.0.0', 12, 'ipv4');
+blockList.addSubnet('192.0.0.0', 24, 'ipv4');
+blockList.addSubnet('192.0.2.0', 24, 'ipv4');
+blockList.addSubnet('192.88.99.0', 24, 'ipv4');
+blockList.addSubnet('192.168.0.0', 16, 'ipv4');
+blockList.addSubnet('198.18.0.0', 15, 'ipv4');
+blockList.addSubnet('198.51.100.0', 24, 'ipv4');
+blockList.addSubnet('203.0.113.0', 24, 'ipv4');
+blockList.addSubnet('224.0.0.0', 4, 'ipv4');
+blockList.addSubnet('240.0.0.0', 4, 'ipv4');
+blockList.addAddress('255.255.255.255', 'ipv4');
+
+// IPv6 subnets & addresses
+blockList.addAddress('::', 'ipv6');
+blockList.addAddress('::1', 'ipv6');
+blockList.addSubnet('64:ff9b::', 96, 'ipv6');
+blockList.addSubnet('100::', 64, 'ipv6');
+blockList.addSubnet('2001::', 23, 'ipv6');
+blockList.addSubnet('2001:db8::', 32, 'ipv6');
+blockList.addSubnet('2002::', 16, 'ipv6');
+blockList.addSubnet('fc00::', 7, 'ipv6');
+blockList.addSubnet('fe80::', 10, 'ipv6');
+blockList.addSubnet('fec0::', 10, 'ipv6');
+blockList.addSubnet('ff00::', 8, 'ipv6');
 
 function isPrivateIp(ip) {
-  if (!ip) return true;
-  if (net.isIPv6(ip)) {
-    const norm = ip.toLowerCase();
-    if (norm === '::1' || norm === '::' || /^(fc|fd|fe80)/i.test(norm)) return true;
-    if (norm.startsWith('::ffff:')) {
-      return isPrivateIp(norm.slice(7));
+  if (!ip || typeof ip !== 'string') return true;
+  const trimmed = ip.trim();
+
+  // Handle IPv4-mapped IPv6 (::ffff:127.0.0.1 or ::ffff:7f00:1)
+  if (trimmed.toLowerCase().startsWith('::ffff:')) {
+    const rest = trimmed.slice(7);
+    if (net.isIPv4(rest)) {
+      return blockList.check(rest, 'ipv4');
     }
-    return false;
+    const hexParts = rest.split(':');
+    if (hexParts.length === 2) {
+      const p1 = parseInt(hexParts[0], 16);
+      const p2 = parseInt(hexParts[1], 16);
+      if (!Number.isNaN(p1) && !Number.isNaN(p2)) {
+        const v4 = `${(p1 >> 8) & 255}.${p1 & 255}.${(p2 >> 8) & 255}.${p2 & 255}`;
+        return blockList.check(v4, 'ipv4');
+      }
+    }
+    return true; // Fail closed
   }
-  const parts = ip.split('.').map(Number);
-  if (parts.length !== 4 || parts.some((n) => Number.isNaN(n) || n < 0 || n > 255)) return true;
-  const [a, b] = parts;
-  return (
-    a === 10 ||
-    a === 127 ||
-    a === 0 ||
-    (a === 172 && b >= 16 && b <= 31) ||
-    (a === 192 && b === 168) ||
-    (a === 169 && b === 254) ||
-    (a === 100 && b >= 64 && b <= 127)
-  );
+
+  if (net.isIPv4(trimmed)) {
+    return blockList.check(trimmed, 'ipv4');
+  }
+  if (net.isIPv6(trimmed)) {
+    return blockList.check(trimmed, 'ipv6');
+  }
+
+  return true; // Fail closed
 }
 
-/**
- * Read at most maxBytes from a response body stream to prevent memory exhaustion.
- */
-async function readLimitedText(response, maxBytes = 16384) {
+function normalizeHost(host) {
+  if (!host || typeof host !== 'string') return '';
+  return host.toLowerCase().trim().replace(/:\d+$/, '');
+}
+
+function isAllowedHost(hostname) {
+  const h = normalizeHost(hostname);
+  if (!h) return false;
+  return ALL_ALLOWED_HOSTS.has(h);
+}
+
+function isAllowedCdnImage(urlStr) {
+  if (!urlStr || typeof urlStr !== 'string') return false;
+  try {
+    const parsed = new URL(urlStr);
+    if (parsed.protocol !== 'https:') return false;
+    const host = normalizeHost(parsed.hostname);
+
+    for (const cdn of PLATFORM_CONFIG.shopee.cdnHosts) {
+      if (host === cdn || host.endsWith('.' + cdn)) return true;
+    }
+    for (const cdn of PLATFORM_CONFIG.tiktok.cdnHosts) {
+      if (host === cdn || host.endsWith('.' + cdn)) return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+function safeDecode(str) {
+  if (typeof str !== 'string') return '';
+  try {
+    return decodeURIComponent(str);
+  } catch {
+    try {
+      return decodeURI(str);
+    } catch {
+      return str;
+    }
+  }
+}
+
+function decodeHtmlEntities(str) {
+  if (!str || typeof str !== 'string') return '';
+  return str
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&#(\d+);/g, (_, dec) => {
+      try {
+        return String.fromCodePoint(parseInt(dec, 10));
+      } catch {
+        return '';
+      }
+    })
+    .replace(/&#x([0-9a-f]+);/gi, (_, hex) => {
+      try {
+        return String.fromCodePoint(parseInt(hex, 16));
+      } catch {
+        return '';
+      }
+    });
+}
+
+function sanitizeTitle(text, maxLength = 120) {
+  if (!text || typeof text !== 'string') return '';
+  let cleaned = text.replace(/<[^>]*>/g, ' ');
+  cleaned = decodeHtmlEntities(cleaned);
+  cleaned = cleaned.replace(/[\x00-\x1f\x7f-\x9f]/g, ' ');
+  cleaned = cleaned
+    .replace(/\s*\|\s*Shopee.*$/i, '')
+    .replace(/\s*\|\s*TikTok\s*(?:Shop)?.*$/i, '')
+    .replace(/\s*-\s*TikTok\s*(?:Shop)?.*$/i, '')
+    .replace(/\s*-\s*Mua sắm trên Shopee.*$/i, '');
+  cleaned = cleaned.replace(/\s+/g, ' ').trim();
+
+  const lower = cleaned.toLowerCase();
+  if (
+    lower.includes('shopee verification') ||
+    lower.includes('robot check') ||
+    lower.includes('security check') ||
+    lower.includes('captcha') ||
+    lower.includes('just a moment') ||
+    lower.includes('attention required')
+  ) {
+    return '';
+  }
+
+  const chars = Array.from(cleaned);
+  if (chars.length > maxLength) {
+    return chars.slice(0, maxLength).join('').trim();
+  }
+  return cleaned;
+}
+
+function sanitizeUrlForLog(urlStr) {
+  if (!urlStr || typeof urlStr !== 'string') return '';
+  try {
+    const parsed = new URL(urlStr);
+    return `${parsed.protocol}//${parsed.host}${parsed.pathname}`;
+  } catch {
+    return urlStr.split('?')[0].slice(0, 100);
+  }
+}
+
+async function discardBody(res) {
+  if (!res || !res.body) return;
+  try {
+    if (typeof res.body.cancel === 'function') {
+      await res.body.cancel();
+    }
+  } catch {}
+}
+
+async function readLimitedText(response, maxBytes = MAX_HTML_BYTES) {
   if (!response.body) return '';
   const reader = response.body.getReader();
-  const chunks = [];
-  let total = 0;
+  const decoder = new TextDecoder('utf-8', { stream: true });
+  let result = '';
+  let totalBytes = 0;
 
   try {
-    while (total < maxBytes) {
+    while (totalBytes < maxBytes) {
       const { done, value } = await reader.read();
       if (done || !value) break;
-      const remaining = maxBytes - total;
-      if (value.byteLength > remaining) {
-        chunks.push(value.subarray(0, remaining));
-        total += remaining;
-        break;
-      }
-      chunks.push(value);
-      total += value.byteLength;
+
+      const remainingBytes = maxBytes - totalBytes;
+      const chunk = value.byteLength > remainingBytes ? value.subarray(0, remainingBytes) : value;
+
+      result += decoder.decode(chunk, { stream: true });
+      totalBytes += chunk.byteLength;
+
+      if (value.byteLength > remainingBytes) break;
     }
-  } catch {
-    // Ignore stream cancellation errors
+    result += decoder.decode();
+  } catch (err) {
+    if (err.name === 'AbortError' || err.name === 'TimeoutError') {
+      throw err;
+    }
   } finally {
     try {
       await reader.cancel();
     } catch {}
   }
 
-  return Buffer.concat(chunks.map((c) => Buffer.from(c))).toString('utf8');
+  return result;
 }
 
+async function resolveHostIps(hostname, timeoutMs = DEFAULT_DNS_TIMEOUT_MS) {
+  if (net.isIP(hostname)) {
+    return [hostname];
+  }
+
+  let timer;
+  const timeoutPromise = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      reject(new UrlResolveError('TIMEOUT', 'Quá thời gian phân giải tên miền.', { hostname }));
+    }, timeoutMs);
+    if (timer.unref) timer.unref();
+  });
+
+  const dnsPromise = (async () => {
+    const results = [];
+    const [ipv4Res, ipv6Res] = await Promise.allSettled([
+      dns.resolve4(hostname),
+      dns.resolve6(hostname)
+    ]);
+
+    if (ipv4Res.status === 'fulfilled' && Array.isArray(ipv4Res.value)) {
+      results.push(...ipv4Res.value);
+    }
+    if (ipv6Res.status === 'fulfilled' && Array.isArray(ipv6Res.value)) {
+      results.push(...ipv6Res.value);
+    }
+
+    if (results.length === 0) {
+      try {
+        const lookupRes = await dns.lookup(hostname, { all: true });
+        if (Array.isArray(lookupRes)) {
+          results.push(...lookupRes.map((r) => r.address));
+        }
+      } catch (err) {
+        throw new UrlResolveError('NETWORK_ERROR', `Không thể phân giải tên miền: ${hostname}`, {
+          hostname,
+          error: err.message
+        });
+      }
+    }
+
+    if (results.length === 0) {
+      throw new UrlResolveError('NETWORK_ERROR', `Không tìm thấy địa chỉ IP cho tên miền: ${hostname}`, {
+        hostname
+      });
+    }
+
+    return results;
+  })();
+
+  try {
+    return await Promise.race([dnsPromise, timeoutPromise]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+const URL_WITH_SCHEME_REGEX = /https?:\/\/[^\s<>"')\]}]+/gi;
+const SCHEMELESS_SHORT_REGEX =
+  /(?:^|[\s<>"'(\[])((?:s\.shopee\.vn|vn\.shp\.ee|shp\.ee|shope\.ee|vt\.tiktok\.com|vm\.tiktok\.com)\/[a-zA-Z0-9_\-/?=&#.]+)/gi;
+const TRAILING_PUNCTUATION_REGEX = /[.,;:!?"'»`’”\)\]\}\…]+$/;
+
 function extractUrlsFromText(text) {
-  logger.logEnter('extractUrlsFromText', { textLength: text ? text.length : 0 });
-  if (!text || typeof text !== 'string') {
-    logger.logLeave('extractUrlsFromText', { count: 0 });
+  const textLen = text && typeof text === 'string' ? text.length : 0;
+  logger.logEnter('extractUrlsFromText', { textLength: textLen });
+  try {
+    if (!text || typeof text !== 'string') {
+      logger.logLeave('extractUrlsFromText', { count: 0 });
+      return [];
+    }
+
+    const boundedText = text.slice(0, MAX_TEXT_INPUT_LENGTH);
+    const candidates = [];
+
+    const schemeMatches = boundedText.match(URL_WITH_SCHEME_REGEX) || [];
+    for (const u of schemeMatches) {
+      candidates.push(u);
+    }
+
+    let sm;
+    while ((sm = SCHEMELESS_SHORT_REGEX.exec(boundedText)) !== null) {
+      if (sm[1]) {
+        candidates.push('https://' + sm[1]);
+      }
+    }
+
+    const cleaned = [];
+    for (const raw of candidates) {
+      const trimmed = raw.replace(TRAILING_PUNCTUATION_REGEX, '').trim();
+      if (!trimmed) continue;
+      try {
+        const parsed = new URL(trimmed);
+        if (isAllowedHost(parsed.hostname)) {
+          cleaned.push(parsed.toString());
+        }
+      } catch {}
+    }
+
+    const unique = Array.from(new Set(cleaned)).slice(0, MAX_EXTRACTED_URLS);
+    logger.logLeave('extractUrlsFromText', { count: unique.length });
+    return unique;
+  } catch (err) {
+    logger.warning('extractUrlsFromText', 'Extraction error', { error: err.message });
     return [];
   }
-  const rawMatches = text.match(URL_REGEX) || [];
-  const cleaned = rawMatches.map((u) => u.replace(/[.,;!?]+$/, ''));
-  const unique = Array.from(new Set(cleaned)).slice(0, 15);
-  logger.logLeave('extractUrlsFromText', { count: unique.length });
-  return unique;
 }
 
 function detectPlatform(urlStr) {
-  logger.logEnter('detectPlatform', { url: urlStr });
+  const safeUrl = sanitizeUrlForLog(urlStr);
+  logger.logEnter('detectPlatform', { url: safeUrl });
   try {
     const parsed = new URL(urlStr);
-    const host = parsed.hostname.toLowerCase();
-    if (!isAllowedHost(host)) {
-      logger.logLeave('detectPlatform', { platform: 'unknown' });
-      return 'unknown';
-    }
-    if (host.includes('shopee') || host.includes('shp.ee') || host.includes('shope.ee')) {
+    const host = normalizeHost(parsed.hostname);
+
+    if (
+      PLATFORM_CONFIG.shopee.canonicalHosts.has(host) ||
+      PLATFORM_CONFIG.shopee.shortenerHosts.has(host)
+    ) {
       logger.logLeave('detectPlatform', { platform: 'shopee' });
       return 'shopee';
     }
-    if (host.includes('tiktok.com')) {
+
+    if (
+      PLATFORM_CONFIG.tiktok.canonicalHosts.has(host) ||
+      PLATFORM_CONFIG.tiktok.shortenerHosts.has(host)
+    ) {
       logger.logLeave('detectPlatform', { platform: 'tiktok' });
       return 'tiktok';
     }
@@ -111,288 +430,560 @@ function detectPlatform(urlStr) {
 }
 
 function needsUnshorten(urlObj) {
-  const host = urlObj.hostname.toLowerCase();
-  if (
-    ['s.shopee.vn', 'vn.shp.ee', 'shp.ee', 'shope.ee', 'vt.tiktok.com', 'vm.tiktok.com'].some(
-      (h) => host === h || host.endsWith('.' + h)
-    )
-  ) {
+  const host = normalizeHost(urlObj.hostname);
+  if (PLATFORM_CONFIG.shopee.shortenerHosts.has(host)) {
     return true;
   }
-  if (host.includes('tiktok.com') && urlObj.pathname.startsWith('/t/')) {
+  if (PLATFORM_CONFIG.tiktok.shortenerHosts.has(host)) {
+    return true;
+  }
+  if (PLATFORM_CONFIG.tiktok.canonicalHosts.has(host) && urlObj.pathname.startsWith('/t/')) {
     return true;
   }
   return false;
 }
 
-/**
- * SSRF-hardened URL resolver:
- * - Enforces HTTPS & strict domain whitelist at every single hop
- * - Resolves DNS and blocks private/loopback/metadata IPs at every hop
- * - Max 4 hops, 4000ms timeout per hop, 16KB stream limit
- */
-async function safeResolve(inputUrl, maxHops = 4) {
-  logger.logEnter('safeResolve', { inputUrl });
-  let url = new URL(inputUrl);
-  let htmlSnippet = '';
-
-  for (let hop = 0; hop <= maxHops; hop++) {
-    if (url.protocol !== 'https:' || !isAllowedHost(url.hostname)) {
-      throw new Error('Tên miền không nằm trong danh sách hỗ trợ (Chỉ hỗ trợ Shopee & TikTok Shop).');
-    }
-
-    // Check embedded origin_link on s.shopee.vn/an_redir and re-validate in next loop iteration
-    const originLink = url.searchParams.get('origin_link');
-    if (originLink) {
-      url = new URL(originLink);
-      continue;
-    }
-
-    const addrs = await dns.lookup(url.hostname, { all: true });
-    if (!addrs || addrs.length === 0 || addrs.some((a) => isPrivateIp(a.address))) {
-      throw new Error('Địa chỉ máy chủ đích bị từ chối vì lý do bảo mật (SSRF Blocked).');
-    }
-
-    if (!needsUnshorten(url)) {
-      logger.logLeave('safeResolve', { resolvedUrl: url.toString(), hop });
-      return { resolvedUrl: url.toString(), htmlSnippet };
-    }
-
-    const res = await fetch(url.toString(), {
-      method: 'GET',
-      redirect: 'manual',
-      headers: {
-        'User-Agent': USER_AGENT,
-        Accept: 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.8'
-      },
-      signal: AbortSignal.timeout(4000)
-    });
-
-    const loc = res.headers.get('location');
-    if (res.status >= 300 && res.status < 400 && loc) {
-      try {
-        if (res.body) await res.body.cancel();
-      } catch {}
-      url = new URL(loc, url);
-      continue;
-    }
-
-    const contentType = res.headers.get('content-type') || '';
-    if (contentType.includes('text/html')) {
-      htmlSnippet = await readLimitedText(res, 16384);
-      const extracted = extractDestinationFromHtml(htmlSnippet, url.toString());
-      if (extracted && extracted !== url.toString()) {
-        url = new URL(extracted);
-        continue;
-      }
-    } else {
-      try {
-        if (res.body) await res.body.cancel();
-      } catch {}
-    }
-
-    logger.logLeave('safeResolve', { resolvedUrl: url.toString(), hop });
-    return { resolvedUrl: url.toString(), htmlSnippet };
-  }
-
-  throw new Error('Liên kết chuyển hướng quá nhiều lần.');
-}
-
 function extractDestinationFromHtml(html, baseUrl) {
-  if (!html) return null;
-  const metaMatch = html.match(/content=["']\d+;\s*url=([^"'>\s]+)["']/i);
-  if (metaMatch && metaMatch[1]) {
+  if (!html || typeof html !== 'string') return null;
+
+  // 1. Meta refresh
+  const refreshMatch =
+    html.match(/<meta[^>]+http-equiv=["']refresh["'][^>]+content=["']\d+;\s*url=([^"'>\s]+)["']/i) ||
+    html.match(/<meta[^>]+content=["']\d+;\s*url=([^"'>\s]+)["'][^>]+http-equiv=["']refresh["']/i);
+  if (refreshMatch && refreshMatch[1]) {
     try {
-      const candidate = new URL(metaMatch[1].replace(/&amp;/g, '&'), baseUrl);
-      if (candidate.protocol === 'https:' && isAllowedHost(candidate.hostname)) {
+      const candidate = new URL(decodeHtmlEntities(refreshMatch[1]), baseUrl);
+      if (isAllowedHost(candidate.hostname)) {
         return candidate.toString();
       }
     } catch {}
   }
 
-  const shopeeMatch = html.match(
-    /https:\/\/(?:www\.)?shopee\.vn\/(?:product\/\d+\/\d+|[^\s"'<>]+-i\.\d+\.\d+)/i
-  );
-  if (shopeeMatch) return shopeeMatch[0].replace(/&amp;/g, '&');
-
-  const tiktokMatch = html.match(/https:\/\/(?:shop|www)\.tiktok\.com\/view\/product\/\d+/i);
-  if (tiktokMatch) return tiktokMatch[0];
-
-  const tiktokPidMatch =
-    html.match(/"product_id"\s*:\s*"(\d{15,22})"/) || html.match(/product\/(\d{15,22})/);
-  if (tiktokPidMatch && tiktokPidMatch[1]) {
-    return `https://shop.tiktok.com/view/product/${tiktokPidMatch[1]}`;
-  }
-  return null;
-}
-
-/**
- * Extract human-friendly product title from URL slug or HTML snippet.
- */
-function extractProductTitleHint(rawUrl, htmlSnippet = '') {
-  if (htmlSnippet) {
-    const ogTitle =
-      htmlSnippet.match(/property=["']og:title["']\s+content=["']([^"']+)["']/i) ||
-      htmlSnippet.match(/<title>([^<]+)<\/title>/i);
-    if (ogTitle && ogTitle[1]) {
-      return ogTitle[1].replace(/\s*\|\s*Shopee.*$/i, '').trim().slice(0, 120);
-    }
-  }
-  try {
-    const parsed = new URL(rawUrl);
-    const decoded = decodeURIComponent(parsed.pathname);
-    const slugMatch = decoded.match(/^\/([^/]+)-i\.\d+\.\d+/);
-    if (slugMatch && slugMatch[1]) {
-      return slugMatch[1].replace(/-/g, ' ').trim().slice(0, 120);
-    }
-  } catch {}
-  return '';
-}
-
-function cleanShopeeUrl(rawUrl, htmlSnippet = '') {
-  logger.logEnter('cleanShopeeUrl', { rawUrl });
-  const parsed = new URL(rawUrl);
-  if (parsed.protocol !== 'https:' || !isAllowedHost(parsed.hostname)) {
-    throw new Error('Link Shopee không hợp lệ.');
-  }
-
-  const pathname = decodeURIComponent(parsed.pathname);
-  let shopId = null;
-  let itemId = null;
-
-  const p1 = pathname.match(/\/(?:product|opaanlp)\/(\d+)\/(\d+)/i);
-  const p2 = pathname.match(/-i\.(\d+)\.(\d+)/i);
-  const p3 = pathname.match(/^\/([a-zA-Z0-9_.-]+)\/(\d{8,15})$/);
-
-  if (p1) {
-    shopId = p1[1];
-    itemId = p1[2];
-  } else if (p2) {
-    shopId = p2[1];
-    itemId = p2[2];
-  } else if (
-    p3 &&
-    !['product', 'opaanlp', 'm', 'search', 'buyer', 'universal-link', 'an_redir'].includes(
-      p3[1].toLowerCase()
-    )
-  ) {
-    itemId = p3[2];
-  }
-
-  const titleHint = extractProductTitleHint(rawUrl, htmlSnippet);
-
-  if (shopId && itemId) {
-    const cleanUrl = `https://shopee.vn/product/${shopId}/${itemId}`;
-    logger.logLeave('cleanShopeeUrl', { cleanUrl, shopId, itemId });
-    return {
-      cleanUrl,
-      shopId,
-      itemId,
-      titleHint: titleHint || `Sản phẩm Shopee #${itemId}`,
-      linkType: 'product'
-    };
-  }
-
-  const cleanParsed = new URL('https://shopee.vn' + parsed.pathname.replace(/^\/universal-link\//, '/'));
-  const allowedParams = ['keyword', 'page', 'sortBy', 'promotionId', 'evcode', 'catid'];
-  for (const key of allowedParams) {
-    if (parsed.searchParams.has(key)) {
-      cleanParsed.searchParams.set(key, parsed.searchParams.get(key));
-    }
-  }
-
-  const cleanUrl = cleanParsed.toString();
-  logger.logLeave('cleanShopeeUrl', { cleanUrl, linkType: 'page' });
-  return {
-    cleanUrl,
-    shopId: null,
-    itemId,
-    titleHint: titleHint || 'Cửa hàng / Sự kiện Shopee',
-    linkType: 'page'
-  };
-}
-
-function cleanTikTokUrl(rawUrl, htmlSnippet = '') {
-  logger.logEnter('cleanTikTokUrl', { rawUrl });
-  const parsed = new URL(rawUrl);
-  if (parsed.protocol !== 'https:' || !isAllowedHost(parsed.hostname)) {
-    throw new Error('Link TikTok không hợp lệ.');
-  }
-
-  const decodedPath = decodeURIComponent(parsed.pathname);
-  let productId = null;
-
-  const p1 = decodedPath.match(/\/(?:view\/)?product\/(\d{15,22})/i);
-  const p2 =
-    parsed.searchParams.get('product_id') ||
-    parsed.searchParams.get('item_id') ||
-    parsed.searchParams.get('share_item_id');
-
-  if (p1) {
-    productId = p1[1];
-  } else if (p2 && /^\d{15,22}$/.test(p2)) {
-    productId = p2;
-  } else if (htmlSnippet) {
-    const htmlMatch =
-      htmlSnippet.match(/"product_id"\s*:\s*"(\d{15,22})"/) ||
-      htmlSnippet.match(/\/product\/(\d{15,22})/);
-    if (htmlMatch) productId = htmlMatch[1];
-  }
-
-  let titleHint = extractProductTitleHint(rawUrl, htmlSnippet);
-  let imageUrl = '';
-
-  const ogInfoRaw = parsed.searchParams.get('og_info');
-  if (ogInfoRaw) {
+  // 2. OpenGraph og:url
+  const ogUrlMatch =
+    html.match(/<meta[^>]+property=["']og:url["'][^>]+content=["']([^"']+)["']/i) ||
+    html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:url["']/i);
+  if (ogUrlMatch && ogUrlMatch[1]) {
     try {
-      const ogObj = JSON.parse(ogInfoRaw);
-      if (ogObj.title) titleHint = String(ogObj.title).trim().slice(0, 140);
-      if (ogObj.image && /^https:\/\//i.test(ogObj.image)) {
-        imageUrl = ogObj.image;
+      const candidate = new URL(decodeHtmlEntities(ogUrlMatch[1]), baseUrl);
+      if (isAllowedHost(candidate.hostname)) {
+        return candidate.toString();
       }
     } catch {}
   }
 
-  if (!imageUrl && htmlSnippet) {
-    const im =
-      htmlSnippet.match(/property=["']og:image["']\s+content=["']([^"']+)["']/i) ||
-      htmlSnippet.match(/content=["']([^"']+)["']\s+property=["']og:image["']/i);
-    if (im && /^https:\/\//i.test(im[1])) {
-      imageUrl = im[1];
+  // 3. Link canonical
+  const canonicalMatch =
+    html.match(/<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)["']/i) ||
+    html.match(/<link[^>]+href=["']([^"']+)["'][^>]+rel=["']canonical["']/i);
+  if (canonicalMatch && canonicalMatch[1]) {
+    try {
+      const candidate = new URL(decodeHtmlEntities(canonicalMatch[1]), baseUrl);
+      if (isAllowedHost(candidate.hostname)) {
+        return candidate.toString();
+      }
+    } catch {}
+  }
+
+  // 4. Shopee product direct URL match
+  const shopeeMatch = html.match(
+    /https:\/\/(?:www\.)?shopee\.vn\/(?:product\/\d+\/\d+|[a-zA-Z0-9_.-]+-i\.\d+\.\d+)/i
+  );
+  if (shopeeMatch) {
+    return decodeHtmlEntities(shopeeMatch[0]);
+  }
+
+  // 5. TikTok Shop direct product URL match
+  const tiktokMatch = html.match(
+    /https:\/\/(?:www|shop)\.tiktok\.com\/(?:view\/)?product\/(\d{15,22})/i
+  );
+  if (tiktokMatch && tiktokMatch[1]) {
+    return `https://www.tiktok.com/view/product/${tiktokMatch[1]}`;
+  }
+
+  // 6. Embedded product_id in script/JSON
+  const pidMatch =
+    html.match(/"product_id"\s*:\s*"(\d{15,22})"/i) ||
+    html.match(/"itemId"\s*:\s*"(\d{15,22})"/i);
+  if (pidMatch && pidMatch[1]) {
+    return `https://www.tiktok.com/view/product/${pidMatch[1]}`;
+  }
+
+  return null;
+}
+
+function extractProductTitleHint(rawUrl, htmlSnippet = '') {
+  if (htmlSnippet && typeof htmlSnippet === 'string') {
+    const ogTitleMatch =
+      htmlSnippet.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i) ||
+      htmlSnippet.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:title["']/i);
+    if (ogTitleMatch && ogTitleMatch[1]) {
+      const sanitized = sanitizeTitle(ogTitleMatch[1]);
+      if (sanitized) return sanitized;
+    }
+
+    const titleTagMatch = htmlSnippet.match(/<title[^>]*>([^<]+)<\/title>/i);
+    if (titleTagMatch && titleTagMatch[1]) {
+      const sanitized = sanitizeTitle(titleTagMatch[1]);
+      if (sanitized) return sanitized;
     }
   }
 
-  if (productId) {
-    const cleanUrl = `https://www.tiktok.com/view/product/${productId}`;
-    logger.logLeave('cleanTikTokUrl', { cleanUrl, productId });
-    return {
-      cleanUrl,
-      productId,
-      titleHint: titleHint || `Sản phẩm TikTok Shop #${productId}`,
-      imageUrl,
-      linkType: 'product'
-    };
+  try {
+    const parsed = new URL(rawUrl);
+    const decodedPath = safeDecode(parsed.pathname);
+    const slugMatch = decodedPath.match(/^\/([^/]+)-i\.\d+\.\d+/);
+    if (slugMatch && slugMatch[1]) {
+      return sanitizeTitle(slugMatch[1].replace(/[-_]+/g, ' '));
+    }
+  } catch {}
+
+  return '';
+}
+
+/**
+ * SSRF-hardened URL resolver:
+ * - Strict domain allowlist per platform at every hop
+ * - Pre-fetch DNS resolution & non-blocking c-ares IP checks against net.BlockList
+ * - Overall deadline timeout (8s) + per-hop timeout (4s)
+ * - Safe response streaming (16KB) with UTF-8 boundary preservation
+ * - Fast-path return for direct product links without network resolution
+ */
+async function safeResolve(inputUrl, options = {}) {
+  let maxHops = DEFAULT_MAX_HOPS;
+  let totalTimeoutMs = DEFAULT_TOTAL_TIMEOUT_MS;
+  let hopTimeoutMs = DEFAULT_HOP_TIMEOUT_MS;
+
+  if (typeof options === 'number') {
+    maxHops = options;
+  } else if (typeof options === 'object' && options !== null) {
+    if (Number.isFinite(options.maxHops) && options.maxHops > 0) maxHops = Math.min(options.maxHops, 10);
+    if (Number.isFinite(options.totalTimeoutMs) && options.totalTimeoutMs > 0) totalTimeoutMs = options.totalTimeoutMs;
+    if (Number.isFinite(options.hopTimeoutMs) && options.hopTimeoutMs > 0) hopTimeoutMs = options.hopTimeoutMs;
   }
 
-  const cleanParsed = new URL(parsed.origin + parsed.pathname);
-  const cleanUrl = cleanParsed.toString();
-  logger.logLeave('cleanTikTokUrl', { cleanUrl, linkType: 'content' });
-  return {
-    cleanUrl,
-    productId: null,
-    titleHint: titleHint || 'Sản phẩm TikTok Shop',
-    imageUrl,
-    linkType: 'content'
-  };
+  const safeLogUrl = sanitizeUrlForLog(inputUrl);
+  logger.logEnter('safeResolve', { inputUrl: safeLogUrl });
+
+  try {
+    let url;
+    try {
+      url = new URL(inputUrl);
+    } catch {
+      throw new UrlResolveError('INVALID_URL', 'Định dạng liên kết không hợp lệ.', { inputUrl });
+    }
+
+    if (url.protocol === 'http:') {
+      if (isAllowedHost(url.hostname)) {
+        url.protocol = 'https:';
+      } else {
+        throw new UrlResolveError(
+          'INSECURE_PROTOCOL',
+          'Giao thức kết nối không an toàn (Chỉ hỗ trợ HTTPS).',
+          { inputUrl }
+        );
+      }
+    } else if (url.protocol !== 'https:') {
+      throw new UrlResolveError(
+        'INSECURE_PROTOCOL',
+        'Giao thức kết nối không an toàn (Chỉ hỗ trợ HTTPS).',
+        { inputUrl }
+      );
+    }
+
+    if (!isAllowedHost(url.hostname)) {
+      throw new UrlResolveError(
+        'HOST_NOT_ALLOWED',
+        'Tên miền không nằm trong danh sách hỗ trợ (Chỉ hỗ trợ Shopee & TikTok Shop).',
+        { hostname: url.hostname }
+      );
+    }
+
+    const cacheKey = url.toString();
+    const cached = resolveCache.get(cacheKey);
+    if (cached && Date.now() < cached.exp) {
+      logger.logLeave('safeResolve', { resolvedUrl: cached.resolvedUrl, fromCache: true });
+      return { resolvedUrl: cached.resolvedUrl, htmlSnippet: cached.htmlSnippet };
+    }
+
+    // Fast-path: if URL does not need unshortening, return directly without network fetch
+    if (!needsUnshorten(url)) {
+      logger.logLeave('safeResolve', { resolvedUrl: url.toString(), hops: 0 });
+      return { resolvedUrl: url.toString(), htmlSnippet: '' };
+    }
+
+    const totalSignal = AbortSignal.timeout(totalTimeoutMs);
+    let htmlSnippet = '';
+    let originLinkFollowed = false;
+
+    for (let hop = 0; hop < maxHops; hop++) {
+      if (url.protocol !== 'https:' || !isAllowedHost(url.hostname)) {
+        throw new UrlResolveError(
+          'HOST_NOT_ALLOWED',
+          'Tên miền không nằm trong danh sách hỗ trợ (Chỉ hỗ trợ Shopee & TikTok Shop).',
+          { hostname: url.hostname }
+        );
+      }
+
+      const originLink = url.searchParams.get('origin_link');
+      if (originLink && !originLinkFollowed) {
+        originLinkFollowed = true;
+        try {
+          const originParsed = new URL(originLink);
+          if (originParsed.protocol === 'http:' && isAllowedHost(originParsed.hostname)) {
+            originParsed.protocol = 'https:';
+          }
+          if (originParsed.protocol === 'https:' && isAllowedHost(originParsed.hostname)) {
+            url = originParsed;
+            if (!needsUnshorten(url)) {
+              break;
+            }
+          }
+        } catch {}
+      }
+
+      const ips = await resolveHostIps(url.hostname, DEFAULT_DNS_TIMEOUT_MS);
+      if (!ips.length || ips.some((ip) => isPrivateIp(ip))) {
+        throw new UrlResolveError(
+          'SSRF_BLOCKED',
+          'Địa chỉ máy chủ đích bị từ chối vì lý do bảo mật (SSRF Blocked).',
+          { hostname: url.hostname, ips }
+        );
+      }
+
+      if (!needsUnshorten(url)) {
+        break;
+      }
+
+      const hopSignal = AbortSignal.timeout(hopTimeoutMs);
+      const combinedSignal =
+        typeof AbortSignal.any === 'function'
+          ? AbortSignal.any([totalSignal, hopSignal])
+          : hopSignal;
+
+      let res;
+      try {
+        res = await fetch(url.toString(), {
+          method: 'GET',
+          redirect: 'manual',
+          headers: {
+            'User-Agent': DEFAULT_USER_AGENT,
+            Accept: 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.8'
+          },
+          signal: combinedSignal
+        });
+      } catch (fetchErr) {
+        if (fetchErr.name === 'TimeoutError' || totalSignal.aborted) {
+          throw new UrlResolveError('TIMEOUT', 'Quá thời gian kết nối tới máy chủ đích.', {
+            url: url.toString(),
+            error: fetchErr.message
+          });
+        }
+        throw new UrlResolveError('NETWORK_ERROR', 'Không thể kết nối tới máy chủ đích.', {
+          url: url.toString(),
+          error: fetchErr.message
+        });
+      }
+
+      const loc = res.headers.get('location');
+      if (res.status >= 300 && res.status < 400 && loc) {
+        await discardBody(res);
+        let nextUrl;
+        try {
+          nextUrl = new URL(loc, url);
+        } catch {
+          throw new UrlResolveError('INVALID_URL', 'Địa chỉ chuyển hướng không hợp lệ.', { location: loc });
+        }
+
+        if (nextUrl.protocol === 'http:' && isAllowedHost(nextUrl.hostname)) {
+          nextUrl.protocol = 'https:';
+        }
+        if (nextUrl.protocol !== 'https:' || !isAllowedHost(nextUrl.hostname)) {
+          throw new UrlResolveError(
+            'HOST_NOT_ALLOWED',
+            'Tên miền chuyển hướng không nằm trong danh sách hỗ trợ.',
+            { hostname: nextUrl.hostname }
+          );
+        }
+
+        url = nextUrl;
+        if (!needsUnshorten(url)) {
+          break;
+        }
+        continue;
+      }
+
+      const contentType = (res.headers.get('content-type') || '').toLowerCase();
+      if (contentType.includes('text/html')) {
+        try {
+          htmlSnippet = await readLimitedText(res, MAX_HTML_BYTES);
+        } catch (readErr) {
+          if (readErr.name === 'TimeoutError' || totalSignal.aborted) {
+            throw new UrlResolveError('TIMEOUT', 'Quá thời gian tải nội dung trang web.', {
+              url: url.toString()
+            });
+          }
+        }
+
+        const extracted = extractDestinationFromHtml(htmlSnippet, url.toString());
+        if (extracted && extracted !== url.toString()) {
+          try {
+            const nextUrl = new URL(extracted);
+            if (nextUrl.protocol === 'http:' && isAllowedHost(nextUrl.hostname)) {
+              nextUrl.protocol = 'https:';
+            }
+            if (nextUrl.protocol === 'https:' && isAllowedHost(nextUrl.hostname)) {
+              url = nextUrl;
+              if (!needsUnshorten(url)) {
+                break;
+              }
+              continue;
+            }
+          } catch {}
+        }
+      } else {
+        await discardBody(res);
+      }
+
+      break;
+    }
+
+    if (needsUnshorten(url)) {
+      throw new UrlResolveError(
+        'UNRESOLVED',
+        'Không thể giải mã liên kết rút gọn (link có thể đã hết hạn hoặc bị chặn).',
+        { finalUrl: url.toString() }
+      );
+    }
+
+    const result = { resolvedUrl: url.toString(), htmlSnippet };
+
+    if (resolveCache.size >= MAX_RESOLVE_CACHE_SIZE) {
+      const firstKey = resolveCache.keys().next().value;
+      resolveCache.delete(firstKey);
+    }
+    resolveCache.set(cacheKey, { ...result, exp: Date.now() + RESOLVE_CACHE_TTL_MS });
+
+    logger.logLeave('safeResolve', { resolvedUrl: result.resolvedUrl });
+    return result;
+  } catch (err) {
+    if (err instanceof UrlResolveError) {
+      logger.warning('safeResolve', `Resolve failed (${err.code})`, { error: err.message, details: err.details });
+      throw err;
+    }
+    logger.warning('safeResolve', 'Unexpected error', { error: err.message });
+    throw new UrlResolveError('NETWORK_ERROR', err.message || 'Lỗi không xác định khi giải mã URL.');
+  }
+}
+
+function cleanShopeeUrl(rawUrl, htmlSnippet = '') {
+  const safeLogUrl = sanitizeUrlForLog(rawUrl);
+  logger.logEnter('cleanShopeeUrl', { rawUrl: safeLogUrl });
+  try {
+    let parsed;
+    try {
+      parsed = new URL(rawUrl);
+    } catch {
+      throw new UrlResolveError('INVALID_URL', 'Link Shopee không hợp lệ.', { rawUrl });
+    }
+
+    if (parsed.protocol !== 'https:' || !isAllowedHost(parsed.hostname)) {
+      throw new UrlResolveError('HOST_NOT_ALLOWED', 'Link Shopee không hợp lệ.', { rawUrl });
+    }
+
+    const pathname = safeDecode(parsed.pathname);
+    let shopId = null;
+    let itemId = null;
+
+    const productPathMatch = pathname.match(/\/(?:product|opaanlp)\/(\d+)\/(\d+)/i);
+    const slugItemMatch = pathname.match(/-i\.(\d+)\.(\d+)/i);
+    const usernameItemMatch = pathname.match(/^\/([a-zA-Z0-9_.-]+)\/(\d{8,15})$/);
+
+    const EXCLUDED_PAGE_PREFIXES = new Set([
+      'product', 'opaanlp', 'm', 'search', 'buyer', 'universal-link', 'an_redir',
+      'shop', 'user', 'portal', 'daily_discover', 'flash_sale', 'cart'
+    ]);
+
+    if (productPathMatch) {
+      shopId = productPathMatch[1];
+      itemId = productPathMatch[2];
+    } else if (slugItemMatch) {
+      shopId = slugItemMatch[1];
+      itemId = slugItemMatch[2];
+    } else if (usernameItemMatch && !EXCLUDED_PAGE_PREFIXES.has(usernameItemMatch[1].toLowerCase())) {
+      itemId = usernameItemMatch[2];
+    }
+
+    const titleHint = extractProductTitleHint(rawUrl, htmlSnippet);
+
+    if (shopId && itemId) {
+      const cleanUrl = `https://shopee.vn/product/${shopId}/${itemId}`;
+      logger.logLeave('cleanShopeeUrl', { cleanUrl, shopId, itemId, linkType: 'product' });
+      return {
+        cleanUrl,
+        shopId,
+        itemId,
+        titleHint: titleHint || `Sản phẩm Shopee #${itemId}`,
+        linkType: 'product'
+      };
+    }
+
+    if (itemId) {
+      const cleanUrl = `https://shopee.vn/product/0/${itemId}`;
+      logger.logLeave('cleanShopeeUrl', { cleanUrl, itemId, linkType: 'product' });
+      return {
+        cleanUrl,
+        shopId: null,
+        itemId,
+        titleHint: titleHint || `Sản phẩm Shopee #${itemId}`,
+        linkType: 'product'
+      };
+    }
+
+    const cleanParsed = new URL('https://shopee.vn' + parsed.pathname.replace(/^\/universal-link\//, '/'));
+    const allowedParams = ['keyword', 'page', 'sortBy', 'promotionId', 'evcode', 'catid', 'shop'];
+    for (const key of allowedParams) {
+      if (parsed.searchParams.has(key)) {
+        cleanParsed.searchParams.set(key, parsed.searchParams.get(key));
+      }
+    }
+
+    const cleanUrl = cleanParsed.toString();
+    logger.logLeave('cleanShopeeUrl', { cleanUrl, linkType: 'page' });
+    return {
+      cleanUrl,
+      shopId: null,
+      itemId: null,
+      titleHint: titleHint || 'Cửa hàng / Sự kiện Shopee',
+      linkType: 'page'
+    };
+  } finally {
+    // ensure pairing
+  }
+}
+
+function cleanTikTokUrl(rawUrl, htmlSnippet = '') {
+  const safeLogUrl = sanitizeUrlForLog(rawUrl);
+  logger.logEnter('cleanTikTokUrl', { rawUrl: safeLogUrl });
+  try {
+    let parsed;
+    try {
+      parsed = new URL(rawUrl);
+    } catch {
+      throw new UrlResolveError('INVALID_URL', 'Link TikTok không hợp lệ.', { rawUrl });
+    }
+
+    if (parsed.protocol !== 'https:' || !isAllowedHost(parsed.hostname)) {
+      throw new UrlResolveError('HOST_NOT_ALLOWED', 'Link TikTok không hợp lệ.', { rawUrl });
+    }
+
+    const decodedPath = safeDecode(parsed.pathname);
+    let productId = null;
+
+    const productMatch = decodedPath.match(/\/product\/(\d{15,22})/i);
+    const searchParamId =
+      parsed.searchParams.get('product_id') ||
+      parsed.searchParams.get('item_id') ||
+      parsed.searchParams.get('share_item_id');
+
+    if (productMatch) {
+      productId = productMatch[1];
+    } else if (searchParamId && /^\d{15,22}$/.test(searchParamId)) {
+      productId = searchParamId;
+    } else if (htmlSnippet && typeof htmlSnippet === 'string') {
+      const htmlMatch =
+        htmlSnippet.match(/"product_id"\s*:\s*"(\d{15,22})"/) ||
+        htmlSnippet.match(/\/product\/(\d{15,22})/);
+      if (htmlMatch) productId = htmlMatch[1];
+    }
+
+    let titleHint = extractProductTitleHint(rawUrl, htmlSnippet);
+    let imageUrl = '';
+
+    const ogInfoRaw = parsed.searchParams.get('og_info');
+    if (ogInfoRaw) {
+      try {
+        const ogObj = JSON.parse(ogInfoRaw);
+        if (ogObj && typeof ogObj === 'object') {
+          if (ogObj.title) {
+            const sanitized = sanitizeTitle(String(ogObj.title), 140);
+            if (sanitized) titleHint = sanitized;
+          }
+          if (ogObj.image && isAllowedCdnImage(ogObj.image)) {
+            imageUrl = ogObj.image;
+          }
+        }
+      } catch {}
+    }
+
+    if (!imageUrl && htmlSnippet && typeof htmlSnippet === 'string') {
+      const imgMatch =
+        htmlSnippet.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i) ||
+        htmlSnippet.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i);
+      if (imgMatch && imgMatch[1] && isAllowedCdnImage(imgMatch[1])) {
+        imageUrl = imgMatch[1];
+      }
+    }
+
+    if (productId) {
+      const cleanUrl = `https://www.tiktok.com/view/product/${productId}`;
+      logger.logLeave('cleanTikTokUrl', { cleanUrl, productId, linkType: 'product' });
+      return {
+        cleanUrl,
+        productId,
+        titleHint: titleHint || `Sản phẩm TikTok Shop #${productId}`,
+        imageUrl,
+        linkType: 'product'
+      };
+    }
+
+    const cleanParsed = new URL(parsed.origin + parsed.pathname);
+    const cleanUrl = cleanParsed.toString();
+    logger.logLeave('cleanTikTokUrl', { cleanUrl, linkType: 'content' });
+    return {
+      cleanUrl,
+      productId: null,
+      titleHint: titleHint || 'Sản phẩm TikTok Shop',
+      imageUrl,
+      linkType: 'content'
+    };
+  } finally {
+    // ensure pairing
+  }
+}
+
+async function resolveUrlsBatch(urls, concurrency = 4) {
+  if (!Array.isArray(urls)) return [];
+  const results = [];
+  const executing = new Set();
+
+  for (const url of urls) {
+    const p = Promise.resolve().then(() => safeResolve(url));
+    results.push(p);
+    executing.add(p);
+    const clean = () => executing.delete(p);
+    p.then(clean, clean);
+    if (executing.size >= concurrency) {
+      await Promise.race(executing);
+    }
+  }
+
+  return Promise.allSettled(results);
 }
 
 module.exports = {
+  UrlResolveError,
+  PLATFORM_CONFIG,
   extractUrlsFromText,
   detectPlatform,
   safeResolve,
   unshortenUrl: safeResolve,
+  resolveUrlsBatch,
   cleanShopeeUrl,
   cleanTikTokUrl,
   isAllowedHost,
-  isPrivateIp
+  isAllowedCdnImage,
+  isPrivateIp,
+  safeDecode,
+  sanitizeTitle
 };
