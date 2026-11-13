@@ -286,6 +286,7 @@ async function runTests() {
 
   await new Promise((resolve) => server.close(resolve));
   console.log('\n=== ALL 6 AUDIT VERIFICATION SUITES PASSED CLEANLY! ===\n');
+  process.exit(0);
 }
 
 runTests().catch((err) => {
