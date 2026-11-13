@@ -43,6 +43,21 @@ const {
   buildVietQrImageUrl
 } = require('../utils/securityMiddleware');
 
+const asyncHandler = (fn) => (req, res, next) =>
+  Promise.resolve(fn(req, res, next)).catch(next);
+
+const ALLOWED_ORDER_TRANSITIONS = {
+  pending: ['approved', 'cancelled'],
+  approved: ['cancelled'],
+  cancelled: ['approved']
+};
+
+function canTransitionOrderStatus(from, to) {
+  if (!from) return true;
+  if (from === to) return true;
+  return Boolean(ALLOWED_ORDER_TRANSITIONS[from]?.includes(to));
+}
+
 function parseCookieToken(req) {
   const raw = req.headers.cookie || '';
   const match = raw.match(/(?:^|;\s*)hts_auth=([^;]+)/);
@@ -200,7 +215,7 @@ function upsertNetworkOrder(db, {
     if (productName && (!existing.productName || existing.productName.startsWith('Đơn'))) {
       existing.productName = productName;
     }
-    if (status) {
+    if (status && canTransitionOrderStatus(existing.status, status)) {
       existing.status = status;
     }
     if (!existing.clickId && cleanSub) {
@@ -289,14 +304,21 @@ async function runShopeeAutoSync() {
           if (!orderSn) continue;
 
           const status = normalizeNetworkStatus(ord.orderStatus);
-          const firstItem = Array.isArray(ord.items) && ord.items.length > 0 ? ord.items[0] : null;
-          const productName = firstItem?.itemName || `Đơn Shopee #${orderSn}`;
-          const orderAmount = Number(firstItem?.itemPrice || 0);
+          const items = Array.isArray(ord.items) ? ord.items : [];
+          const productName = items.map((it) => it?.itemName).filter(Boolean).join(', ') || `Đơn Shopee #${orderSn}`;
+          const orderAmount = items.reduce((sum, it) => sum + Number(it?.itemPrice || 0) * Number(it?.qty || it?.itemQty || 1), 0)
+            || Number(ord.totalPrice || ord.orderAmount || 0);
+
+          // Calculate order-level commission (distribute node commission evenly across orders if order-level is missing)
+          const ordSpecificComm = Number(ord.netCommission ?? ord.totalCommission ?? ord.commission);
+          const orderGross = Number.isFinite(ordSpecificComm) && ordSpecificComm > 0
+            ? ordSpecificComm
+            : (subOrders.length > 0 ? Math.round(grossComm / subOrders.length) : grossComm);
 
           upsertNetworkOrder(db, {
             orderSn,
             rawSubId,
-            grossCommission: grossComm,
+            grossCommission: orderGross,
             orderAmount,
             status,
             platform: 'shopee',
@@ -707,7 +729,7 @@ function registerCashbackRoutes(app) {
   });
 
   // 5. Update User Profile / Bank Info (Requires password verification if changing existing bank account)
-  app.post('/api/user/profile', async (req, res) => {
+  app.post('/api/user/profile', asyncHandler(async (req, res) => {
     logger.logEnter('POST /api/user/profile');
     const user = getAuthUser(req);
     if (!user) return res.status(401).json({ error: 'Chưa đăng nhập.' });
@@ -730,13 +752,14 @@ function registerCashbackRoutes(app) {
       user.bankOwner = String(bankOwner).trim().toUpperCase().slice(0, 60);
     }
 
-    await saveDb();
+    const db = ensureDbLoaded();
+    await saveDb(db);
     logger.logLeave('POST /api/user/profile', { userCode: user.code });
     return res.json({ user: sanitizeUser(user) });
-  });
+  }));
 
   // 6. User Submit Order Lookup / Tracking Request (Prevents unauthorized hijacking of GUEST orders)
-  app.post('/api/user/submit-order', async (req, res) => {
+  app.post('/api/user/submit-order', asyncHandler(async (req, res) => {
     logger.logEnter('POST /api/user/submit-order');
     const user = getAuthUser(req);
     if (!user) return res.status(401).json({ error: 'Vui lòng đăng nhập để tra cứu đơn hàng.' });
@@ -845,10 +868,10 @@ function registerCashbackRoutes(app) {
       claimPending: true,
       message: 'Đã ghi nhận mã đơn hàng. Tiền hoàn sẽ tự động cập nhật khi sàn đối soát hoàn tất và xác nhận liên kết tiếp thị!'
     });
-  });
+  }));
 
   // 7. User Request Withdrawal (Atomic per-user lock + Postgres FOR UPDATE transaction)
-  app.post('/api/user/withdraw', withdrawLimiter, async (req, res) => {
+  app.post('/api/user/withdraw', withdrawLimiter, asyncHandler(async (req, res) => {
     logger.logEnter('POST /api/user/withdraw');
     const user = getAuthUser(req);
     if (!user) return res.status(401).json({ error: 'Vui lòng đăng nhập.' });
@@ -904,11 +927,16 @@ function registerCashbackRoutes(app) {
       });
       return res.status(400).json({ error: err.message });
     }
-  });
+  }));
 
   // 7.5. Instant Product Preview (Safe Resolve + GraphQL productOfferV2 metadata + Cashback estimate)
-  const previewLimiter = createRateLimiter(60, 60000);
-  app.post('/api/preview', previewLimiter, async (req, res) => {
+  const previewLimiter = createRateLimiter({
+    windowMs: 60000,
+    max: 20,
+    keyPrefix: 'preview',
+    failClosed: false
+  });
+  app.post('/api/preview', previewLimiter, asyncHandler(async (req, res) => {
     logger.logEnter('POST /api/preview');
     try {
       const { url } = req.body || {};
@@ -1085,11 +1113,12 @@ function registerCashbackRoutes(app) {
       logger.error('POST /api/preview', 'Preview error', { error: err.message });
       return res.status(500).json({ found: false, error: err.message });
     }
-  });
+  }));
 
-  // Diagnostic route for testing Shopee productOfferV2 directly
-  app.get('/api/test-shopee-offer', async (req, res) => {
+  // Diagnostic route for testing Shopee productOfferV2 directly (Admin only)
+  app.get('/api/test-shopee-offer', asyncHandler(async (req, res) => {
     logger.logEnter('GET /api/test-shopee-offer');
+    if (!requireAdmin(req, res)) return;
     const itemId = req.query.itemId || '15696940827';
     const shopId = req.query.shopId || '968599922';
 
@@ -1153,10 +1182,10 @@ function registerCashbackRoutes(app) {
       },
       testedItem: { itemId, shopId }
     });
-  });
+  }));
 
   // 8. Convert Link (Generates opaque random click_id -> maps to userId in db.clicks)
-  app.post('/api/convert', convertLimiter, async (req, res) => {
+  app.post('/api/convert', convertLimiter, asyncHandler(async (req, res) => {
     logger.logEnter('POST /api/convert');
     try {
       const { text } = req.body || {};
@@ -1229,7 +1258,7 @@ function registerCashbackRoutes(app) {
         }
       }
 
-      db.clicks = db.clicks.slice(0, 1000);
+      db.clicks = db.clicks.slice(-5000);
       await saveDb(db);
 
       logger.logLeave('POST /api/convert', { total: result.summary.total });
@@ -1242,10 +1271,10 @@ function registerCashbackRoutes(app) {
       logger.error('POST /api/convert', 'Convert error', { error: err.message });
       return res.status(500).json({ error: `Không thể chuyển đổi liên kết: ${err.message}` });
     }
-  });
+  }));
 
   // 9. Vercel Cron & Webhook Postback Endpoints
-  app.get('/api/cron/sync-shopee', async (req, res) => {
+  app.get('/api/cron/sync-shopee', asyncHandler(async (req, res) => {
     logger.logEnter('GET /api/cron/sync-shopee');
     const cronSecret = process.env.CRON_SECRET;
     const authHeader = req.headers.authorization || '';
@@ -1258,7 +1287,7 @@ function registerCashbackRoutes(app) {
     } catch (err) {
       return res.status(500).json({ error: err.message });
     }
-  });
+  }));
 
   // Official AccessTrade Real-Time Postback (Supports query macros, body, and header token)
   async function handleAccessTradePostback(req, res) {
@@ -1351,11 +1380,12 @@ function registerCashbackRoutes(app) {
     }
   }
 
-  app.get('/api/webhooks/accesstrade', handleAccessTradePostback);
-  app.post('/api/webhooks/accesstrade', handleAccessTradePostback);
+  app.get('/api/webhooks/accesstrade', asyncHandler(handleAccessTradePostback));
+  app.post('/api/webhooks/accesstrade', asyncHandler(handleAccessTradePostback));
 
-  app.post('/api/webhooks/postback', async (req, res) => {
+  app.post('/api/webhooks/postback', asyncHandler(async (req, res) => {
     logger.logEnter('POST /api/webhooks/postback');
+    const db = ensureDbLoaded();
     const secret = process.env.POSTBACK_SECRET || getDefaultPostbackToken();
     if (!secret) {
       return res.status(503).json({ error: 'Postback webhook not configured.' });
@@ -1408,7 +1438,7 @@ function registerCashbackRoutes(app) {
       logger.error('POST /api/webhooks/postback', 'Error saving postback', { error: err.message });
       return res.status(500).json({ error: 'Failed to process postback order.' });
     }
-  });
+  }));
 
   // ================= ADMIN ENDPOINTS =================
   function requireAdmin(req, res) {
@@ -1420,7 +1450,7 @@ function registerCashbackRoutes(app) {
     return user;
   }
 
-  app.get('/api/admin/dashboard', async (req, res) => {
+  app.get('/api/admin/dashboard', asyncHandler(async (req, res) => {
     logger.logEnter('GET /api/admin/dashboard');
     if (!requireAdmin(req, res)) return;
 
@@ -1500,7 +1530,7 @@ function registerCashbackRoutes(app) {
         totalWithdrawals: db.withdrawals.length
       }
     });
-  });
+  }));
 
   // Reveal raw postback URL on explicit admin request
   app.get('/api/admin/reveal-postback-url', (req, res) => {
@@ -1515,7 +1545,7 @@ function registerCashbackRoutes(app) {
     return res.json({ postbackUrl: fullUrl });
   });
 
-  app.post('/api/admin/sync-shopee', async (req, res) => {
+  app.post('/api/admin/sync-shopee', asyncHandler(async (req, res) => {
     logger.logEnter('POST /api/admin/sync-shopee');
     if (!requireAdmin(req, res)) return;
     try {
@@ -1524,9 +1554,9 @@ function registerCashbackRoutes(app) {
     } catch (err) {
       return res.status(400).json({ error: err.message });
     }
-  });
+  }));
 
-  app.post('/api/admin/settings', async (req, res) => {
+  app.post('/api/admin/settings', asyncHandler(async (req, res) => {
     logger.logEnter('POST /api/admin/settings');
     if (!requireAdmin(req, res)) return;
 
@@ -1609,9 +1639,9 @@ function registerCashbackRoutes(app) {
     await saveDb(db);
     logger.logLeave('POST /api/admin/settings');
     return res.json({ status: 'ok' });
-  });
+  }));
 
-  app.post('/api/admin/orders', async (req, res) => {
+  app.post('/api/admin/orders', asyncHandler(async (req, res) => {
     logger.logEnter('POST /api/admin/orders');
     if (!requireAdmin(req, res)) return;
 
@@ -1764,10 +1794,10 @@ function registerCashbackRoutes(app) {
 
     logger.logLeave('POST /api/admin/orders', { orderSn: targetOrder.orderSn, status: targetOrder.status, cashback: targetOrder.userCashbackAmount });
     return res.json({ order: targetOrder });
-  });
+  }));
 
   // Admin Delete Order
-  app.post('/api/admin/orders/delete', async (req, res) => {
+  app.post('/api/admin/orders/delete', asyncHandler(async (req, res) => {
     logger.logEnter('POST /api/admin/orders/delete');
     if (!requireAdmin(req, res)) return;
 
@@ -1793,10 +1823,10 @@ function registerCashbackRoutes(app) {
 
     logger.logLeave('POST /api/admin/orders/delete', { orderSn: deletedOrder.orderSn });
     return res.json({ status: 'ok', message: `Đã xóa đơn hàng #${deletedOrder.orderSn} thành công!` });
-  });
+  }));
 
   // Admin CSV Import (Payload limit 200kb, max 500 rows per batch)
-  app.post('/api/admin/import-orders', express.json({ limit: '200kb' }), async (req, res) => {
+  app.post('/api/admin/import-orders', express.json({ limit: '200kb' }), asyncHandler(async (req, res) => {
     logger.logEnter('POST /api/admin/import-orders');
     if (!requireAdmin(req, res)) return;
 
@@ -1845,17 +1875,17 @@ function registerCashbackRoutes(app) {
     await saveDb(db);
     logger.logLeave('POST /api/admin/import-orders', { importedCount, errorCount: errors.length });
     return res.json({ importedCount, errors });
-  });
+  }));
 
-  app.post('/api/admin/withdrawals/update', async (req, res) => {
+  app.post('/api/admin/withdrawals/update', asyncHandler(async (req, res) => {
     logger.logEnter('POST /api/admin/withdrawals/update');
     if (!requireAdmin(req, res)) return;
 
     const { id, status } = req.body || {};
-    const ALLOWED_WITHDRAWAL_STATUSES = ['pending', 'paid', 'rejected'];
+    const ALLOWED_WITHDRAWAL_STATUSES = ['paid', 'rejected'];
     if (!ALLOWED_WITHDRAWAL_STATUSES.includes(status)) {
       return res.status(400).json({
-        error: `Trạng thái rút tiền không hợp lệ. Chỉ chấp nhận: ${ALLOWED_WITHDRAWAL_STATUSES.join(', ')}.`
+        error: `Trạng thái rút tiền không hợp lệ. Chỉ chấp nhận duyệt: paid hoặc rejected.`
       });
     }
 
@@ -1865,17 +1895,40 @@ function registerCashbackRoutes(app) {
       return res.status(404).json({ error: 'Không tìm thấy yêu cầu rút tiền.' });
     }
 
+    if (wd.status === 'paid') {
+      return res.status(400).json({ error: 'Lệnh rút tiền đã chi trả thành công, không thể thay đổi trạng thái.' });
+    }
+    if (wd.status === 'rejected') {
+      return res.status(400).json({ error: 'Lệnh rút tiền đã bị từ chối trước đó, không thể thay đổi lại.' });
+    }
+
     wd.status = status;
     wd.processedAt = new Date().toISOString();
+
+    // If rejected, refund user's balance via compensatory credit ledger entry (append-only)
+    if (status === 'rejected') {
+      const refundRefId = `withdraw_refund_${wd.id}`;
+      const existingRefund = db.ledger.find((l) => l.refId === refundRefId);
+      if (!existingRefund) {
+        appendLedgerEntry(
+          wd.userId,
+          'withdrawal_refund',
+          Math.abs(Number(wd.amount || 0)),
+          refundRefId,
+          `Hoàn tiền do lệnh rút #${wd.id} bị từ chối`
+        );
+      }
+    }
+
     recalculateUserWallet(wd.userId);
     await saveDb(db);
 
     logger.logLeave('POST /api/admin/withdrawals/update', { id, status });
     return res.json({ withdrawal: wd });
-  });
+  }));
 
-  // Admin Delete Withdrawal
-  app.post('/api/admin/withdrawals/delete', async (req, res) => {
+  // Admin Delete / Cancel Withdrawal
+  app.post('/api/admin/withdrawals/delete', asyncHandler(async (req, res) => {
     logger.logEnter('POST /api/admin/withdrawals/delete');
     if (!requireAdmin(req, res)) return;
 
@@ -1885,25 +1938,41 @@ function registerCashbackRoutes(app) {
     }
 
     const db = ensureDbLoaded();
-    const idx = db.withdrawals.findIndex((w) => w.id === id);
-    if (idx === -1) {
+    const wd = db.withdrawals.find((w) => w.id === id);
+    if (!wd) {
       return res.status(404).json({ error: 'Không tìm thấy lệnh rút tiền.' });
     }
 
-    const [deletedWd] = db.withdrawals.splice(idx, 1);
-    // Remove ledger debit & refund entries for this withdrawal so balance is unlocked/restored
-    db.ledger = db.ledger.filter(
-      (e) => !e.refId.startsWith(`withdraw_debit_${id}`) && !e.refId.startsWith(`withdraw_refund_${id}`)
-    );
-    recalculateUserWallet(deletedWd.userId);
+    if (wd.status === 'paid') {
+      return res.status(400).json({
+        error: 'Không thể xóa lệnh rút tiền đã chi trả thành công để bảo toàn sổ cái tài chính.'
+      });
+    }
+
+    // Mark rejected and refund user via append-only ledger (never delete ledger entries)
+    wd.status = 'rejected';
+    wd.processedAt = new Date().toISOString();
+    const refundRefId = `withdraw_refund_${wd.id}`;
+    const existingRefund = db.ledger.find((l) => l.refId === refundRefId);
+    if (!existingRefund) {
+      appendLedgerEntry(
+        wd.userId,
+        'withdrawal_refund',
+        Math.abs(Number(wd.amount || 0)),
+        refundRefId,
+        `Hoàn tiền do hủy yêu cầu rút #${wd.id}`
+      );
+    }
+
+    recalculateUserWallet(wd.userId);
     await saveDb(db);
 
     logger.logLeave('POST /api/admin/withdrawals/delete', { id });
-    return res.json({ status: 'ok', message: `Đã xóa lệnh rút tiền #${id} thành công!` });
-  });
+    return res.json({ status: 'ok', message: `Đã hủy và hoàn tiền lệnh rút #${id} thành công!` });
+  }));
 
   // Admin User Management Action (Reset password, Lock/Unlock, Adjust balance, Reset balance, Delete)
-  app.post('/api/admin/users/action', async (req, res) => {
+  app.post('/api/admin/users/action', asyncHandler(async (req, res) => {
     logger.logEnter('POST /api/admin/users/action');
     if (!requireAdmin(req, res)) return;
 
@@ -1991,6 +2060,19 @@ function registerCashbackRoutes(app) {
     }
 
     return res.status(400).json({ error: 'Thao tác không hợp lệ.' });
+  }));
+
+  // Centralized express error handler
+  app.use((err, req, res, _next) => {
+    logger.error('express', 'Lỗi xử lý request chưa bắt', {
+      path: req.path,
+      method: req.method,
+      error: err.message
+    });
+    if (res.headersSent) return;
+    const status = err.httpStatus || err.status || 500;
+    const message = err.publicMessage || (status >= 500 ? 'Đã xảy ra lỗi hệ thống. Vui lòng thử lại sau.' : err.message);
+    return res.status(status).json({ error: message });
   });
 
   // Periodic background auto-sync every 15 minutes on persistent server (Singleton timer)
