@@ -46,6 +46,12 @@ const {
   buildVietQrImageUrl
 } = require('../utils/securityMiddleware');
 const { cleanExpiredClicks } = require('../utils/clickManager');
+const {
+  DEFAULT_ZALO_GROUP_URL,
+  isValidZaloGroupUrl,
+  normalizeZaloTarget,
+  migrateZaloSettings
+} = require('../utils/zalo');
 
 class AppError extends Error {
   constructor(status, publicMessage) {
@@ -1237,6 +1243,13 @@ function verifyWebhookRequest(req, db) {
 }
 
 function registerCashbackRoutes(app) {
+  try {
+    const startupDb = ensureDbLoaded();
+    migrateZaloSettings(startupDb);
+  } catch (err) {
+    logger.warning('registerCashbackRoutes', 'Initial db load migration warning', { error: err.message });
+  }
+
   const authLimiter = createRateLimiter({
     windowMs: 60000,
     max: 15,
@@ -1255,6 +1268,8 @@ function registerCashbackRoutes(app) {
   app.use(async (req, res, next) => {
     try {
       await initPostgresIfConfigured();
+      const activeDb = ensureDbLoaded();
+      migrateZaloSettings(activeDb);
       next();
     } catch (err) {
       logger.error('initMiddleware', 'Postgres startup error', { error: err.message });
@@ -1293,6 +1308,7 @@ function registerCashbackRoutes(app) {
   app.get('/api/public-config', (req, res) => {
     logger.logEnter('GET /api/public-config');
     const db = ensureDbLoaded();
+    migrateZaloSettings(db);
     const s = db.settings;
     res.json({
       siteName: s.siteName || 'Hoàn Tiền Sàn',
@@ -1302,10 +1318,33 @@ function registerCashbackRoutes(app) {
       referralBountyAmount: Number(s.referralBountyAmount ?? 5000),
       minWithdrawAmount: Number(s.minWithdrawAmount || 50000),
       supportZalo: s.supportZalo || '',
+      zaloGroupUrl: s.zaloGroupUrl || DEFAULT_ZALO_GROUP_URL,
+      zaloWidgetEnabled: s.zaloWidgetEnabled ?? true,
       turnstileSiteKey: process.env.TURNSTILE_SITE_KEY || '',
       hasShopeeConfigured: Boolean(s.shopeeAffiliateId || s.shopeeAppId)
     });
     logger.logLeave('GET /api/public-config');
+  });
+
+  app.get('/api/settings', (req, res) => {
+    logger.logEnter('GET /api/settings');
+    const db = ensureDbLoaded();
+    migrateZaloSettings(db);
+    const s = db.settings;
+    res.json({
+      siteName: s.siteName || 'Hoàn Tiền Sàn',
+      cashbackPercent: Number(s.cashbackPercent || 70),
+      taxDeductPercent: Number(s.taxDeductPercent ?? 10),
+      referralBonusPercent: Number(s.referralBonusPercent ?? 5),
+      referralBountyAmount: Number(s.referralBountyAmount ?? 5000),
+      minWithdrawAmount: Number(s.minWithdrawAmount || 50000),
+      supportZalo: s.supportZalo || '',
+      zaloGroupUrl: s.zaloGroupUrl || DEFAULT_ZALO_GROUP_URL,
+      zaloWidgetEnabled: s.zaloWidgetEnabled ?? true,
+      turnstileSiteKey: process.env.TURNSTILE_SITE_KEY || '',
+      hasShopeeConfigured: Boolean(s.shopeeAffiliateId || s.shopeeAppId)
+    });
+    logger.logLeave('GET /api/settings');
   });
 
   // 2. Auth: Register (scrypt + 1-level referral + Turnstile check)
@@ -2507,6 +2546,7 @@ function registerCashbackRoutes(app) {
   app.get('/api/admin/settings', requireAdmin, asyncHandler(async (req, res) => {
     logger.logEnter('GET /api/admin/settings');
     const db = ensureDbLoaded();
+    migrateZaloSettings(db);
     const postbackToken = getConfiguredPostbackToken(db);
     const isSuperAdmin = req.adminUser?.role === 'admin';
     const revealRequested = Boolean(
@@ -2517,6 +2557,8 @@ function registerCashbackRoutes(app) {
     const shouldReveal = isSuperAdmin && revealRequested;
 
     const safeSettings = { ...db.settings };
+    safeSettings.zaloGroupUrl = db.settings.zaloGroupUrl || DEFAULT_ZALO_GROUP_URL;
+    safeSettings.zaloWidgetEnabled = db.settings.zaloWidgetEnabled ?? true;
     safeSettings.postbackToken = shouldReveal ? (db.settings.postbackToken || postbackToken) : '***';
     safeSettings.shopeeAppSecret = shouldReveal ? (db.settings.shopeeAppSecret || process.env.SHOPEE_APP_SECRET || '') : '***';
     safeSettings.tiktokAppSecret = shouldReveal ? (db.settings.tiktokAppSecret || process.env.TIKTOK_APP_SECRET || '') : '***';
@@ -2549,6 +2591,26 @@ function registerCashbackRoutes(app) {
       if (body[key] !== undefined) {
         db.settings[key] = String(body[key] || '').trim();
       }
+    }
+
+    if (body.zaloGroupUrl !== undefined) {
+      const rawZalo = String(body.zaloGroupUrl || '').trim();
+      if (rawZalo) {
+        if (!isValidZaloGroupUrl(rawZalo)) {
+          return res.status(400).json({ error: 'Đường dẫn nhóm Zalo không hợp lệ. Phải là đường dẫn HTTPS đến zalo.me.' });
+        }
+        db.settings.zaloGroupUrl = normalizeZaloTarget(rawZalo);
+      } else {
+        db.settings.zaloGroupUrl = '';
+      }
+    }
+
+    if (body.zaloWidgetEnabled !== undefined) {
+      db.settings.zaloWidgetEnabled = Boolean(body.zaloWidgetEnabled);
+    }
+
+    if (body.zaloGroupUrl === undefined) {
+      migrateZaloSettings(db);
     }
 
     // Strict finite numeric validation to prevent NaN contamination

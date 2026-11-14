@@ -260,6 +260,8 @@ function getDefaultSettings() {
     referralBountyAmount: Number.isFinite(rawBounty) && rawBounty >= 0 ? rawBounty : 5000,
     minWithdrawAmount: Number.isFinite(rawMinWd) && rawMinWd >= 0 ? rawMinWd : 50000,
     supportZalo: process.env.SUPPORT_ZALO || '',
+    zaloGroupUrl: (process.env.ZALO_GROUP_URL || '').trim(),
+    zaloWidgetEnabled: true,
     lastAutoSyncAt: null,
     shortenerProvider: process.env.SHORTENER_PROVIDER || 'none'
   };
@@ -362,6 +364,13 @@ function normalizeState(raw, initial = null) {
   delete state.settings.postbackToken;
 
   syncAdminCredentials(state);
+  if (
+    typeof state.settings.supportZalo === 'string' &&
+    state.settings.supportZalo.startsWith('https://zalo.me/g/') &&
+    !state.settings.zaloGroupUrl
+  ) {
+    state.settings.zaloGroupUrl = state.settings.supportZalo.trim();
+  }
   return state;
 }
 
@@ -371,6 +380,14 @@ function ensureDbLoaded() {
     if (process.env.SHOPEE_AFFILIATE_ID) memoryCache.settings.shopeeAffiliateId = process.env.SHOPEE_AFFILIATE_ID.trim();
     if (process.env.TIKTOK_DEEPLINK_TEMPLATE) memoryCache.settings.tiktokDeepLinkTemplate = process.env.TIKTOK_DEEPLINK_TEMPLATE.trim();
     if (process.env.SUPPORT_ZALO) memoryCache.settings.supportZalo = process.env.SUPPORT_ZALO.trim();
+    if (process.env.ZALO_GROUP_URL) memoryCache.settings.zaloGroupUrl = process.env.ZALO_GROUP_URL.trim();
+    if (
+      typeof memoryCache.settings.supportZalo === 'string' &&
+      memoryCache.settings.supportZalo.startsWith('https://zalo.me/g/') &&
+      !memoryCache.settings.zaloGroupUrl
+    ) {
+      memoryCache.settings.zaloGroupUrl = memoryCache.settings.supportZalo.trim();
+    }
     if (process.env.ADDLIVETAG_API_KEY) {
       memoryCache.settings.addlivetagApiKey = process.env.ADDLIVETAG_API_KEY.trim();
     } else if (!memoryCache.settings.addlivetagApiKey) {
