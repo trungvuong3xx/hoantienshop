@@ -59,7 +59,7 @@ function numOr(val, fallback) {
 }
 
 let publicConfig = {
-  siteName: 'Hoàn Tiền Sàn',
+  siteName: 'LiLa',
   cashbackPercent: 70,
   taxDeductPercent: 10,
   referralBountyAmount: 10000,
@@ -609,6 +609,8 @@ function applyZaloWidget(cfg) {
 function applyPublicSettings(data) {
   if (!data) return;
   publicConfig = { ...publicConfig, ...data };
+  const navSiteNameEl = document.getElementById('navSiteName');
+  if (navSiteNameEl && publicConfig.siteName) navSiteNameEl.textContent = publicConfig.siteName;
   const rateEl = document.getElementById('heroCashbackRate');
   if (rateEl) rateEl.textContent = `${publicConfig.cashbackPercent}%`;
   const minLabel = document.getElementById('minWithdrawLabel');
@@ -1564,7 +1566,7 @@ on('shareZaloBtn', 'click', () => {
   const refLink = document.getElementById('userReferralLinkInput')?.value;
   if (!refLink) return;
   const title = 'Mua Shopee & TikTok hoàn tiền đến 70%';
-  const text = `Tớ đang dùng Hoàn Tiền Sàn mua sắm Shopee & TikTok được hoàn đến 70% hoa hồng! Bấm vào đây đăng ký cùng tớ nhé: ${refLink}`;
+  const text = `Tớ đang dùng LiLa mua sắm Shopee & TikTok được hoàn đến 70% hoa hồng! Bấm vào đây đăng ký cùng tớ nhé: ${refLink}`;
 
   if (navigator.share) {
     navigator.share({ title, text, url: refLink }).catch(() => {});
@@ -3230,11 +3232,11 @@ function showPwaBanner() {
   if (isIosDevice()) {
     if (pwaBannerDesc) {
       pwaBannerDesc.textContent =
-        'Thêm Hoàn Tiền Sàn ra màn hình chính iPhone để mở nhanh như App.';
+        'Thêm LiLa ra màn hình chính iPhone để mở nhanh như App.';
     }
   } else {
     if (pwaBannerDesc) {
-      pwaBannerDesc.textContent = 'Thêm Hoàn Tiền Sàn ra màn hình chính để truy cập nhanh.';
+      pwaBannerDesc.textContent = 'Thêm LiLa ra màn hình chính để truy cập nhanh.';
     }
   }
 
@@ -3265,7 +3267,7 @@ function openPwaGuideModal(type = 'ios') {
       <div class="pwa-step-item">
         <div class="pwa-step-num">3</div>
         <div class="pwa-step-text">
-          Nhấn nút <strong>Thêm</strong> (Add) ở góc trên bên phải màn hình. Biểu tượng ứng dụng <strong>Hoàn Tiền Sàn</strong> sẽ xuất hiện ngay trên màn hình chính của bạn!
+          Nhấn nút <strong>Thêm</strong> (Add) ở góc trên bên phải màn hình. Biểu tượng ứng dụng <strong>LiLa</strong> sẽ xuất hiện ngay trên màn hình chính của bạn!
         </div>
       </div>
     `;
@@ -3286,7 +3288,7 @@ function openPwaGuideModal(type = 'ios') {
       <div class="pwa-step-item">
         <div class="pwa-step-num">3</div>
         <div class="pwa-step-text">
-          Nhấn <strong>Cài đặt</strong> để hoàn tất. Bạn có thể mở Hoàn Tiền Sàn trực tiếp từ màn hình điện thoại bất cứ lúc nào!
+          Nhấn <strong>Cài đặt</strong> để hoàn tất. Bạn có thể mở LiLa trực tiếp từ màn hình điện thoại bất cứ lúc nào!
         </div>
       </div>
     `;
@@ -3314,7 +3316,7 @@ if (pwaInstallBtn) {
         const choice = await deferredInstallPrompt.userChoice;
         if (choice && choice.outcome === 'accepted') {
           hidePwaBanner();
-          showToast('Đang cài đặt Hoàn Tiền Sàn ra màn hình chính...');
+          showToast('Đang cài đặt LiLa ra màn hình chính...');
         }
       } catch (err) {
         openPwaGuideModal(isIosDevice() ? 'ios' : 'android');

@@ -334,7 +334,7 @@ function getDefaultSettings() {
   const rawBounty = Number(process.env.REFERRAL_BOUNTY_AMOUNT);
 
   cachedDefaultSettings = {
-    siteName: process.env.SITE_NAME || 'Hoàn Tiền Sàn',
+    siteName: process.env.SITE_NAME || 'LiLa',
     shopeeMode: process.env.SHOPEE_MODE || 'an_redir',
     shopeeAffiliateId: (process.env.SHOPEE_AFFILIATE_ID || '').trim(),
     addlivetagApiKey: (process.env.ADDLIVETAG_API_KEY || '').trim(),
@@ -440,6 +440,9 @@ function syncAdminCredentials(data) {
  */
 function migrateReferralBountySetting(settings) {
   if (!settings || typeof settings !== 'object') return;
+  if (!settings.siteName || settings.siteName === 'Hoàn Tiền Sàn') {
+    settings.siteName = 'LiLa';
+  }
   if (!settings.referralBountyV2Migrated) {
     if (settings.referralBountyAmount === undefined || Number(settings.referralBountyAmount) === 5000) {
       settings.referralBountyAmount = 10000;

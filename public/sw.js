@@ -1,10 +1,10 @@
-// Service Worker for HoanTienShop PWA
-const CACHE_NAME = 'hts-pwa-v2';
+// Service Worker for LiLa PWA
+const CACHE_NAME = 'lila-pwa-v3';
 const OFFLINE_URL = '/offline.html';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll([OFFLINE_URL]))
+    caches.open(CACHE_NAME).then((cache) => cache.addAll([OFFLINE_URL, '/icon.svg']))
   );
   self.skipWaiting();
 });
