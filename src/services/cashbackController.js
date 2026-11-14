@@ -43,6 +43,7 @@ const {
   verifyTurnstileIfEnabled,
   buildVietQrImageUrl
 } = require('../utils/securityMiddleware');
+const { cleanExpiredClicks } = require('../utils/clickManager');
 
 class AppError extends Error {
   constructor(status, publicMessage) {
@@ -1512,7 +1513,10 @@ function registerCashbackRoutes(app) {
         }
 
         if (item.status === 'success' && item.clickId) {
-          db.clicks.unshift({
+          if (!Array.isArray(db.clicks)) {
+            db.clicks = [];
+          }
+          const clickRecord = {
             clickId: item.clickId,
             userId: authUser ? authUser.id : null,
             userCode: authUser ? authUser.code : 'GUEST',
@@ -1522,11 +1526,17 @@ function registerCashbackRoutes(app) {
             productId: item.productId || null,
             affiliateUrl: item.affiliateUrl,
             createdAt: new Date().toISOString()
+          };
+          db.clicks.unshift(clickRecord);
+          logger.log('POST /api/convert', 'Click recorded', {
+            clickId: item.clickId,
+            userCode: clickRecord.userCode,
+            platform: item.platform
           });
         }
       }
 
-      db.clicks = db.clicks.slice(0, 5000);
+      db.clicks = cleanExpiredClicks(db.clicks);
       await saveDb(db);
 
       logger.logLeave('POST /api/convert', { total: result.summary.total });
