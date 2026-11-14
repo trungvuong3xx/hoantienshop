@@ -536,8 +536,8 @@ async function main() {
     assert.ok(!pwdMatch[0].includes('Math.random'), 'btnGenerateRandomPwd must not use Math.random');
 
     // Asset cache-busting & HTTP headers
-    assert.ok(indexHtml.includes('/styles.css?v=2.1.0'), 'index.html must reference versioned styles.css');
-    assert.ok(indexHtml.includes('/app.js?v=2.1.0'), 'index.html must reference versioned app.js');
+    assert.ok(/\/styles\.css\?v=\d+\.\d+\.\d+/.test(indexHtml), 'index.html must reference versioned styles.css');
+    assert.ok(/\/app\.js\?v=\d+\.\d+\.\d+/.test(indexHtml), 'index.html must reference versioned app.js');
     const appAssetRes = await fetch(`${baseUrl}/app.js`);
     assert.strictEqual(appAssetRes.status, 200);
     const cacheCtrl = appAssetRes.headers.get('cache-control') || '';

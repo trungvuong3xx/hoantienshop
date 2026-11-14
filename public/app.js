@@ -266,9 +266,14 @@ function switchView(viewName, updateHistory = true, options = {}) {
     try {
       history.pushState({ view: targetView }, '', `#${targetView}`);
     } catch {}
+    if (typeof window !== 'undefined' && typeof window.scrollTo === 'function') {
+      try {
+        window.scrollTo({ top: 0, behavior: 'auto' });
+      } catch {}
+    }
   }
 
-  if (targetView === 'wallet' && authToken && !options.skipReload) {
+  if (['wallet', 'orders', 'account'].includes(targetView) && authToken && !options.skipReload) {
     loadUserDashboard();
   }
   if (targetView === 'admin' && authToken && currentUser?.role === 'admin') {
@@ -287,6 +292,47 @@ document.body.addEventListener('click', (e) => {
   if (navEl) {
     e.preventDefault();
     switchView(navEl.getAttribute('data-nav'));
+    return;
+  }
+
+  const hbTabBtn = e.target.closest('[data-hb-tab]');
+  if (hbTabBtn) {
+    const tab = hbTabBtn.getAttribute('data-hb-tab');
+    document.querySelectorAll('.hb-tab').forEach((btn) => {
+      const isActive = btn.getAttribute('data-hb-tab') === tab;
+      btn.classList.toggle('active', isActive);
+      btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+    });
+    document.querySelectorAll('.hb-panel').forEach((panel) => {
+      const isMatch = panel.id === `hb-panel-${tab}`;
+      panel.classList.toggle('active', isMatch);
+      panel.classList.toggle('hidden', !isMatch);
+    });
+    return;
+  }
+
+  const walletTabBtn = e.target.closest('[data-wallet-tab]');
+  if (walletTabBtn) {
+    const tab = walletTabBtn.getAttribute('data-wallet-tab');
+    document.querySelectorAll('[data-wallet-tab]').forEach((btn) => {
+      const isActive = btn.getAttribute('data-wallet-tab') === tab;
+      btn.classList.toggle('active', isActive);
+      btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+    });
+    document.getElementById('walletTabWithdrawals')?.classList.toggle('hidden', tab !== 'withdrawals');
+    document.getElementById('walletTabLedger')?.classList.toggle('hidden', tab !== 'ledger');
+    return;
+  }
+
+  const orderStatusBtn = e.target.closest('[data-order-status]');
+  if (orderStatusBtn) {
+    activeOrderStatusFilter = orderStatusBtn.getAttribute('data-order-status') || 'all';
+    document.querySelectorAll('[data-order-status]').forEach((btn) => {
+      const isActive = btn.getAttribute('data-order-status') === activeOrderStatusFilter;
+      btn.classList.toggle('active', isActive);
+      btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+    });
+    renderUserOrdersTable(userOrdersCache);
     return;
   }
 
@@ -386,36 +432,127 @@ window.addEventListener('keydown', (e) => {
   }
 });
 
+let isBalanceHidden = safeStorage.get('hts_hide_balance') === '1';
+
+function updateBalancePrivacyDisplay() {
+  const maskText = '••••••đ';
+  const avail = currentUser ? fmtVnd(currentUser.balanceAvailable) : '0đ';
+  const pend = currentUser ? fmtVnd(currentUser.balancePending) : '0đ';
+  const earned = currentUser ? fmtVnd(currentUser.totalEarned) : '0đ';
+  const withdrawn = currentUser ? fmtVnd(currentUser.totalWithdrawn) : '0đ';
+
+  const setTxt = (id, txt) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = txt;
+  };
+
+  setTxt('headerUserBalance', isBalanceHidden ? '••••đ' : avail);
+  setTxt('statAvailable', isBalanceHidden ? maskText : avail);
+  setTxt('statPending', isBalanceHidden ? maskText : pend);
+  setTxt('statTotalEarned', isBalanceHidden ? maskText : earned);
+  setTxt('statWithdrawn', isBalanceHidden ? maskText : withdrawn);
+
+  const privacyBtn = document.getElementById('toggleBalancePrivacyBtn');
+  if (privacyBtn) {
+    privacyBtn.textContent = isBalanceHidden ? '👁️ Hiện số dư' : '👁️ Ẩn số dư';
+    privacyBtn.setAttribute('aria-pressed', isBalanceHidden ? 'true' : 'false');
+  }
+}
+
+function updateWithdrawProgressBar() {
+  const barBox = document.getElementById('withdrawThresholdBar');
+  const textEl = document.getElementById('withdrawProgressText');
+  const pctEl = document.getElementById('withdrawProgressPercent');
+  const fillEl = document.getElementById('withdrawProgressFill');
+  if (!barBox || !textEl || !pctEl || !fillEl) return;
+
+  const minAmount = numOr(publicConfig.minWithdrawAmount, 50000);
+  const available = Number(currentUser?.balanceAvailable || 0);
+  const pct = minAmount > 0 ? Math.min(100, Math.max(0, Math.round((available / minAmount) * 100))) : 100;
+
+  fillEl.style.width = `${pct}%`;
+  pctEl.textContent = `${pct}%`;
+
+  if (available >= minAmount) {
+    barBox.classList.add('eligible');
+    textEl.textContent = '✅ Bạn đã đủ điều kiện rút tiền ngay!';
+  } else {
+    barBox.classList.remove('eligible');
+    const remaining = Math.max(0, minAmount - available);
+    textEl.textContent = `Cần thêm ${fmtVnd(remaining)} để đạt hạn mức tối thiểu (${fmtVnd(minAmount)})`;
+  }
+}
+
+function syncAccountProfileUi() {
+  if (!currentUser) return;
+  const setTxt = (id, txt) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = txt;
+  };
+  const displayName = currentUser.name || 'Thành viên';
+  const initial = displayName.trim().charAt(0).toUpperCase() || 'U';
+  setTxt('accountAvatarInitial', initial);
+  setTxt('accountUserName', displayName);
+  setTxt('accountUserPhone', currentUser.phone || 'Chưa cập nhật SĐT');
+  setTxt('accountUserCode', currentUser.code || '...');
+
+  const bankSummaryEl = document.getElementById('accountBankSummary');
+  if (bankSummaryEl) {
+    if (currentUser.bankName && currentUser.bankAccount) {
+      const ownerPart = currentUser.bankOwner ? ` • ${currentUser.bankOwner}` : '';
+      bankSummaryEl.textContent = `🏦 Tài khoản nhận tiền: ${currentUser.bankName} — ${currentUser.bankAccount}${ownerPart}`;
+    } else {
+      bankSummaryEl.textContent = '🏦 Chưa lưu thông tin ngân hàng nhận tiền (nhập ở mục Ví khi rút lần đầu)';
+    }
+  }
+}
+
 // Sync Auth UI
 function syncAuthUi() {
   const navAuthArea = document.getElementById('navAuthArea');
   const navUserArea = document.getElementById('navUserArea');
   const navAdminBtn = document.getElementById('navAdminBtn');
   const mobileNavAdminBtn = document.getElementById('mobileNavAdminBtn');
+  const accountAdminMenuBtn = document.getElementById('accountAdminMenuBtn');
   const walletGuestPrompt = document.getElementById('walletGuestPrompt');
   const walletAuthenticatedContent = document.getElementById('walletAuthenticatedContent');
+  const ordersGuestPrompt = document.getElementById('ordersGuestPrompt');
+  const ordersAuthenticatedContent = document.getElementById('ordersAuthenticatedContent');
+  const accountGuestPrompt = document.getElementById('accountGuestPrompt');
+  const accountAuthenticatedContent = document.getElementById('accountAuthenticatedContent');
 
   if (authToken && currentUser) {
     navAuthArea?.classList.add('hidden');
     navUserArea?.classList.remove('hidden');
     walletGuestPrompt?.classList.add('hidden');
     walletAuthenticatedContent?.classList.remove('hidden');
+    ordersGuestPrompt?.classList.add('hidden');
+    ordersAuthenticatedContent?.classList.remove('hidden');
+    accountGuestPrompt?.classList.add('hidden');
+    accountAuthenticatedContent?.classList.remove('hidden');
 
     const headerNameEl = document.getElementById('headerUserName');
     if (headerNameEl) headerNameEl.textContent = currentUser.name || '';
-    const headerBalEl = document.getElementById('headerUserBalance');
-    if (headerBalEl) headerBalEl.textContent = fmtVnd(currentUser.balanceAvailable);
+    updateBalancePrivacyDisplay();
+    updateWithdrawProgressBar();
+    syncAccountProfileUi();
 
     const isAdmin = currentUser.role === 'admin';
     navAdminBtn?.classList.toggle('hidden', !isAdmin);
     mobileNavAdminBtn?.classList.toggle('hidden', !isAdmin);
+    accountAdminMenuBtn?.classList.toggle('hidden', !isAdmin);
   } else {
     navAuthArea?.classList.remove('hidden');
     navUserArea?.classList.add('hidden');
     navAdminBtn?.classList.add('hidden');
     mobileNavAdminBtn?.classList.add('hidden');
+    accountAdminMenuBtn?.classList.add('hidden');
     walletGuestPrompt?.classList.remove('hidden');
     walletAuthenticatedContent?.classList.add('hidden');
+    ordersGuestPrompt?.classList.remove('hidden');
+    ordersAuthenticatedContent?.classList.add('hidden');
+    accountGuestPrompt?.classList.remove('hidden');
+    accountAuthenticatedContent?.classList.add('hidden');
   }
 }
 
@@ -433,6 +570,7 @@ function setSession(_token, user) {
     })
   );
   syncAuthUi();
+  loadUserDashboard();
 }
 
 async function clearSession() {
@@ -485,6 +623,7 @@ function applyPublicSettings(data) {
   });
 
   applyZaloWidget(publicConfig);
+  updateWithdrawProgressBar();
 }
 
 // Public Config
@@ -687,6 +826,37 @@ on('logoutBtn', 'click', () => {
   clearSession();
   showToast('Đã đăng xuất tài khoản.');
 });
+
+on('accountLogoutBtn', 'click', () => {
+  clearSession();
+  showToast('Đã đăng xuất tài khoản.');
+});
+
+on('copyAccountCodeBtn', 'click', () => {
+  const code = currentUser?.code || document.getElementById('accountUserCode')?.textContent?.trim();
+  if (code && code !== '...') {
+    copyText(code, `Đã sao chép mã tài khoản: ${code}`);
+  }
+});
+
+on('toggleBalancePrivacyBtn', 'click', () => {
+  isBalanceHidden = !isBalanceHidden;
+  safeStorage.set('hts_hide_balance', isBalanceHidden ? '1' : '0');
+  updateBalancePrivacyDisplay();
+});
+
+on('toggleClaimBoxBtn', 'click', () => {
+  const trigger = document.getElementById('toggleClaimBoxBtn');
+  const body = document.getElementById('orderClaimCollapsible');
+  if (!trigger || !body) return;
+  const isNowHidden = body.classList.toggle('hidden');
+  trigger.setAttribute('aria-expanded', isNowHidden ? 'false' : 'true');
+  if (!isNowHidden) {
+    document.getElementById('claimOrderSn')?.focus();
+  }
+});
+
+on('refreshOrdersBtn', 'click', () => loadUserDashboard());
 
 // ================= HOME CONVERTER (CUSTOMER VIEW) =================
 const productUrlInput = document.getElementById('productUrlInput');
@@ -1059,16 +1229,54 @@ if (wdBankAccountInput) {
 const USER_ORDERS_LIMIT = 10;
 let userOrdersPage = 1;
 let userOrdersTotalPages = 1;
+let userOrdersCache = [];
+let activeOrderStatusFilter = 'all';
+
+function syncOrderStatusCounts(orders) {
+  const list = Array.isArray(orders) ? orders : [];
+  const counts = { all: list.length, pending: 0, approved: 0, cancelled: 0 };
+  for (const o of list) {
+    const st = String(o.status || 'pending').toLowerCase();
+    if (st === 'approved') counts.approved += 1;
+    else if (st === 'cancelled') counts.cancelled += 1;
+    else counts.pending += 1;
+  }
+  const setCnt = (id, val) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = String(val);
+  };
+  setCnt('ordCountAll', counts.all);
+  setCnt('ordCountPending', counts.pending);
+  setCnt('ordCountApproved', counts.approved);
+  setCnt('ordCountCancelled', counts.cancelled);
+}
 
 function renderUserOrdersTable(orders) {
   const ordBody = document.getElementById('userOrdersTableBody');
   if (!ordBody) return;
-  if (!Array.isArray(orders) || orders.length === 0) {
-    ordBody.innerHTML =
-      '<tr><td colspan="4" class="text-center">Chưa có đơn hàng nào được ghi nhận.</td></tr>';
+  const sourceOrders = Array.isArray(orders) ? orders : [];
+  userOrdersCache = sourceOrders;
+  syncOrderStatusCounts(sourceOrders);
+
+  const filteredOrders =
+    activeOrderStatusFilter === 'all'
+      ? sourceOrders
+      : sourceOrders.filter((o) => {
+          const st = String(o.status || 'pending').toLowerCase();
+          return activeOrderStatusFilter === 'pending'
+            ? st !== 'approved' && st !== 'cancelled'
+            : st === activeOrderStatusFilter;
+        });
+
+  if (filteredOrders.length === 0) {
+    const emptyMsg =
+      sourceOrders.length === 0
+        ? 'Chưa có đơn hàng nào được ghi nhận.'
+        : 'Không có đơn hàng nào ở trạng thái này trong trang hiện tại.';
+    ordBody.innerHTML = `<tr><td colspan="4" class="text-center">${emptyMsg}</td></tr>`;
     return;
   }
-  ordBody.innerHTML = orders
+  ordBody.innerHTML = filteredOrders
     .map((o) => {
       const stCls = getStatusClass(o.status);
       const stLabel =
@@ -1129,9 +1337,14 @@ async function loadUserOrdersPage(page = 1) {
 async function loadUserDashboard(prefetchedData = null) {
   if (!authToken) return;
   const refreshBtn = document.getElementById('refreshWalletBtn');
+  const refreshOrdersBtn = document.getElementById('refreshOrdersBtn');
   if (refreshBtn) {
     refreshBtn.disabled = true;
     refreshBtn.textContent = 'Đang tải...';
+  }
+  if (refreshOrdersBtn) {
+    refreshOrdersBtn.disabled = true;
+    refreshOrdersBtn.textContent = 'Đang đồng bộ...';
   }
   try {
     const q = document.getElementById('userOrderSearchInput')?.value?.trim() || '';
@@ -1161,10 +1374,9 @@ async function loadUserDashboard(prefetchedData = null) {
     };
 
     setTxt('walletUserName', currentUser.name || '');
-    setTxt('statAvailable', fmtVnd(currentUser.balanceAvailable));
-    setTxt('statPending', fmtVnd(currentUser.balancePending));
-    setTxt('statTotalEarned', fmtVnd(currentUser.totalEarned));
-    setTxt('statWithdrawn', fmtVnd(currentUser.totalWithdrawn));
+    updateBalancePrivacyDisplay();
+    updateWithdrawProgressBar();
+    syncAccountProfileUi();
     setTxt('userRefCount', data.referralCount || 0);
 
     const refInputEl = document.getElementById('userReferralLinkInput');
@@ -1199,7 +1411,7 @@ async function loadUserDashboard(prefetchedData = null) {
     userOrdersPage = ordPagState.page;
     userOrdersTotalPages = ordPagState.totalPages;
 
-    // Ledger Table
+    // Balance History Table
     const ledBody = document.getElementById('userLedgerTableBody');
     const ledger = data.ledger || [];
     if (ledBody) {
@@ -1261,6 +1473,10 @@ async function loadUserDashboard(prefetchedData = null) {
     if (refreshBtn) {
       refreshBtn.disabled = false;
       refreshBtn.textContent = 'Làm mới số dư';
+    }
+    if (refreshOrdersBtn) {
+      refreshOrdersBtn.disabled = false;
+      refreshOrdersBtn.textContent = '🔄 Đồng bộ';
     }
   }
 }
@@ -1930,7 +2146,7 @@ async function loadAdminDashboard() {
     const dbTextEl = document.getElementById('admDbStatusText');
     if (dbTextEl) {
       if (dbStatus.mode === 'postgres') {
-        dbTextEl.textContent = '🟢 Đã kết nối Cloud PostgreSQL (Dữ liệu bền vững + Sổ cái Ledger)';
+        dbTextEl.textContent = '🟢 Đã kết nối Cloud PostgreSQL (Dữ liệu tài khoản & giao dịch bền vững)';
         dbTextEl.style.color = '#059669';
       } else if (dbStatus.mode === 'ephemeral_tmp') {
         dbTextEl.textContent =
@@ -2142,7 +2358,7 @@ on('admSaveOrderBtn', 'click', async () => {
     if (document.getElementById('admOrdCommission')) {
       document.getElementById('admOrdCommission').value = '';
     }
-    showToast('Đã lưu đơn hàng & ghi nhận vào sổ cái!');
+    showToast('Đã lưu đơn hàng & cập nhật số dư!');
     await loadAdminDashboard();
   } catch (err) {
     showToast(err.message);
@@ -3018,8 +3234,14 @@ async function initBoot() {
 
   // Restore view from URL hash on load (support both guide and faq routes)
   const initialHash = window.location.hash.replace('#', '');
-  if (initialHash && ['home', 'wallet', 'admin', 'guide', 'faq', 'terms'].includes(initialHash)) {
-    switchView(initialHash, false, { skipReload: initialHash === 'wallet' });
+  if (
+    initialHash &&
+    (['home', 'wallet', 'admin', 'guide', 'faq', 'terms'].includes(initialHash) ||
+      ['orders', 'account'].includes(initialHash))
+  ) {
+    switchView(initialHash, false, {
+      skipReload: initialHash === 'wallet' || initialHash === 'orders' || initialHash === 'account'
+    });
   }
 }
 

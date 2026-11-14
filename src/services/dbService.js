@@ -901,7 +901,7 @@ async function loadAuthoritativeStateFromPostgres(client) {
 
   let finalUsers = [];
   if (usersRes.rows.length > 0) {
-    const tableUsers = usersRes.rows.map((row) => ({
+    finalUsers = usersRes.rows.map((row) => ({
       id: row.id,
       code: row.code,
       name: row.name || '',
@@ -925,23 +925,13 @@ async function loadAuthoritativeStateFromPostgres(client) {
       hasNegativeBalance: Boolean(row.has_negative_balance),
       createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString()
     }));
-
-    const userMap = new Map();
-    for (const u of tableUsers) {
-      userMap.set(u.id, u);
-    }
-    const memoryUsers = memoryCache && Array.isArray(memoryCache.users) ? memoryCache.users : [];
-    for (const u of [...payloadUsers, ...memoryUsers]) {
-      if (u && u.id && !userMap.has(u.id)) {
-        userMap.set(u.id, u);
-      }
-    }
-    finalUsers = Array.from(userMap.values());
   } else if (payloadUsers.length > 0) {
     finalUsers = payloadUsers;
   } else {
     finalUsers = initial.users;
   }
+
+  const hasRelationalState = usersRes.rows.length > 0;
 
   const tableOrders = ordersRes.rows.map((row) => ({
     orderSn: row.order_sn,
@@ -971,17 +961,10 @@ async function loadAuthoritativeStateFromPostgres(client) {
     updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : new Date().toISOString()
   }));
 
-  const orderMap = new Map();
-  for (const o of tableOrders) {
-    orderMap.set(o.orderSn, o);
+  let finalOrders = tableOrders;
+  if (!hasRelationalState && finalOrders.length === 0 && payloadOrders.length > 0) {
+    finalOrders = payloadOrders;
   }
-  const memoryOrders = memoryCache && Array.isArray(memoryCache.orders) ? memoryCache.orders : [];
-  for (const o of [...payloadOrders, ...memoryOrders]) {
-    if (o && o.orderSn && !orderMap.has(o.orderSn)) {
-      orderMap.set(o.orderSn, o);
-    }
-  }
-  const finalOrders = Array.from(orderMap.values());
 
   const tableLedger = ledgerRes.rows.map((row) => ({
     id: row.id,
@@ -993,18 +976,10 @@ async function loadAuthoritativeStateFromPostgres(client) {
     createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString()
   }));
 
-  const ledgerMap = new Map();
-  for (const l of tableLedger) {
-    ledgerMap.set(l.refId || l.id, l);
+  let finalLedger = tableLedger;
+  if (!hasRelationalState && finalLedger.length === 0 && payloadLedger.length > 0) {
+    finalLedger = payloadLedger;
   }
-  const memoryLedger = memoryCache && Array.isArray(memoryCache.ledger) ? memoryCache.ledger : [];
-  for (const l of [...payloadLedger, ...memoryLedger]) {
-    const key = l?.refId || l?.id;
-    if (key && !ledgerMap.has(key)) {
-      ledgerMap.set(key, l);
-    }
-  }
-  const finalLedger = Array.from(ledgerMap.values());
 
   const tableWithdrawals = withdrawalsRes.rows.map((row) => ({
     id: row.id,
@@ -1023,41 +998,24 @@ async function loadAuthoritativeStateFromPostgres(client) {
     processedAt: row.processed_at ? new Date(row.processed_at).toISOString() : (row.updated_at ? new Date(row.updated_at).toISOString() : null)
   }));
 
-  const withdrawalMap = new Map();
-  for (const w of tableWithdrawals) {
-    withdrawalMap.set(w.id, w);
+  let finalWithdrawals = tableWithdrawals;
+  if (!hasRelationalState && finalWithdrawals.length === 0 && payloadWithdrawals.length > 0) {
+    finalWithdrawals = payloadWithdrawals;
   }
-  const memoryWithdrawals = memoryCache && Array.isArray(memoryCache.withdrawals) ? memoryCache.withdrawals : [];
-  for (const w of [...payloadWithdrawals, ...memoryWithdrawals]) {
-    if (w && w.id && !withdrawalMap.has(w.id)) {
-      withdrawalMap.set(w.id, w);
-    }
-  }
-  const finalWithdrawals = Array.from(withdrawalMap.values());
 
-  const tableClicks = clicksRes.rows.map((row) => ({
-    clickId: row.click_id,
-    userId: row.user_id || null,
-    userCode: row.user_code || 'GUEST',
-    platform: row.platform || 'shopee',
-    originalUrl: row.original_url || '',
-    cleanUrl: row.clean_url || '',
-    productId: row.product_id || '',
-    affiliateUrl: row.affiliate_url || '',
-    createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString()
-  }));
-
-  const clickMap = new Map();
-  for (const c of tableClicks) {
-    clickMap.set(c.clickId, c);
-  }
-  const memoryClicks = memoryCache && Array.isArray(memoryCache.clicks) ? memoryCache.clicks : [];
-  for (const c of memoryClicks) {
-    if (c && c.clickId && !clickMap.has(c.clickId)) {
-      clickMap.set(c.clickId, c);
-    }
-  }
-  const finalClicks = Array.from(clickMap.values()).slice(0, 5000);
+  const finalClicks = clicksRes.rows
+    .map((row) => ({
+      clickId: row.click_id,
+      userId: row.user_id || null,
+      userCode: row.user_code || 'GUEST',
+      platform: row.platform || 'shopee',
+      originalUrl: row.original_url || '',
+      cleanUrl: row.clean_url || '',
+      productId: row.product_id || '',
+      affiliateUrl: row.affiliate_url || '',
+      createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString()
+    }))
+    .slice(0, 5000);
 
   const tableAuditLogs = (auditLogsRes?.rows || []).map((row) => ({
     id: row.id,
@@ -1068,17 +1026,9 @@ async function loadAuthoritativeStateFromPostgres(client) {
     details: row.details || {},
     timestamp: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString()
   }));
-  const auditMap = new Map();
-  for (const a of tableAuditLogs) {
-    auditMap.set(a.id, a);
-  }
-  const memoryAudits = memoryCache && Array.isArray(memoryCache.auditLogs) ? memoryCache.auditLogs : [];
-  for (const a of [...payloadAuditLogs, ...memoryAudits]) {
-    if (a && a.id && !auditMap.has(a.id)) {
-      auditMap.set(a.id, a);
-    }
-  }
-  const finalAuditLogs = Array.from(auditMap.values()).slice(0, 1000);
+  const finalAuditLogs = (
+    tableAuditLogs.length > 0 || hasRelationalState ? tableAuditLogs : payloadAuditLogs
+  ).slice(0, 1000);
 
   return {
     settings,
@@ -1224,7 +1174,14 @@ async function batchSyncUsers(client, users) {
 }
 
 async function batchSyncWithdrawals(client, withdrawals) {
-  if (!Array.isArray(withdrawals) || withdrawals.length === 0) return;
+  if (!Array.isArray(withdrawals)) return;
+  const activeIds = withdrawals.map((w) => w && w.id).filter(Boolean);
+  if (activeIds.length === 0) {
+    await client.query('DELETE FROM withdrawals');
+    return;
+  }
+  await client.query('DELETE FROM withdrawals WHERE NOT (id = ANY($1::text[]))', [activeIds]);
+
   const chunks = chunkArray(withdrawals, 30);
   for (const chunk of chunks) {
     const valuePlaceholders = [];
@@ -1341,8 +1298,26 @@ async function batchSyncOrders(client, orders) {
       )
       VALUES ${valuePlaceholders.join(', ')}
       ON CONFLICT (order_sn) DO UPDATE SET
-        user_id = COALESCE(orders.user_id, EXCLUDED.user_id),
-        user_code = CASE WHEN orders.user_code = 'GUEST' THEN EXCLUDED.user_code ELSE orders.user_code END,
+        platform = COALESCE(NULLIF(EXCLUDED.platform, ''), orders.platform),
+        product_name = CASE
+          WHEN EXCLUDED.status_source = 'admin' AND EXCLUDED.product_name IS NOT NULL THEN EXCLUDED.product_name
+          WHEN (orders.product_name IS NULL OR orders.product_name = '') AND EXCLUDED.product_name <> '' THEN EXCLUDED.product_name
+          ELSE orders.product_name
+        END,
+        order_amount = CASE
+          WHEN EXCLUDED.status_source = 'admin' THEN EXCLUDED.order_amount
+          WHEN EXCLUDED.order_amount > 0 THEN EXCLUDED.order_amount
+          ELSE orders.order_amount
+        END,
+        user_id = CASE
+          WHEN EXCLUDED.status_source = 'admin' THEN EXCLUDED.user_id
+          ELSE COALESCE(orders.user_id, EXCLUDED.user_id)
+        END,
+        user_code = CASE
+          WHEN EXCLUDED.status_source = 'admin' AND EXCLUDED.user_code IS NOT NULL AND EXCLUDED.user_code <> '' THEN EXCLUDED.user_code
+          WHEN orders.user_code = 'GUEST' THEN EXCLUDED.user_code
+          ELSE orders.user_code
+        END,
         gross_commission = EXCLUDED.gross_commission,
         tax_amount = EXCLUDED.tax_amount,
         net_commission = EXCLUDED.net_commission,
@@ -1468,17 +1443,37 @@ async function persistOrderToPostgres(order, customClient = null) {
       )
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)
       ON CONFLICT (order_sn) DO UPDATE SET
-        user_id = COALESCE(orders.user_id, EXCLUDED.user_id),
-        user_code = CASE WHEN orders.user_code = 'GUEST' THEN EXCLUDED.user_code ELSE orders.user_code END,
+        platform = COALESCE(NULLIF(EXCLUDED.platform, ''), orders.platform),
+        product_name = CASE
+          WHEN EXCLUDED.status_source = 'admin' AND EXCLUDED.product_name IS NOT NULL THEN EXCLUDED.product_name
+          WHEN (orders.product_name IS NULL OR orders.product_name = '') AND EXCLUDED.product_name <> '' THEN EXCLUDED.product_name
+          ELSE orders.product_name
+        END,
+        order_amount = CASE
+          WHEN EXCLUDED.status_source = 'admin' THEN EXCLUDED.order_amount
+          WHEN EXCLUDED.order_amount > 0 THEN EXCLUDED.order_amount
+          ELSE orders.order_amount
+        END,
+        user_id = CASE
+          WHEN EXCLUDED.status_source = 'admin' THEN EXCLUDED.user_id
+          ELSE COALESCE(orders.user_id, EXCLUDED.user_id)
+        END,
+        user_code = CASE
+          WHEN EXCLUDED.status_source = 'admin' AND EXCLUDED.user_code IS NOT NULL AND EXCLUDED.user_code <> '' THEN EXCLUDED.user_code
+          WHEN orders.user_code = 'GUEST' THEN EXCLUDED.user_code
+          ELSE orders.user_code
+        END,
         gross_commission = EXCLUDED.gross_commission,
         tax_amount = EXCLUDED.tax_amount,
         net_commission = EXCLUDED.net_commission,
         user_cashback_amount = CASE 
+          WHEN EXCLUDED.status_source = 'admin' THEN EXCLUDED.user_cashback_amount
           WHEN orders.user_cashback_amount > 0 AND EXCLUDED.user_cashback_amount = 0 THEN orders.user_cashback_amount 
           ELSE EXCLUDED.user_cashback_amount 
         END,
         admin_share_amount = EXCLUDED.admin_share_amount,
         status = CASE
+          WHEN EXCLUDED.status_source = 'admin' THEN EXCLUDED.status
           WHEN orders.status IN ('approved', 'cancelled') AND EXCLUDED.status = 'pending' THEN orders.status
           ELSE EXCLUDED.status
         END,
@@ -1489,7 +1484,10 @@ async function persistOrderToPostgres(order, customClient = null) {
         claim_pending = EXCLUDED.claim_pending,
         claimed_by_user_id = COALESCE(EXCLUDED.claimed_by_user_id, orders.claimed_by_user_id),
         submitted_by_user_id = COALESCE(orders.submitted_by_user_id, EXCLUDED.submitted_by_user_id),
-        status_source = COALESCE(EXCLUDED.status_source, orders.status_source),
+        status_source = CASE
+          WHEN EXCLUDED.status_source = 'admin' THEN 'admin'
+          ELSE COALESCE(EXCLUDED.status_source, orders.status_source)
+        END,
         event_time = GREATEST(COALESCE(orders.event_time, 0), COALESCE(EXCLUDED.event_time, 0)),
         clawback_at = COALESCE(orders.clawback_at, EXCLUDED.clawback_at),
         updated_at = NOW()
@@ -2501,6 +2499,199 @@ function recordAuditLog(db, { adminId, adminName, action, targetId, details } = 
   return entry;
 }
 
+function isTestUserRecord(u) {
+  if (!u || typeof u !== 'object') return false;
+  if (u.role === 'admin' || u.id === 'usr_admin') return false;
+  const id = String(u.id || '');
+  const code = String(u.code || '');
+  const name = String(u.name || '').trim();
+  const email = String(u.email || '').trim().toLowerCase();
+  const phone = String(u.phone || '').trim();
+
+  if (
+    /^(usr_test_|usr_fin_test_|usr_claim_test_|usr_u_test_|usr_adm_test_|usr_active_|usr_p23_|usr_sync_|usr_concurrency_test_|usr_crit05_|admin_test_)/i.test(
+      id
+    ) ||
+    id.includes('_test_')
+  ) {
+    return true;
+  }
+  if (/^(U108899|U_TEST|ADM_TEST|ADMIN_P03)$/i.test(code) || /^USR_\d{10,}$/i.test(code)) {
+    return true;
+  }
+  if (email && (/@example\.com$/i.test(email) || /@test\.com$/i.test(email))) {
+    return true;
+  }
+  if (
+    /^(Referee User Test|Referrer User Test|Self Referral Test|Test P03 User|Test Withdrawal User|User Test|Admin Test|Nguyen Van (User|Admin|Test|Wallet))$/i.test(
+      name
+    ) ||
+    /^Test[\s_]/i.test(name)
+  ) {
+    return true;
+  }
+  if (/^DELETED_\d+_/.test(phone) && /test/i.test(`${name}_${id}`)) {
+    return true;
+  }
+  return false;
+}
+
+function isTestOrderRecord(o, testUserIds) {
+  if (!o || typeof o !== 'object') return false;
+  const sn = String(o.orderSn || '').trim().toUpperCase();
+  const id = String(o.id || '');
+  if (testUserIds && o.userId && testUserIds.has(o.userId)) return true;
+  if (
+    /^(ORD_LOCK_|SN_APPROVED_|SN_CONCURR_|ORD_HMAC_|ORD_VALID_TS_|ORD_AT_REALTIME_|SN_REF_TEST_|P23SN_|SN_TEST5_|SN_LEAK_TEST|SN_INVALID_|ORD_GQL_|ORD_MULTI_|ORD_EMPTY_|ORD_MALFORMED_|TEST_)/i.test(
+      sn
+    ) ||
+    sn === '261111ABC8899'
+  ) {
+    return true;
+  }
+  if (/^(ord_test_|ord_p23_|ord_crit05_|ord_leak_test)/i.test(id)) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Remove automated test/demo artifacts from state & Cloud PostgreSQL while preserving real users/orders.
+ */
+async function purgeTestArtifactsFromDb(targetDb = null) {
+  logger.logEnter('purgeTestArtifactsFromDb');
+  const db = targetDb || ensureDbLoaded();
+
+  const testUsers = (db.users || []).filter((u) => isTestUserRecord(u));
+  const testUserIds = new Set(testUsers.map((u) => u.id).filter(Boolean));
+  const remainingUsers = (db.users || []).filter((u) => !testUserIds.has(u.id));
+  const remainingUserIds = new Set(remainingUsers.map((u) => u.id).filter(Boolean));
+
+  const testOrders = (db.orders || []).filter((o) => isTestOrderRecord(o, testUserIds));
+  const testOrderSns = new Set(
+    testOrders.map((o) => String(o.orderSn || '').trim().toUpperCase()).filter(Boolean)
+  );
+  const remainingOrders = (db.orders || []).filter((o) => !isTestOrderRecord(o, testUserIds));
+
+  const isTestWithdrawal = (w) => {
+    if (!w || typeof w !== 'object') return false;
+    if (w.userId && (testUserIds.has(w.userId) || !remainingUserIds.has(w.userId))) return true;
+    if (/test/i.test(String(w.id || '')) || /test/i.test(String(w.userName || ''))) return true;
+    return false;
+  };
+  const testWithdrawals = (db.withdrawals || []).filter(isTestWithdrawal);
+  const testWithdrawalIds = new Set(testWithdrawals.map((w) => w.id).filter(Boolean));
+  const remainingWithdrawals = (db.withdrawals || []).filter((w) => !isTestWithdrawal(w));
+
+  const isTestClick = (c) => {
+    if (!c || typeof c !== 'object') return false;
+    if (c.userId && testUserIds.has(c.userId)) return true;
+    if (String(c.userCode || '').toUpperCase() === 'U108899') return true;
+    if (String(c.clickId || '').startsWith('clk_test')) return true;
+    if (/example\.com/i.test(String(c.originalUrl || ''))) return true;
+    return false;
+  };
+  const testClicks = (db.clicks || []).filter(isTestClick);
+  const testClickIds = new Set(testClicks.map((c) => c.clickId).filter(Boolean));
+  const remainingClicks = (db.clicks || []).filter((c) => !isTestClick(c));
+
+  const isTestLedger = (e) => {
+    if (!e || typeof e !== 'object') return false;
+    if (e.id === 'led_1794458515533_fd75d4f3') return true;
+    if (e.userId && (testUserIds.has(e.userId) || !remainingUserIds.has(e.userId))) return true;
+    const refUpper = String(e.refId || '').toUpperCase();
+    for (const sn of testOrderSns) {
+      if (refUpper.includes(sn)) return true;
+    }
+    for (const wid of testWithdrawalIds) {
+      if (String(e.refId || '').includes(wid)) return true;
+    }
+    if (/261111ABC8899/i.test(`${e.refId || ''}_${e.note || ''}`)) return true;
+    return false;
+  };
+  const testLedger = (db.ledger || []).filter(isTestLedger);
+  const testLedgerIds = new Set(testLedger.map((e) => e.id).filter(Boolean));
+  const remainingLedger = (db.ledger || []).filter((e) => !isTestLedger(e));
+
+  db.users = remainingUsers;
+  db.orders = remainingOrders;
+  db.withdrawals = remainingWithdrawals;
+  db.clicks = remainingClicks;
+  db.ledger = remainingLedger;
+
+  // Recalculate all remaining users' wallets so balances stay 100% synced
+  for (const u of db.users) {
+    recalculateUserWallet(u.id, { persist: false });
+  }
+
+  // Purge relational tables in PostgreSQL (including immutable ledger rows inside a single TX)
+  if (pgPool && pgSchemaReady) {
+    const client = await pgPool.connect();
+    try {
+      await client.query('BEGIN');
+      if (testLedgerIds.size > 0 || testUserIds.size > 0) {
+        await client.query('ALTER TABLE ledger DISABLE TRIGGER ledger_no_update');
+        try {
+          if (testLedgerIds.size > 0) {
+            await client.query('DELETE FROM ledger WHERE id = ANY($1::text[])', [
+              Array.from(testLedgerIds)
+            ]);
+          }
+          if (testUserIds.size > 0) {
+            await client.query('DELETE FROM ledger WHERE user_id = ANY($1::text[])', [
+              Array.from(testUserIds)
+            ]);
+          }
+        } finally {
+          await client.query('ALTER TABLE ledger ENABLE TRIGGER ledger_no_update');
+        }
+      }
+      if (testOrderSns.size > 0) {
+        await client.query('DELETE FROM orders WHERE UPPER(order_sn) = ANY($1::text[])', [
+          Array.from(testOrderSns)
+        ]);
+      }
+      if (testWithdrawalIds.size > 0) {
+        await client.query('DELETE FROM withdrawals WHERE id = ANY($1::text[])', [
+          Array.from(testWithdrawalIds)
+        ]);
+      }
+      if (testClickIds.size > 0) {
+        await client.query('DELETE FROM clicks WHERE click_id = ANY($1::text[])', [
+          Array.from(testClickIds)
+        ]);
+      }
+      if (testUserIds.size > 0) {
+        await client.query('DELETE FROM users WHERE id = ANY($1::text[])', [
+          Array.from(testUserIds)
+        ]);
+      }
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => {});
+      logger.error('purgeTestArtifactsFromDb', 'Postgres cleanup error', { error: err.message });
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+
+  await saveDb(db);
+
+  const summary = {
+    removedUsers: testUsers.length,
+    removedOrders: testOrders.length,
+    removedWithdrawals: testWithdrawals.length,
+    removedClicks: testClicks.length,
+    removedLedger: testLedger.length,
+    remainingUsers: db.users.length,
+    remainingOrders: db.orders.length,
+    remainingWithdrawals: db.withdrawals.length
+  };
+  logger.logLeave('purgeTestArtifactsFromDb', summary);
+  return summary;
+}
+
 module.exports = {
   ensureDbLoaded,
   saveDb,
@@ -2528,6 +2719,7 @@ module.exports = {
   persistUserToPostgres,
   persistLedgerToPostgres,
   persistWithdrawalToPostgres,
+  purgeTestArtifactsFromDb,
   recordAuditLog,
   normalizePhoneNumber,
   getPgPool
