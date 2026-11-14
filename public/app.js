@@ -1,23 +1,23 @@
 // Safe storage helper with try/catch to protect against private browsing restrictions
 const safeStorage = {
-  get(key, storage = localStorage) {
+  get(key, storage = typeof localStorage !== 'undefined' ? localStorage : null) {
     try {
-      return storage.getItem(key);
+      return storage ? storage.getItem(key) : null;
     } catch {
       return null;
     }
   },
-  set(key, val, storage = localStorage) {
+  set(key, val, storage = typeof localStorage !== 'undefined' ? localStorage : null) {
     try {
-      storage.setItem(key, String(val));
+      if (storage) storage.setItem(key, String(val));
       return true;
     } catch {
       return false;
     }
   },
-  remove(key, storage = localStorage) {
+  remove(key, storage = typeof localStorage !== 'undefined' ? localStorage : null) {
     try {
-      storage.removeItem(key);
+      if (storage) storage.removeItem(key);
       return true;
     } catch {
       return false;
@@ -1450,6 +1450,36 @@ if (admOrdCommission) {
   admOrdCommission.addEventListener('input', updateAdminSplitPreview);
 }
 
+function loadAdminSettings(settings) {
+  const s = settings || {};
+  const setVal = (id, val) => {
+    const el = document.getElementById(id);
+    if (el) el.value = val;
+  };
+
+  setVal('admShopeeMode', s.shopeeMode || 'an_redir');
+  setVal('admShopeeAffiliateId', s.shopeeAffiliateId || '');
+  setVal('admShopeeAppId', s.shopeeAppId || '');
+  setVal('admShopeeAppSecret', s.shopeeAppSecret || '');
+  setVal('admAddlivetagApiKey', s.addlivetagApiKey || '');
+  setVal('admTiktokMode', s.tiktokMode || 'deeplink');
+  setVal('admTiktokDeepLink', s.tiktokDeepLinkTemplate || '');
+  setVal('admAccesstradeApiKey', s.accesstradeApiKey || '');
+  setVal('admPostbackUrl', s.postbackUrlTemplate || '');
+  setVal('admTaxDeductPercent', s.taxDeductPercent ?? 10);
+  setVal('admCashbackPercent', s.cashbackPercent ?? 70);
+  setVal('admMinWithdraw', s.minWithdrawAmount ?? 50000);
+  setVal('admReferralBounty', s.referralBountyAmount ?? 5000);
+  setVal('admShortener', s.shortenerProvider || 'none');
+  setVal('admSupportZalo', s.supportZalo || '');
+  setVal('admZaloGroupUrl', s.zaloGroupUrl || '');
+
+  const zaloWidgetEl = document.getElementById('admZaloWidgetEnabled');
+  if (zaloWidgetEl) {
+    zaloWidgetEl.checked = s.zaloWidgetEnabled !== false;
+  }
+}
+
 async function loadAdminDashboard() {
   try {
     const data = await apiFetch('/api/admin/dashboard');
@@ -1485,26 +1515,7 @@ async function loadAdminDashboard() {
     setTxt('admProfit', fmtVnd(st.totalAdminProfit || 0));
     setTxt('admUsersOrders', `${st.totalUsers || 0} / ${st.totalOrders || 0}`);
 
-    const setVal = (id, val) => {
-      const el = document.getElementById(id);
-      if (el) el.value = val;
-    };
-
-    setVal('admShopeeMode', s.shopeeMode || 'an_redir');
-    setVal('admShopeeAffiliateId', s.shopeeAffiliateId || '');
-    setVal('admShopeeAppId', s.shopeeAppId || '');
-    setVal('admShopeeAppSecret', s.shopeeAppSecret || '');
-    setVal('admAddlivetagApiKey', s.addlivetagApiKey || '');
-    setVal('admTiktokMode', s.tiktokMode || 'deeplink');
-    setVal('admTiktokDeepLink', s.tiktokDeepLinkTemplate || '');
-    setVal('admAccesstradeApiKey', s.accesstradeApiKey || '');
-    setVal('admPostbackUrl', s.postbackUrlTemplate || '');
-    setVal('admTaxDeductPercent', s.taxDeductPercent ?? 10);
-    setVal('admCashbackPercent', s.cashbackPercent ?? 70);
-    setVal('admMinWithdraw', s.minWithdrawAmount ?? 50000);
-    setVal('admReferralBounty', s.referralBountyAmount ?? 5000);
-    setVal('admShortener', s.shortenerProvider || 'none');
-    setVal('admSupportZalo', s.supportZalo || '');
+    loadAdminSettings(s);
 
     // Orders Table
     const ordTbody = document.getElementById('admOrdersTableBody');
@@ -1676,50 +1687,62 @@ on('copyPostbackUrlBtn', 'click', () => {
   copyText(val, 'Đã sao chép Link Postback AccessTrade!');
 });
 
-on('saveAdminSettingsBtn', 'click', async () => {
+async function saveAdminSettings() {
   const btn = document.getElementById('saveAdminSettingsBtn');
   if (btn) {
     btn.disabled = true;
     btn.textContent = 'Đang lưu cấu hình...';
   }
   try {
-    await apiFetch('/api/admin/settings', {
+    const zaloWidgetCheckbox = document.getElementById('admZaloWidgetEnabled');
+    const zaloWidgetEnabled = zaloWidgetCheckbox ? Boolean(zaloWidgetCheckbox.checked) : true;
+    const zaloGroupUrl = document.getElementById('admZaloGroupUrl')?.value?.trim() || '';
+
+    const payload = {
+      shopeeMode: document.getElementById('admShopeeMode')?.value,
+      shopeeAffiliateId: document.getElementById('admShopeeAffiliateId')?.value?.trim() || '',
+      shopeeAppId: document.getElementById('admShopeeAppId')?.value?.trim() || '',
+      shopeeAppSecret: document.getElementById('admShopeeAppSecret')?.value?.trim() || '',
+      addlivetagApiKey: document.getElementById('admAddlivetagApiKey')?.value?.trim() || '',
+      tiktokMode: document.getElementById('admTiktokMode')?.value,
+      tiktokDeepLinkTemplate:
+        document.getElementById('admTiktokDeepLink')?.value?.trim() || '',
+      accesstradeApiKey: document.getElementById('admAccesstradeApiKey')?.value?.trim() || '',
+      taxDeductPercent: numOr(
+        document.getElementById('admTaxDeductPercent')?.value,
+        currentAdminSettings?.taxDeductPercent ?? 10
+      ),
+      cashbackPercent: numOr(
+        document.getElementById('admCashbackPercent')?.value,
+        currentAdminSettings?.cashbackPercent ?? 70
+      ),
+      minWithdrawAmount: numOr(
+        document.getElementById('admMinWithdraw')?.value,
+        currentAdminSettings?.minWithdrawAmount ?? 50000
+      ),
+      referralBountyAmount: numOr(
+        document.getElementById('admReferralBounty')?.value,
+        currentAdminSettings?.referralBountyAmount ?? 0
+      ),
+      shortenerProvider: document.getElementById('admShortener')?.value || 'none',
+      supportZalo: document.getElementById('admSupportZalo')?.value?.trim() || '',
+      zaloGroupUrl,
+      zaloWidgetEnabled,
+      newAdminPassword: document.getElementById('admNewPass')?.value?.trim() || ''
+    };
+
+    const res = await apiFetch('/api/admin/settings', {
       method: 'POST',
-      body: JSON.stringify({
-        shopeeMode: document.getElementById('admShopeeMode')?.value,
-        shopeeAffiliateId: document.getElementById('admShopeeAffiliateId')?.value?.trim() || '',
-        shopeeAppId: document.getElementById('admShopeeAppId')?.value?.trim() || '',
-        shopeeAppSecret: document.getElementById('admShopeeAppSecret')?.value?.trim() || '',
-        addlivetagApiKey: document.getElementById('admAddlivetagApiKey')?.value?.trim() || '',
-        tiktokMode: document.getElementById('admTiktokMode')?.value,
-        tiktokDeepLinkTemplate:
-          document.getElementById('admTiktokDeepLink')?.value?.trim() || '',
-        accesstradeApiKey: document.getElementById('admAccesstradeApiKey')?.value?.trim() || '',
-        taxDeductPercent: numOr(
-          document.getElementById('admTaxDeductPercent')?.value,
-          currentAdminSettings?.taxDeductPercent ?? 10
-        ),
-        cashbackPercent: numOr(
-          document.getElementById('admCashbackPercent')?.value,
-          currentAdminSettings?.cashbackPercent ?? 70
-        ),
-        minWithdrawAmount: numOr(
-          document.getElementById('admMinWithdraw')?.value,
-          currentAdminSettings?.minWithdrawAmount ?? 50000
-        ),
-        referralBountyAmount: numOr(
-          document.getElementById('admReferralBounty')?.value,
-          currentAdminSettings?.referralBountyAmount ?? 0
-        ),
-        shortenerProvider: document.getElementById('admShortener')?.value || 'none',
-        supportZalo: document.getElementById('admSupportZalo')?.value?.trim() || '',
-        newAdminPassword: document.getElementById('admNewPass')?.value?.trim() || ''
-      })
+      body: JSON.stringify(payload)
     });
     if (document.getElementById('admNewPass')) document.getElementById('admNewPass').value = '';
     showToast('Đã lưu cấu hình hệ thống thành công!');
     await initPublicConfig();
+    if (typeof applyZaloWidget === 'function') {
+      applyZaloWidget(publicConfig);
+    }
     await loadAdminDashboard();
+    return res;
   } catch (err) {
     showToast(err.message);
   } finally {
@@ -1728,7 +1751,9 @@ on('saveAdminSettingsBtn', 'click', async () => {
       btn.textContent = 'Lưu Cấu Hình';
     }
   }
-});
+}
+
+on('saveAdminSettingsBtn', 'click', saveAdminSettings);
 
 on('admSaveOrderBtn', 'click', async () => {
   const btn = document.getElementById('admSaveOrderBtn');
@@ -2656,41 +2681,56 @@ async function initBoot() {
 }
 
 // Global Escape key listener to close active modals
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') {
-    const modalIds = [
-      'authModal',
-      'userManageModal',
-      'orderEditModal',
-      'vietQrModal',
-      'refQrModal',
-      'pwaGuideModal'
-    ];
-    for (const mId of modalIds) {
-      const el = document.getElementById(mId);
-      if (el && !el.classList.contains('hidden')) {
-        el.classList.add('hidden');
+if (typeof document !== 'undefined') {
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      const modalIds = [
+        'authModal',
+        'userManageModal',
+        'orderEditModal',
+        'vietQrModal',
+        'refQrModal',
+        'pwaGuideModal'
+      ];
+      for (const mId of modalIds) {
+        const el = document.getElementById(mId);
+        if (el && !el.classList.contains('hidden')) {
+          el.classList.add('hidden');
+        }
       }
     }
+  });
+
+  // Global CSP-compliant image fallback handler (useCapture=true since <img> error does not bubble)
+  document.addEventListener(
+    'error',
+    (e) => {
+      const target = e.target;
+      if (target && target.tagName === 'IMG') {
+        if (target.classList.contains('ip-thumb') || target.classList.contains('product-thumb')) {
+          target.style.display = 'none';
+        }
+      }
+    },
+    true
+  );
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initBoot);
+  } else if (typeof window !== 'undefined' && window.location) {
+    initBoot();
   }
-});
+}
 
-// Global CSP-compliant image fallback handler (useCapture=true since <img> error does not bubble)
-document.addEventListener(
-  'error',
-  (e) => {
-    const target = e.target;
-    if (target && target.tagName === 'IMG') {
-      if (target.classList.contains('ip-thumb') || target.classList.contains('product-thumb')) {
-        target.style.display = 'none';
-      }
-    }
-  },
-  true
-);
-
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initBoot);
-} else {
-  initBoot();
+if (typeof window !== 'undefined') {
+  window.loadAdminSettings = loadAdminSettings;
+  window.saveAdminSettings = saveAdminSettings;
+  window.applyZaloWidget = applyZaloWidget;
+}
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = {
+    loadAdminSettings,
+    saveAdminSettings,
+    applyZaloWidget
+  };
 }

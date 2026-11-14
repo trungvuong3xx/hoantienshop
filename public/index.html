@@ -683,12 +683,31 @@
                 </select>
               </div>
               <div class="form-group">
-                <label>SĐT / Zalo Hỗ trợ</label>
-                <input type="text" id="admSupportZalo" placeholder="Số điện thoại hỗ trợ..." />
+                <label for="admSupportZalo">SĐT / Zalo Hỗ trợ (Hotline CSKH)</label>
+                <input type="text" id="admSupportZalo" placeholder="Số điện thoại hoặc Zalo CSKH cá nhân..." />
               </div>
               <div class="form-group">
-                <label>Đổi mật khẩu Quản trị (≥ 6 ký tự)</label>
+                <label for="admNewPass">Đổi mật khẩu Quản trị (≥ 6 ký tự)</label>
                 <input type="password" id="admNewPass" placeholder="Bỏ trống nếu không đổi..." />
+              </div>
+            </div>
+
+            <div class="two-inputs">
+              <div class="form-group">
+                <label for="admZaloGroupUrl">Link Nhóm Zalo Cộng Đồng</label>
+                <input type="url" id="admZaloGroupUrl" placeholder="https://zalo.me/g/..." />
+                <small style="color:#64748b;font-size:12px;display:block;margin-top:2px;">
+                  Đường dẫn tham gia nhóm Zalo mở trên nút nổi (Bắt buộc dạng https://zalo.me/g/...).
+                </small>
+              </div>
+              <div class="form-group" style="justify-content:center;">
+                <label for="admZaloWidgetEnabled" style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:0;font-weight:600;">
+                  <input type="checkbox" id="admZaloWidgetEnabled" checked style="width:18px;height:18px;margin:0;cursor:pointer;" />
+                  <span>Hiển thị nút Zalo nổi trên toàn trang</span>
+                </label>
+                <small style="color:#64748b;font-size:12px;display:block;margin-top:4px;">
+                  Bật/tắt nút tròn Zalo hỗ trợ cộng đồng ở góc dưới bên phải màn hình.
+                </small>
               </div>
             </div>
 
