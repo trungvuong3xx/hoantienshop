@@ -372,7 +372,9 @@ async function runWebhookSecurityTests() {
   }
 }
 
-runWebhookSecurityTests().catch((err) => {
+runWebhookSecurityTests().then(() => {
+  process.exit(0);
+}).catch((err) => {
   console.error('TEST FAILED:', err);
   process.exit(1);
 });

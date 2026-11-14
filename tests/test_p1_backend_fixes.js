@@ -485,6 +485,8 @@ async function runTestSuite() {
 
   // Cleanup test artifacts
   await new Promise((resolve) => server.close(resolve));
+  db.settings.cashbackPercent = 70;
+  db.settings.taxDeductPercent = 10;
   db.users = db.users.filter((u) => u.id !== testAdmin.id && u.id !== testUser.id && u.id !== activeUser.id);
   db.orders = db.orders.filter((o) => o.orderSn !== testOrderSn1);
   db.withdrawals = db.withdrawals.filter((w) => w.userId !== testUser.id);
