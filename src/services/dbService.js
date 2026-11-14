@@ -302,7 +302,8 @@ function getInitialData() {
     clicks: [],
     orders: [],
     ledger: [],
-    withdrawals: []
+    withdrawals: [],
+    auditLogs: []
   };
 }
 
@@ -350,7 +351,8 @@ function normalizeState(raw, initial = null) {
     clicks: Array.isArray(raw.clicks) ? raw.clicks : [],
     orders: Array.isArray(raw.orders) ? raw.orders : [],
     ledger: Array.isArray(raw.ledger) ? raw.ledger : [],
-    withdrawals: Array.isArray(raw.withdrawals) ? raw.withdrawals : []
+    withdrawals: Array.isArray(raw.withdrawals) ? raw.withdrawals : [],
+    auditLogs: Array.isArray(raw.auditLogs) ? raw.auditLogs : []
   };
 
   // Strip plaintext secrets from settings so they are never written to disk or Postgres
@@ -1784,10 +1786,11 @@ async function executeAtomicWithdrawal({
   bankName,
   bankAccount,
   bankOwner,
-  minWithdraw
+  minWithdraw,
+  idempotencyKey
 }) {
   return withUserLock(userId, async () => {
-    logger.logEnter('executeAtomicWithdrawal', { userId, amount });
+    logger.logEnter('executeAtomicWithdrawal', { userId, amount, idempotencyKey });
     const db = ensureDbLoaded();
     const user = db.users.find((u) => u.id === userId);
     if (!user) {
@@ -1795,6 +1798,25 @@ async function executeAtomicWithdrawal({
     }
     if (user.accountLocked) {
       throw new Error('Tài khoản đang bị tạm khóa đối soát. Vui lòng liên hệ hỗ trợ.');
+    }
+
+    const cleanIdempotencyKey = idempotencyKey ? String(idempotencyKey).trim() : null;
+    if (cleanIdempotencyKey) {
+      const tenMinutesAgo = Date.now() - 10 * 60 * 1000;
+      const existing = db.withdrawals.find(
+        (w) =>
+          w.userId === user.id &&
+          w.idempotencyKey === cleanIdempotencyKey &&
+          new Date(w.createdAt).getTime() >= tenMinutesAgo
+      );
+      if (existing) {
+        logger.logLeave('executeAtomicWithdrawal', {
+          wdId: existing.id,
+          amount: existing.amount,
+          idempotentReplay: true
+        });
+        return { withdrawal: existing, user: sanitizeUser(user), idempotent: true };
+      }
     }
 
     // Input sanitization and validation
@@ -1931,6 +1953,7 @@ async function executeAtomicWithdrawal({
       bankAccount: user.bankAccount,
       bankOwner: user.bankOwner,
       status: 'pending',
+      idempotencyKey: cleanIdempotencyKey,
       createdAt: new Date().toISOString(),
       processedAt: null
     };
@@ -2124,6 +2147,37 @@ function getDatabaseStatus() {
   };
 }
 
+function normalizePhoneNumber(phone) {
+  if (!phone) return '';
+  let str = String(phone).replace(/[\s\-_.\(\)]/g, '').trim();
+  if (str.startsWith('+84')) {
+    str = '0' + str.slice(3);
+  } else if (str.startsWith('84') && str.length >= 10 && !str.startsWith('840')) {
+    str = '0' + str.slice(2);
+  }
+  return str;
+}
+
+function recordAuditLog(db, { adminId, adminName, action, targetId, details } = {}) {
+  logger.logEnter('recordAuditLog', { action, targetId });
+  if (!db) return null;
+  if (!Array.isArray(db.auditLogs)) {
+    db.auditLogs = [];
+  }
+  const entry = {
+    id: `audit_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`,
+    adminId: String(adminId || 'admin'),
+    adminName: String(adminName || 'Quản Trị Viên'),
+    action: String(action || 'unknown'),
+    targetId: targetId ? String(targetId) : null,
+    details: details || {},
+    timestamp: new Date().toISOString()
+  };
+  db.auditLogs.unshift(entry);
+  logger.logLeave('recordAuditLog', { id: entry.id, action: entry.action });
+  return entry;
+}
+
 module.exports = {
   ensureDbLoaded,
   saveDb,
@@ -2148,5 +2202,7 @@ module.exports = {
   persistOrderToPostgres,
   persistUserToPostgres,
   persistLedgerToPostgres,
-  persistWithdrawalToPostgres
+  persistWithdrawalToPostgres,
+  recordAuditLog,
+  normalizePhoneNumber
 };
