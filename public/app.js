@@ -377,6 +377,9 @@ async function initPublicConfig() {
     document.querySelectorAll('[data-config="minWithdrawAmount"]').forEach((el) => {
       el.textContent = fmtVnd(publicConfig.minWithdrawAmount);
     });
+    document.querySelectorAll('[data-config="referralBountyAmount"]').forEach((el) => {
+      el.textContent = fmtVnd(publicConfig.referralBountyAmount ?? 5000);
+    });
   } catch (err) {
     console.warn('Init public config notice:', err);
   }
@@ -416,6 +419,26 @@ document.querySelectorAll('.auth-tab').forEach((tabBtn) => {
   tabBtn.addEventListener('click', () => openAuthModal(tabBtn.getAttribute('data-auth-tab')));
 });
 
+// Helper to extract Cloudflare Turnstile token from DOM or Turnstile API if present
+function getTurnstileToken(containerId) {
+  try {
+    if (containerId) {
+      const container = document.getElementById(containerId);
+      const tokenInContainer = container?.querySelector?.('[name="cf-turnstile-response"]')?.value;
+      if (tokenInContainer) return tokenInContainer;
+    }
+    const tokenInput = document.querySelector('[name="cf-turnstile-response"]');
+    if (tokenInput && tokenInput.value) {
+      return tokenInput.value;
+    }
+    if (typeof window !== 'undefined' && window.turnstile && typeof window.turnstile.getResponse === 'function') {
+      const resp = window.turnstile.getResponse();
+      if (resp) return resp;
+    }
+  } catch (_) {}
+  return '';
+}
+
 // Login execution with button lock
 async function handleDoLogin() {
   const btn = document.getElementById('doLoginBtn');
@@ -433,9 +456,13 @@ async function handleDoLogin() {
   }
 
   try {
+    const turnstileToken = getTurnstileToken('loginTurnstile');
+    const payload = { identifier, password };
+    if (turnstileToken) payload.turnstileToken = turnstileToken;
+
     const data = await apiFetch('/api/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ identifier, password })
+      body: JSON.stringify(payload)
     });
     setSession(data.token, data.user);
     authModal?.classList.add('hidden');
@@ -473,7 +500,7 @@ async function handleDoRegister() {
   }
 
   const agree = document.getElementById('regTermsAgree');
-  if (agree && !agree.checked) {
+  if (!agree || !agree.checked) {
     showToast('Vui lòng đồng ý với Điều khoản dịch vụ & Chính sách bảo mật.');
     return;
   }
@@ -484,9 +511,13 @@ async function handleDoRegister() {
   }
 
   try {
+    const turnstileToken = getTurnstileToken('registerTurnstile');
+    const payload = { name, phone, password, refCode };
+    if (turnstileToken) payload.turnstileToken = turnstileToken;
+
     const data = await apiFetch('/api/auth/register', {
       method: 'POST',
-      body: JSON.stringify({ name, phone, password, refCode })
+      body: JSON.stringify(payload)
     });
     setSession(data.token, data.user);
     authModal?.classList.add('hidden');
@@ -678,7 +709,7 @@ function renderInstantPreviewCard(data) {
 
   const safeThumbUrl = safeHttpsUrl(data.imageUrl);
   const thumbHtml = safeThumbUrl
-    ? `<img src="${safeThumbUrl}" alt="${title}" class="ip-thumb" referrerpolicy="no-referrer" onerror="this.onerror=null;this.style.display='none';" />`
+    ? `<img src="${safeThumbUrl}" alt="${title}" class="ip-thumb" referrerpolicy="no-referrer" />`
     : `<div class="ip-thumb ip-thumb-fallback">🛍️</div>`;
 
   const cashbackPill = estCashback
@@ -785,7 +816,7 @@ async function handleGetCashbackLink() {
           const safeAffUrl = safeAppOrWebUrl(item.affiliateUrl);
 
           const thumbHtml = safeThumbUrl
-            ? `<img src="${safeThumbUrl}" alt="Sản phẩm" class="product-thumb" referrerpolicy="no-referrer" onerror="this.onerror=null;this.style.display='none';" />`
+            ? `<img src="${safeThumbUrl}" alt="Sản phẩm" class="product-thumb" referrerpolicy="no-referrer" />`
             : `<div class="product-thumb" style="display:flex;align-items:center;justify-content:center;font-size:26px;">🛍️</div>`;
 
           const priceInfoHtml =
@@ -1052,15 +1083,20 @@ async function loadUserReferrals() {
     const refInput = document.getElementById('userReferralLinkInput');
     if (refInput) refInput.value = refLink;
 
-    setTxt('userRefCount', data.stats?.totalFriends || 0);
-    setTxt('refTotalFriends', `${data.stats?.totalFriends || 0} người`);
-    setTxt('refCompletedFriends', `${data.stats?.completedFriends || 0} người`);
-    setTxt('refPendingFriends', `${data.stats?.pendingFriends || 0} người`);
-    setTxt('refBonusEarned', fmtVnd(data.stats?.totalBountyEarned || 0));
+    const totalCount = data.referralCount ?? data.stats?.totalFriends ?? 0;
+    const completedCount = data.completedFriends ?? data.stats?.completedFriends ?? 0;
+    const pendingCount = data.pendingFriends ?? data.stats?.pendingFriends ?? 0;
+    const totalBonus = data.totalBountyEarned ?? data.stats?.totalBountyEarned ?? 0;
+
+    setTxt('userRefCount', totalCount);
+    setTxt('refTotalFriends', `${totalCount} người`);
+    setTxt('refCompletedFriends', `${completedCount} người`);
+    setTxt('refPendingFriends', `${pendingCount} người`);
+    setTxt('refBonusEarned', fmtVnd(totalBonus));
 
     const tbody = document.getElementById('refFriendsTableBody');
     if (tbody) {
-      const list = data.friends || [];
+      const list = data.referrals || data.friends || [];
       if (list.length === 0) {
         tbody.innerHTML =
           '<tr><td colspan="5" class="text-center" style="padding:14px;color:#64748b;">Chưa có bạn bè nào đăng ký qua link của bạn. Hãy sao chép link và chia sẻ ngay!</td></tr>';
@@ -1192,7 +1228,7 @@ on('submitWithdrawBtn', 'click', async () => {
   const bankName = document.getElementById('wdBankName')?.value?.trim() || '';
   const bankAccount = document.getElementById('wdBankAccount')?.value?.trim() || '';
   const bankOwner = document.getElementById('wdBankOwner')?.value?.trim() || '';
-  const amountStr = document.getElementById('wdAmount')?.value?.trim() || '';
+  const amountStr = (document.getElementById('withdrawAmountInput') || document.getElementById('wdAmount'))?.value?.trim() || '';
   const currentPassword = document.getElementById('wdCurrentPassword')?.value || '';
 
   const amount = Number(amountStr);
@@ -1249,7 +1285,8 @@ on('submitWithdrawBtn', 'click', async () => {
         currentPassword
       })
     });
-    if (document.getElementById('wdAmount')) document.getElementById('wdAmount').value = '';
+    const amtInput = document.getElementById('withdrawAmountInput') || document.getElementById('wdAmount');
+    if (amtInput) amtInput.value = '';
     if (document.getElementById('wdCurrentPassword')) {
       document.getElementById('wdCurrentPassword').value = '';
     }
@@ -1267,16 +1304,16 @@ on('submitWithdrawBtn', 'click', async () => {
 
 on('btnMaxWithdraw', 'click', () => {
   const available = currentUser?.balanceAvailable || 0;
+  const amtInput = document.getElementById('withdrawAmountInput') || document.getElementById('wdAmount');
+  if (amtInput) {
+    amtInput.value = Math.floor(available);
+  }
   const minAmount = numOr(publicConfig.minWithdrawAmount, 50000);
   if (available < minAmount) {
     showToast(`Số dư khả dụng (${fmtVnd(available)}) chưa đủ hạn mức rút tối thiểu (${fmtVnd(minAmount)}).`);
     return;
   }
-  const amtInput = document.getElementById('wdAmount');
-  if (amtInput) {
-    amtInput.value = Math.floor(available);
-    showToast(`Đã điền số dư tối đa: ${fmtVnd(Math.floor(available))}`);
-  }
+  showToast(`Đã điền số dư tối đa: ${fmtVnd(Math.floor(available))}`);
 });
 
 // ================= ADMIN DASHBOARD =================
@@ -2456,6 +2493,20 @@ document.addEventListener('keydown', (e) => {
     }
   }
 });
+
+// Global CSP-compliant image fallback handler (useCapture=true since <img> error does not bubble)
+document.addEventListener(
+  'error',
+  (e) => {
+    const target = e.target;
+    if (target && target.tagName === 'IMG') {
+      if (target.classList.contains('ip-thumb') || target.classList.contains('product-thumb')) {
+        target.style.display = 'none';
+      }
+    }
+  },
+  true
+);
 
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', initBoot);
