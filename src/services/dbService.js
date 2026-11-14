@@ -1308,7 +1308,15 @@ function appendLedgerEntry(userId, type, amount, refId, note = '', { forcedId = 
     return null;
   }
   const rawAmt = Number(amount);
-  if (!Number.isFinite(rawAmt) || rawAmt === 0) return null;
+  if (!Number.isFinite(rawAmt) || rawAmt === 0) {
+    logger.warning('appendLedgerEntry', 'Bỏ qua ghi sổ cái do số tiền không hợp lệ hoặc bằng 0', {
+      userId,
+      type,
+      amount,
+      refId
+    });
+    return null;
+  }
 
   const db = ensureDbLoaded();
   const cleanRefId = String(refId).trim();
@@ -1317,11 +1325,14 @@ function appendLedgerEntry(userId, type, amount, refId, note = '', { forcedId = 
   const exists = db.ledger.find((e) => e.refId === cleanRefId);
   if (exists) return exists;
 
+  const roundedAmt = Math.round(rawAmt);
+  if (!Number.isFinite(roundedAmt) || roundedAmt === 0) return null;
+
   const entry = {
     id: forcedId || `led_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`,
     userId,
     type,
-    amount: Math.round(rawAmt),
+    amount: roundedAmt,
     refId: cleanRefId,
     note: String(note || ''),
     createdAt: new Date().toISOString()
@@ -1422,16 +1433,27 @@ function recalculateUserWallet(userId, { persist = false } = {}) {
   // 3. Reconcile withdrawals
   const userWithdrawals = db.withdrawals.filter((w) => w.userId === user.id);
   for (const w of userWithdrawals) {
-    const amt = Math.round(Number(w.amount || 0));
     const debitRef = `withdraw_debit_${w.id}`;
     const refundRef = `withdraw_refund_${w.id}`;
+    const hadDebit = ledgerByRefId.get(debitRef);
+    const hadRefund = ledgerByRefId.get(refundRef);
+
+    const rawAmt = Number(w.amount);
+    const validAmount = Number.isFinite(rawAmt) && rawAmt > 0 ? Math.round(rawAmt) : null;
 
     if (w.status === 'pending' || w.status === 'paid') {
-      if (!ledgerByRefId.has(debitRef)) {
+      if (!validAmount) {
+        logger.warning('recalculateUserWallet', 'Bỏ qua lệnh rút tiền có số tiền không hợp lệ', {
+          wdId: w.id,
+          amount: w.amount
+        });
+        continue;
+      }
+      if (!hadDebit) {
         const entry = appendLedgerEntry(
           user.id,
           'withdrawal_lock',
-          -Math.abs(amt),
+          -Math.abs(validAmount),
           debitRef,
           `Rút tiền #${w.id} (${w.bankName || 'Ngân hàng'})`
         );
@@ -1441,19 +1463,21 @@ function recalculateUserWallet(userId, { persist = false } = {}) {
         }
       }
     } else if (w.status === 'rejected') {
-      const hadDebit = ledgerByRefId.get(debitRef);
-      const hadRefund = ledgerByRefId.get(refundRef);
+      // Idempotent refund: only credit if previously debited AND not yet refunded
       if (hadDebit && !hadRefund) {
-        const entry = appendLedgerEntry(
-          user.id,
-          'withdrawal_refund',
-          Math.abs(amt),
-          refundRef,
-          `Hoàn lại lệnh rút tiền bị từ chối #${w.id}`
-        );
-        if (entry) {
-          userLedger.push(entry);
-          ledgerByRefId.set(refundRef, entry);
+        const refundAmt = Math.abs(Number(hadDebit.amount)) || (validAmount ? Math.abs(validAmount) : 0);
+        if (Number.isFinite(refundAmt) && refundAmt > 0) {
+          const entry = appendLedgerEntry(
+            user.id,
+            'withdrawal_refund',
+            refundAmt,
+            refundRef,
+            `Hoàn lại lệnh rút tiền bị từ chối #${w.id}`
+          );
+          if (entry) {
+            userLedger.push(entry);
+            ledgerByRefId.set(refundRef, entry);
+          }
         }
       }
     }
@@ -1516,7 +1540,8 @@ function recalculateUserWallet(userId, { persist = false } = {}) {
   let earnedNetSum = 0;
 
   for (const entry of userLedger) {
-    const entryAmt = Number(entry.amount || 0);
+    const entryAmt = Number(entry.amount);
+    if (!Number.isFinite(entryAmt)) continue;
     ledgerSum += entryAmt;
     if (
       entry.type === 'order_cashback' ||
@@ -1530,12 +1555,15 @@ function recalculateUserWallet(userId, { persist = false } = {}) {
 
   const paidWithdrawn = userWithdrawals
     .filter((w) => w.status === 'paid')
-    .reduce((acc, w) => acc + Number(w.amount || 0), 0);
+    .reduce((acc, w) => {
+      const a = Math.round(Number(w.amount));
+      return acc + (Number.isFinite(a) && a > 0 ? a : 0);
+    }, 0);
 
-  user.balancePending = Math.max(0, Math.round(pending));
-  user.totalEarned = Math.max(0, Math.round(earnedNetSum));
-  user.totalWithdrawn = Math.max(0, Math.round(paidWithdrawn));
-  user.balanceAvailable = Math.round(ledgerSum);
+  user.balancePending = Math.max(0, Math.round(Number.isFinite(pending) ? pending : 0));
+  user.totalEarned = Math.max(0, Math.round(Number.isFinite(earnedNetSum) ? earnedNetSum : 0));
+  user.totalWithdrawn = Math.max(0, Math.round(Number.isFinite(paidWithdrawn) ? paidWithdrawn : 0));
+  user.balanceAvailable = Math.round(Number.isFinite(ledgerSum) ? ledgerSum : 0);
   user.hasNegativeBalance = user.balanceAvailable < 0;
 
   if (persist) {
@@ -1597,7 +1625,7 @@ async function executeAtomicWithdrawal({
       ? Math.max(Number(db.settings.minWithdrawAmount ?? 50000), rawMin)
       : Number(db.settings.minWithdrawAmount ?? 50000);
 
-    const numAmount = Math.round(Number(amount || 0));
+    const numAmount = Math.round(Number(amount));
     if (!Number.isFinite(numAmount) || numAmount <= 0) {
       throw new Error('Số tiền rút phải lớn hơn 0đ.');
     }
@@ -1738,6 +1766,66 @@ async function executeAtomicWithdrawal({
 }
 
 /**
+ * Idempotently refund a withdrawal, restoring user's balance exactly once.
+ * Rejects invalid/NaN amounts and paid withdrawals.
+ */
+async function refundWithdrawal(db, wd, adminUser = {}) {
+  logger.logEnter('refundWithdrawal', { wdId: wd?.id, userId: wd?.userId, amount: wd?.amount });
+  if (!wd || typeof wd !== 'object') {
+    const err = new Error('Invalid withdrawal object');
+    err.status = 400;
+    throw err;
+  }
+
+  const numAmount = Math.round(Number(wd.amount));
+  if (!Number.isFinite(numAmount) || numAmount <= 0) {
+    const err = new Error('Invalid withdrawal amount');
+    err.status = 400;
+    throw err;
+  }
+
+  if (wd.status === 'paid') {
+    const err = new Error('Không thể hoàn tiền lệnh rút đã chi trả thành công.');
+    err.status = 400;
+    throw err;
+  }
+
+  if (!wd.userId) {
+    const err = new Error('Thiếu userId trong lệnh rút tiền.');
+    err.status = 400;
+    throw err;
+  }
+
+  const database = db || ensureDbLoaded();
+
+  return withUserLock(wd.userId, async () => {
+    // Idempotency: if already rejected, ensure recalculateUserWallet does not duplicate and return wd
+    if (wd.status === 'rejected') {
+      logger.warning('refundWithdrawal', 'Lệnh rút tiền đã bị từ chối trước đó, bảo đảm không hoàn tiền trùng lặp', {
+        wdId: wd.id,
+        userId: wd.userId
+      });
+      recalculateUserWallet(wd.userId, { persist: false });
+      await saveDb(database);
+      logger.logLeave('refundWithdrawal', { wdId: wd.id, status: 'rejected', idempotent: true });
+      return wd;
+    }
+
+    wd.status = 'rejected';
+    wd.processedAt = new Date().toISOString();
+    wd.processedByAdminId = adminUser?.id || null;
+    wd.processedByAdmin = adminUser?.username || 'admin';
+
+    // recalculateUserWallet detects wd.status === 'rejected' and creates a single withdrawal_refund entry
+    recalculateUserWallet(wd.userId, { persist: false });
+    await saveDb(database);
+
+    logger.logLeave('refundWithdrawal', { wdId: wd.id, status: 'rejected' });
+    return wd;
+  });
+}
+
+/**
  * Pure read-only integrity audit by default (Side-effect free for status checks).
  * Auto-healing is only enabled when explicitly passed { autoRepair: true }.
  */
@@ -1750,7 +1838,10 @@ function auditLedgerIntegrity({ autoRepair = false } = {}) {
   for (const u of db.users) {
     const sum = db.ledger
       .filter((e) => e.userId === u.id)
-      .reduce((acc, e) => acc + Number(e.amount || 0), 0);
+      .reduce((acc, e) => {
+        const a = Number(e.amount);
+        return acc + (Number.isFinite(a) ? a : 0);
+      }, 0);
 
     const roundedSum = Math.round(sum);
     const storedBal = Math.round(Number(u.balanceAvailable || 0));
@@ -1846,6 +1937,7 @@ module.exports = {
   recalculateUserWallet,
   recalculateAllWallets,
   executeAtomicWithdrawal,
+  refundWithdrawal,
   auditLedgerIntegrity,
   createToken,
   verifyToken,

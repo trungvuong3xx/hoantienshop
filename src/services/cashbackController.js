@@ -11,6 +11,7 @@ const {
   recalculateUserWallet,
   recalculateAllWallets,
   executeAtomicWithdrawal,
+  refundWithdrawal,
   appendLedgerEntry,
   auditLedgerIntegrity,
   createToken,
@@ -2204,25 +2205,6 @@ function registerCashbackRoutes(app) {
     return res.json({ importedCount, errors });
   }));
 
-  async function refundWithdrawal(db, wd, adminUser) {
-    const numAmount = Math.round(Number(wd.amount));
-    if (!Number.isFinite(numAmount) || numAmount <= 0) {
-      throw new AppError(400, 'Số tiền của lệnh rút không hợp lệ.');
-    }
-
-    return withUserLock(wd.userId, async () => {
-      wd.status = 'rejected';
-      wd.processedAt = new Date().toISOString();
-      wd.processedByAdminId = adminUser?.id || null;
-      wd.processedByAdmin = adminUser?.username || 'admin';
-
-      // recalculateUserWallet detects wd.status === 'rejected' and creates a single withdrawal_refund entry
-      recalculateUserWallet(wd.userId, { persist: false });
-      await saveDb(db);
-      return wd;
-    });
-  }
-
   app.post('/api/admin/withdrawals/update', requireAdmin, asyncHandler(async (req, res) => {
     logger.logEnter('POST /api/admin/withdrawals/update');
     const admin = req.adminUser;
@@ -2466,5 +2448,7 @@ function registerCashbackRoutes(app) {
 }
 
 module.exports = {
-  registerCashbackRoutes
+  registerCashbackRoutes,
+  refundWithdrawal,
+  AppError
 };
