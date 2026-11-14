@@ -62,7 +62,9 @@ let publicConfig = {
   siteName: 'Hoàn Tiền Sàn',
   cashbackPercent: 70,
   taxDeductPercent: 10,
-  minWithdrawAmount: 50000
+  minWithdrawAmount: 50000,
+  zaloGroupUrl: 'https://zalo.me/g/cl2cmiseoqienusnrbyr',
+  zaloWidgetEnabled: true
 };
 
 // Capture ?ref=... referral code from URL if present
@@ -446,24 +448,49 @@ async function clearSession() {
   switchView('home');
 }
 
+// Floating Zalo Community Widget
+function applyZaloWidget(cfg) {
+  const box = document.getElementById('floatingZaloWidget');
+  const link = document.getElementById('floatingZaloLink');
+  if (!box || !link) return;
+
+  const groupUrl = cfg?.zaloGroupUrl || '';
+  const isEnabled = cfg?.zaloWidgetEnabled !== false;
+  // Chỉ kích hoạt nếu server xác nhận bật và URL bắt đầu bằng https://zalo.me/
+  const ok = isEnabled && /^https:\/\/zalo\.me\//.test(groupUrl);
+
+  box.classList.toggle('hidden', !ok);
+  if (ok) {
+    link.href = groupUrl;
+  }
+}
+
+// Public Settings & Config Application
+function applyPublicSettings(data) {
+  if (!data) return;
+  publicConfig = { ...publicConfig, ...data };
+  const rateEl = document.getElementById('heroCashbackRate');
+  if (rateEl) rateEl.textContent = `${publicConfig.cashbackPercent}%`;
+  const minLabel = document.getElementById('minWithdrawLabel');
+  if (minLabel) minLabel.textContent = fmtVnd(publicConfig.minWithdrawAmount);
+  document.querySelectorAll('[data-config="cashbackPercent"]').forEach((el) => {
+    el.textContent = `${publicConfig.cashbackPercent}%`;
+  });
+  document.querySelectorAll('[data-config="minWithdrawAmount"]').forEach((el) => {
+    el.textContent = fmtVnd(publicConfig.minWithdrawAmount);
+  });
+  document.querySelectorAll('[data-config="referralBountyAmount"]').forEach((el) => {
+    el.textContent = fmtVnd(publicConfig.referralBountyAmount ?? 5000);
+  });
+
+  applyZaloWidget(publicConfig);
+}
+
 // Public Config
 async function initPublicConfig() {
   try {
     const data = await apiFetch('/api/public-config');
-    publicConfig = { ...publicConfig, ...data };
-    const rateEl = document.getElementById('heroCashbackRate');
-    if (rateEl) rateEl.textContent = `${publicConfig.cashbackPercent}%`;
-    const minLabel = document.getElementById('minWithdrawLabel');
-    if (minLabel) minLabel.textContent = fmtVnd(publicConfig.minWithdrawAmount);
-    document.querySelectorAll('[data-config="cashbackPercent"]').forEach((el) => {
-      el.textContent = `${publicConfig.cashbackPercent}%`;
-    });
-    document.querySelectorAll('[data-config="minWithdrawAmount"]').forEach((el) => {
-      el.textContent = fmtVnd(publicConfig.minWithdrawAmount);
-    });
-    document.querySelectorAll('[data-config="referralBountyAmount"]').forEach((el) => {
-      el.textContent = fmtVnd(publicConfig.referralBountyAmount ?? 5000);
-    });
+    applyPublicSettings(data);
   } catch (err) {
     console.warn('Init public config notice:', err);
   }
