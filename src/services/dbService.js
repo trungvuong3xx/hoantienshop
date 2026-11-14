@@ -1571,6 +1571,8 @@ function recalculateUserWallet(userId, { persist = false } = {}) {
         sn = entry.refId.slice(15);
       } else if (entry.refId.startsWith('order_cancellation_')) {
         sn = entry.refId.slice(19);
+      } else if (entry.refId.startsWith('clawback_')) {
+        sn = entry.refId.slice(9);
       }
 
       if (sn) {
@@ -1736,7 +1738,8 @@ function recalculateUserWallet(userId, { persist = false } = {}) {
       entry.type === 'order_cashback' ||
       entry.type === 'referral_bonus' ||
       entry.type === 'order_revocation' ||
-      entry.type === 'order_cancellation'
+      entry.type === 'order_cancellation' ||
+      entry.type === 'order_clawback'
     ) {
       earnedNetSum += entryAmt;
     }

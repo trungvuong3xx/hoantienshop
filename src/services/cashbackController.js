@@ -65,6 +65,25 @@ const ALLOWED_ORDER_TRANSITIONS = {
   cancelled: ['approved']
 };
 
+function parseTimestamp(val) {
+  if (!val) return 0;
+  if (typeof val === 'number') {
+    if (!Number.isFinite(val)) return 0;
+    return val < 1e11 ? val * 1000 : val;
+  }
+  if (val instanceof Date) {
+    const t = val.getTime();
+    return Number.isFinite(t) ? t : 0;
+  }
+  const str = String(val).trim();
+  const num = Number(str);
+  if (Number.isFinite(num) && !str.includes('-') && !str.includes('T')) {
+    return num < 1e11 ? num * 1000 : num;
+  }
+  const parsed = new Date(str).getTime();
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
 function canTransitionOrderStatus(from, to, { fromEventTime = 0, currentStatusUpdatedAt = 0 } = {}) {
   if (!from) return true;
   if (from === to) return true;
@@ -241,7 +260,8 @@ function normalizeNetworkStatus(rawStatus) {
 
 /**
  * Shared order upsert that automatically maps clickId (sub_id / sub1) -> userId,
- * preserves user-claimed orders, and calculates post-tax 70/30 cashback split.
+ * preserves user-claimed orders, guards against out-of-order events, blocks invalid downgrades,
+ * applies clawback on cancelled approved orders, and calculates post-tax 70/30 cashback split.
  */
 function upsertNetworkOrder(db, {
   orderSn,
@@ -257,6 +277,8 @@ function upsertNetworkOrder(db, {
 }) {
   const cleanSn = String(orderSn || '').trim().toUpperCase();
   if (!cleanSn) return null;
+
+  logger.logEnter('upsertNetworkOrder', { orderSn: cleanSn, status, eventTime });
 
   const cleanSub = String(rawSubId || '').split('-')[0].trim();
   const clickRecord = cleanSub
@@ -288,6 +310,8 @@ function upsertNetworkOrder(db, {
       ? 'tiktok'
       : 'shopee';
 
+  const incomingEventTime = parseTimestamp(eventTime) || parseTimestamp(purchaseTime);
+
   const existing = db.orders.find((o) => String(o.orderSn || '').toUpperCase() === cleanSn);
   if (existing) {
     // 1. Guard against admin override if statusSource === 'admin'
@@ -296,31 +320,142 @@ function upsertNetworkOrder(db, {
         orderSn: cleanSn,
         currentStatus: existing.status
       });
+      logger.logLeave('upsertNetworkOrder', { orderSn: cleanSn, status: existing.status });
       return existing;
     }
 
-    // 2. Validate state transition BEFORE updating amounts or status
-    const incomingEventTime = eventTime || (purchaseTime ? new Date(purchaseTime).getTime() : 0);
-    const currentStatusUpdatedAt = existing.statusUpdatedAt ? new Date(existing.statusUpdatedAt).getTime() : 0;
+    const existingEventTime = parseTimestamp(existing.eventTime);
+    const existingStatusUpdatedAt = parseTimestamp(existing.statusUpdatedAt);
+    const existingUpdatedAt = parseTimestamp(existing.updatedAt);
 
-    if (status && !canTransitionOrderStatus(existing.status, status, { fromEventTime: incomingEventTime, currentStatusUpdatedAt })) {
+    // 2. Out-of-order network webhooks with older eventTime are ignored
+    if (incomingEventTime > 0 && existingEventTime > 0 && incomingEventTime < existingEventTime) {
+      logger.warning('upsertNetworkOrder', 'Bỏ qua sự kiện ngoài thứ tự do eventTime cũ hơn eventTime của đơn hàng', {
+        orderSn: cleanSn,
+        incomingEventTime,
+        existingEventTime
+      });
+      logger.logLeave('upsertNetworkOrder', { orderSn: cleanSn, ignored: true, reason: 'older_eventTime' });
+      return existing;
+    }
+
+    // 3. For approved orders:
+    if (existing.status === 'approved') {
+      // Reject any event attempting to downgrade status to pending
+      if (status === 'pending') {
+        logger.warning('canTransitionOrderStatus', 'Bỏ qua chuyển đổi trạng thái không hợp lệ', {
+          from: existing.status,
+          to: status
+        });
+        logger.warning('upsertNetworkOrder', 'Bỏ qua sự kiện trạng thái không hợp lệ', {
+          orderSn: cleanSn,
+          from: existing.status,
+          to: status
+        });
+        logger.logLeave('upsertNetworkOrder', { orderSn: cleanSn, status: existing.status, blocked: 'approved_to_pending' });
+        return existing;
+      }
+
+      // Reject/ignore any event with eventTime older than existing.eventTime (or existing.updatedAt / statusUpdatedAt)
+      const existingApprovedTime = existingEventTime || existingStatusUpdatedAt || existingUpdatedAt;
+      if (incomingEventTime > 0 && existingApprovedTime > 0 && incomingEventTime < existingApprovedTime) {
+        logger.warning('upsertNetworkOrder', 'Bỏ qua sự kiện có eventTime cũ hơn trạng thái hiện tại của đơn đã duyệt', {
+          orderSn: cleanSn,
+          incomingEventTime,
+          existingApprovedTime
+        });
+        logger.logLeave('upsertNetworkOrder', { orderSn: cleanSn, ignored: true, reason: 'stale_event_for_approved' });
+        return existing;
+      }
+    }
+
+    // 4. Validate general state transition BEFORE updating amounts or status
+    const currentStatusTime = existingEventTime || existingStatusUpdatedAt || existingUpdatedAt;
+    if (status && !canTransitionOrderStatus(existing.status, status, {
+      fromEventTime: incomingEventTime,
+      currentStatusUpdatedAt: currentStatusTime
+    })) {
       logger.warning('upsertNetworkOrder', 'Bỏ qua sự kiện trạng thái không hợp lệ', {
         orderSn: cleanSn,
         from: existing.status,
         to: status
       });
-      return existing; // Không cập nhật số tiền hay trạng thái, tránh đè đơn đã chốt
+      logger.logLeave('upsertNetworkOrder', { orderSn: cleanSn, status: existing.status, blocked: 'invalid_transition' });
+      return existing;
     }
 
-    // 3. Do not let pending sync overwrite finalized financial amounts of approved or cancelled orders
+    // 5. Do not let pending sync overwrite finalized financial amounts of approved or cancelled orders
     if ((existing.status === 'approved' || existing.status === 'cancelled') && status === 'pending') {
       logger.warning('upsertNetworkOrder', 'Bỏ qua cập nhật số tiền từ sự kiện pending cho đơn đã duyệt/hủy', {
         orderSn: cleanSn,
         currentStatus: existing.status
       });
+      logger.logLeave('upsertNetworkOrder', { orderSn: cleanSn, status: existing.status, blocked: 'pending_overwrite' });
       return existing;
     }
 
+    // 6. Clawback Mechanism: if order was previously approved and valid network event updates it to cancelled
+    if (existing.status === 'approved' && status === 'cancelled') {
+      const targetUserId =
+        existing.userId ||
+        matchedUser?.id ||
+        db.users.find(
+          (u) =>
+            existing.userCode &&
+            String(u.code).toUpperCase() === String(existing.userCode).toUpperCase()
+        )?.id;
+
+      let creditedAmount = 0;
+      if (targetUserId) {
+        const orderLedgerEntries = db.ledger.filter(
+          (e) =>
+            e.userId === targetUserId &&
+            (e.refId === `order_credit_${cleanSn}` ||
+              (e.refId && e.refId.startsWith(`ord_adj_${cleanSn}_`)) ||
+              (e.refId && e.refId.startsWith(`clawback_${cleanSn}`)))
+        );
+        const netCredited = orderLedgerEntries.reduce((sum, e) => sum + Number(e.amount || 0), 0);
+        if (netCredited > 0) {
+          creditedAmount = netCredited;
+        }
+      }
+
+      existing.status = 'cancelled';
+      existing.statusUpdatedAt = new Date().toISOString();
+      existing.clawbackAt = new Date().toISOString();
+      if (incomingEventTime > 0) {
+        existing.eventTime = eventTime || incomingEventTime;
+      }
+
+      const clawbackRefId = `clawback_${cleanSn}`;
+      if (creditedAmount > 0 && targetUserId && !db.ledger.some((e) => e.refId === clawbackRefId)) {
+        const clawbackAmt = -Math.abs(Math.round(creditedAmount));
+        appendLedgerEntry(
+          targetUserId,
+          'order_clawback',
+          clawbackAmt,
+          clawbackRefId,
+          `Thu hồi hoàn tiền đơn hàng bị hủy #${cleanSn} (${clawbackAmt.toLocaleString('vi-VN')} đ)`
+        );
+        recalculateUserWallet(targetUserId, { persist: false });
+        logger.log('upsertNetworkOrder', 'Đã ghi nhận bút toán thu hồi hoàn tiền clawback', {
+          orderSn: cleanSn,
+          userId: targetUserId,
+          amount: clawbackAmt,
+          refId: clawbackRefId
+        });
+      }
+
+      existing.updatedAt = new Date().toISOString();
+      logger.logLeave('upsertNetworkOrder', {
+        orderSn: cleanSn,
+        status: existing.status,
+        clawbackAt: existing.clawbackAt
+      });
+      return existing;
+    }
+
+    // 7. Update financial amounts and attribution
     existing.grossCommission = split.grossCommission;
     existing.taxAmount = split.taxAmount;
     existing.netCommission = split.netCommission;
@@ -349,6 +484,9 @@ function upsertNetworkOrder(db, {
       existing.status = status;
       existing.statusUpdatedAt = new Date().toISOString();
     }
+    if (incomingEventTime > 0) {
+      existing.eventTime = eventTime || incomingEventTime;
+    }
     if (!existing.clickId && cleanSub) {
       existing.clickId = cleanSub;
     }
@@ -373,6 +511,11 @@ function upsertNetworkOrder(db, {
       existing.claimPending = true;
     }
     existing.updatedAt = new Date().toISOString();
+    logger.logLeave('upsertNetworkOrder', {
+      orderSn: cleanSn,
+      status: existing.status,
+      userCashbackAmount: existing.userCashbackAmount
+    });
     return existing;
   }
 
@@ -398,11 +541,17 @@ function upsertNetworkOrder(db, {
     status,
     hasCustomCashback: false,
     commissionEstimated: Boolean(commissionEstimated),
+    eventTime: eventTime || (incomingEventTime || null),
     createdAt: new Date().toISOString(),
     statusUpdatedAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
   };
   db.orders.unshift(created);
+  logger.logLeave('upsertNetworkOrder', {
+    orderSn: cleanSn,
+    created: true,
+    status: created.status
+  });
   return created;
 }
 
@@ -1663,7 +1812,9 @@ function registerCashbackRoutes(app) {
           orderAmount,
           status,
           platform,
-          productName
+          productName,
+          eventTime: src.event_time || src.eventTime || src.timestamp,
+          purchaseTime: src.purchase_time || src.purchaseTime
         });
 
         if (order?.userId) {
@@ -1753,7 +1904,9 @@ function registerCashbackRoutes(app) {
           orderAmount: validBilling,
           status: normalizeNetworkStatus(status),
           platform,
-          productName
+          productName,
+          eventTime: req.body?.eventTime || req.body?.event_time || req.body?.timestamp,
+          purchaseTime: req.body?.purchaseTime || req.body?.purchase_time
         });
 
         if (order?.userId) {
@@ -2497,5 +2650,8 @@ function registerCashbackRoutes(app) {
 module.exports = {
   registerCashbackRoutes,
   refundWithdrawal,
-  AppError
+  AppError,
+  upsertNetworkOrder,
+  canTransitionOrderStatus,
+  normalizeNetworkStatus
 };
