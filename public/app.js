@@ -47,11 +47,15 @@ const on = (idOrEl, ev, fn) => {
   return el;
 };
 
-// Helper for numeric input values that avoids treating 0 as falsy
+// Helper for numeric input values that avoids treating 0 as falsy or forcing fallbacks on empty/0 inputs
 function numOr(val, fallback) {
-  if (val === undefined || val === null || val === '') return fallback;
-  const n = Number(val);
-  return isNaN(n) ? fallback : n;
+  if (val === undefined || val === null) return fallback;
+  const s = typeof val === 'string' ? val.trim() : val;
+  if (s === '') {
+    return typeof fallback === 'number' ? fallback : 0;
+  }
+  const n = Number(s);
+  return Number.isFinite(n) ? n : fallback;
 }
 
 let publicConfig = {
@@ -83,12 +87,13 @@ function escapeHtml(str) {
     .replace(/'/g, '&#39;');
 }
 
-function safeHttpsUrl(rawUrl) {
+function safeHttpsUrl(rawUrl, raw = false) {
   const s = String(rawUrl || '').trim();
   if (!s) return '';
   try {
     const u = new URL(s);
-    return u.protocol === 'https:' ? escapeHtml(u.toString()) : '';
+    if (u.protocol !== 'https:') return '';
+    return raw ? u.toString() : escapeHtml(u.toString());
   } catch {
     return '';
   }
@@ -171,8 +176,27 @@ async function apiFetch(url, options = {}) {
   };
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 15000);
-  const signal = options.signal || controller.signal;
+  let timedOut = false;
+  const timeoutId = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, 15000);
+
+  let signal;
+  if (options.signal) {
+    if (typeof AbortSignal.any === 'function') {
+      signal = AbortSignal.any([controller.signal, options.signal]);
+    } else {
+      if (options.signal.aborted) {
+        controller.abort();
+      } else {
+        options.signal.addEventListener('abort', () => controller.abort(), { once: true });
+      }
+      signal = controller.signal;
+    }
+  } else {
+    signal = controller.signal;
+  }
 
   try {
     const res = await fetch(url, {
@@ -193,6 +217,10 @@ async function apiFetch(url, options = {}) {
   } catch (err) {
     clearTimeout(timeoutId);
     if (err.name === 'AbortError') {
+      // If caller intentionally aborted via signal, preserve AbortError without masking as timeout
+      if (options.signal?.aborted && !timedOut) {
+        throw err;
+      }
       throw new Error('Yêu cầu quá thời gian chờ (Timeout). Vui lòng thử lại.');
     }
     if (err instanceof TypeError || String(err.message).includes('Failed to fetch')) {
@@ -204,23 +232,38 @@ async function apiFetch(url, options = {}) {
 
 // Navigation & History API
 function switchView(viewName, updateHistory = true) {
+  let targetView = viewName;
+  if (targetView === 'faq') {
+    targetView = 'guide';
+  }
+
+  // Admin navigation guard: only authorized admin can activate view-admin
+  if (targetView === 'admin') {
+    if (!currentUser || currentUser.role !== 'admin') {
+      showToast('Bạn không có quyền truy cập trang Quản trị.');
+      switchView('home', true);
+      return;
+    }
+  }
+
   document.querySelectorAll('.view-section').forEach((sec) => {
-    sec.classList.toggle('active', sec.id === `view-${viewName}`);
+    sec.classList.toggle('active', sec.id === `view-${targetView}`);
   });
   document.querySelectorAll('.nav-btn').forEach((btn) => {
-    btn.classList.toggle('active', btn.getAttribute('data-nav') === viewName);
+    const navVal = btn.getAttribute('data-nav');
+    btn.classList.toggle('active', navVal === targetView || (targetView === 'guide' && navVal === 'faq'));
   });
 
   if (updateHistory) {
     try {
-      history.pushState({ view: viewName }, '', `#${viewName}`);
+      history.pushState({ view: targetView }, '', `#${targetView}`);
     } catch {}
   }
 
-  if (viewName === 'wallet' && authToken) {
+  if (targetView === 'wallet' && authToken) {
     loadUserDashboard();
   }
-  if (viewName === 'admin' && authToken && currentUser?.role === 'admin') {
+  if (targetView === 'admin' && authToken && currentUser?.role === 'admin') {
     loadAdminDashboard();
   }
 }
@@ -261,9 +304,11 @@ document.body.addEventListener('click', (e) => {
 
   const qrBtn = e.target.closest('[data-vietqr]');
   if (qrBtn) {
-    const imgUrl = qrBtn.getAttribute('data-vietqr') || '';
+    const rawImgUrl = qrBtn.getAttribute('data-vietqr') || '';
     const info = qrBtn.getAttribute('data-vietqr-info') || '';
-    const safeQr = safeHttpsUrl(imgUrl);
+    // Use raw unescaped URL with literal '&' for direct element.src property assignment
+    const cleanImgUrl = rawImgUrl.replace(/&amp;/g, '&');
+    const safeQr = safeHttpsUrl(cleanImgUrl, true);
     if (
       safeQr &&
       (safeQr.startsWith('https://img.vietqr.io/') || safeQr.startsWith('https://api.vietqr.io/'))
@@ -439,8 +484,11 @@ function getTurnstileToken(containerId) {
   return '';
 }
 
-// Login execution with button lock
+let isAuthSubmitting = false;
+
+// Login execution with button lock & duplicate submit guard
 async function handleDoLogin() {
+  if (isAuthSubmitting) return;
   const btn = document.getElementById('doLoginBtn');
   const identifier = document.getElementById('loginIdentifier')?.value?.trim() || '';
   const password = document.getElementById('loginPassword')?.value || '';
@@ -450,6 +498,7 @@ async function handleDoLogin() {
     return;
   }
 
+  isAuthSubmitting = true;
   if (btn) {
     btn.disabled = true;
     btn.textContent = 'Đang đăng nhập...';
@@ -473,6 +522,7 @@ async function handleDoLogin() {
   } catch (err) {
     showToast(err.message);
   } finally {
+    isAuthSubmitting = false;
     if (btn) {
       btn.disabled = false;
       btn.textContent = 'Đăng Nhập';
@@ -482,8 +532,9 @@ async function handleDoLogin() {
 
 on('doLoginBtn', 'click', handleDoLogin);
 
-// Register execution with button lock
+// Register execution with button lock & duplicate submit guard
 async function handleDoRegister() {
+  if (isAuthSubmitting) return;
   const btn = document.getElementById('doRegisterBtn');
   const name = document.getElementById('regName')?.value?.trim() || '';
   const phone = document.getElementById('regPhone')?.value?.trim() || '';
@@ -505,6 +556,7 @@ async function handleDoRegister() {
     return;
   }
 
+  isAuthSubmitting = true;
   if (btn) {
     btn.disabled = true;
     btn.textContent = 'Đang tạo tài khoản...';
@@ -525,6 +577,7 @@ async function handleDoRegister() {
   } catch (err) {
     showToast(err.message);
   } finally {
+    isAuthSubmitting = false;
     if (btn) {
       btn.disabled = false;
       btn.textContent = 'Đăng Ký Tài Khoản';
@@ -534,7 +587,7 @@ async function handleDoRegister() {
 
 on('doRegisterBtn', 'click', handleDoRegister);
 
-// Allow Enter key / form submit inside login and register inputs
+// Form submit listeners handle both button click and Enter key without duplicate invocation
 on('loginFormBox', 'submit', (e) => {
   e.preventDefault();
   handleDoLogin();
@@ -546,17 +599,6 @@ on('registerFormBox', 'submit', (e) => {
 on('withdrawFormBox', 'submit', (e) => {
   e.preventDefault();
   document.getElementById('submitWithdrawBtn')?.click();
-});
-
-['loginIdentifier', 'loginPassword'].forEach((id) => {
-  on(id, 'keydown', (e) => {
-    if (e.key === 'Enter') handleDoLogin();
-  });
-});
-['regName', 'regPhone', 'regPassword', 'regRefCode'].forEach((id) => {
-  on(id, 'keydown', (e) => {
-    if (e.key === 'Enter') handleDoRegister();
-  });
 });
 
 const regRefCodeInput = document.getElementById('regRefCode');
@@ -681,9 +723,11 @@ async function fetchInstantPreview(rawText) {
     }
     renderInstantPreviewCard(res);
   } catch (err) {
-    if (err.name !== 'AbortError') {
-      instantPreviewArea.classList.add('hidden');
+    if (signal.aborted || err.name === 'AbortError') {
+      // Previous preview request was aborted by subsequent input; silently ignore without altering subsequent state
+      return;
     }
+    instantPreviewArea.classList.add('hidden');
   } finally {
     if (!signal.aborted) {
       instantPreviewCard.classList.remove('loading');
@@ -1468,10 +1512,11 @@ async function loadAdminDashboard() {
                   )}">Đã chuyển</button>
                    <button type="button" class="btn btn-danger btn-xs" data-wd-action="rejected" data-wd-id="${escapeHtml(
                      w.id
-                   )}">Từ chối</button>`
-                : `<button type="button" class="btn btn-ghost btn-xs text-danger" data-wd-delete="${escapeHtml(
-                    w.id
-                  )}">Xóa</button>`;
+                   )}">Từ chối</button>
+                   <button type="button" class="btn btn-ghost btn-xs text-danger" data-wd-delete="${escapeHtml(
+                     w.id
+                   )}">Hủy</button>`
+                : '<span style="color:#94a3b8;font-size:12px;">—</span>';
 
             const dt = w.createdAt ? new Date(w.createdAt).toLocaleDateString('vi-VN') : '—';
             const stCls = getStatusClass(w.status);
@@ -1582,10 +1627,22 @@ on('saveAdminSettingsBtn', 'click', async () => {
         tiktokDeepLinkTemplate:
           document.getElementById('admTiktokDeepLink')?.value?.trim() || '',
         accesstradeApiKey: document.getElementById('admAccesstradeApiKey')?.value?.trim() || '',
-        taxDeductPercent: numOr(document.getElementById('admTaxDeductPercent')?.value, 10),
-        cashbackPercent: numOr(document.getElementById('admCashbackPercent')?.value, 70),
-        minWithdrawAmount: numOr(document.getElementById('admMinWithdraw')?.value, 50000),
-        referralBountyAmount: numOr(document.getElementById('admReferralBounty')?.value, 5000),
+        taxDeductPercent: numOr(
+          document.getElementById('admTaxDeductPercent')?.value,
+          currentAdminSettings?.taxDeductPercent ?? 10
+        ),
+        cashbackPercent: numOr(
+          document.getElementById('admCashbackPercent')?.value,
+          currentAdminSettings?.cashbackPercent ?? 70
+        ),
+        minWithdrawAmount: numOr(
+          document.getElementById('admMinWithdraw')?.value,
+          currentAdminSettings?.minWithdrawAmount ?? 50000
+        ),
+        referralBountyAmount: numOr(
+          document.getElementById('admReferralBounty')?.value,
+          currentAdminSettings?.referralBountyAmount ?? 0
+        ),
         shortenerProvider: document.getElementById('admShortener')?.value || 'none',
         supportZalo: document.getElementById('admSupportZalo')?.value?.trim() || '',
         newAdminPassword: document.getElementById('admNewPass')?.value?.trim() || ''
@@ -2091,7 +2148,23 @@ on('saveOrderEditBtn', 'click', async () => {
 });
 
 // ================= CSV IMPORT & RECONCILIATION =================
-function splitCsvLine(line) {
+function detectCsvDelimiter(headerLine) {
+  let commaCount = 0;
+  let semiCount = 0;
+  let inQuotes = false;
+  for (let i = 0; i < headerLine.length; i++) {
+    const ch = headerLine[i];
+    if (ch === '"') inQuotes = !inQuotes;
+    else if (!inQuotes) {
+      if (ch === ',') commaCount++;
+      else if (ch === ';') semiCount++;
+    }
+  }
+  return semiCount > commaCount ? ';' : ',';
+}
+
+function splitCsvLine(line, delimiter) {
+  const delim = delimiter || detectCsvDelimiter(line);
   const result = [];
   let current = '';
   let inQuotes = false;
@@ -2099,7 +2172,7 @@ function splitCsvLine(line) {
     const ch = line[i];
     if (ch === '"') {
       inQuotes = !inQuotes;
-    } else if (ch === ',' && !inQuotes) {
+    } else if (ch === delim && !inQuotes) {
       result.push(current.trim());
       current = '';
     } else {
@@ -2142,6 +2215,13 @@ on('admCsvInput', 'change', async (e) => {
   const file = e.target.files[0];
   if (!file) return;
 
+  const MAX_CSV_SIZE = 2 * 1024 * 1024; // Enforce 2MB client-side limit
+  if (file.size > MAX_CSV_SIZE) {
+    showToast('Kích thước file CSV vượt quá giới hạn 2MB.');
+    e.target.value = '';
+    return;
+  }
+
   try {
     const text = await file.text();
     const lines = text.split(/\r?\n/).filter((l) => l.trim());
@@ -2150,13 +2230,14 @@ on('admCsvInput', 'change', async (e) => {
       return;
     }
 
-    const headers = splitCsvLine(lines[0]).map((h) => h.replace(/^\uFEFF/, '').toLowerCase());
+    const delimiter = detectCsvDelimiter(lines[0]);
+    const headers = splitCsvLine(lines[0], delimiter).map((h) => h.replace(/^\uFEFF/, '').toLowerCase().trim());
     const rows = [];
     let totalEstComm = 0;
     let skippedCount = 0;
 
     for (let i = 1; i < lines.length; i++) {
-      const cols = splitCsvLine(lines[i]);
+      const cols = splitCsvLine(lines[i], delimiter);
       if (cols.length < 2) {
         skippedCount++;
         continue;
@@ -2177,7 +2258,9 @@ on('admCsvInput', 'change', async (e) => {
         cols[0] ||
         '';
 
-      if (!orderSn || !orderSn.trim()) {
+      const cleanOrderSn = String(orderSn).trim();
+      // Validate orderSn format before submission
+      if (!cleanOrderSn || cleanOrderSn.length < 2 || !/^[A-Za-z0-9_\-\.]+$/.test(cleanOrderSn)) {
         skippedCount++;
         continue;
       }
@@ -2207,6 +2290,22 @@ on('admCsvInput', 'change', async (e) => {
         rowObj['order amount'] ||
         '0';
 
+      const totalCommission = parseVnMoney(commRaw);
+      const orderAmount = parseVnMoney(amountRaw);
+
+      // Validate finite non-negative numbers before submission
+      if (
+        isNaN(totalCommission) ||
+        !Number.isFinite(totalCommission) ||
+        totalCommission < 0 ||
+        isNaN(orderAmount) ||
+        !Number.isFinite(orderAmount) ||
+        orderAmount < 0
+      ) {
+        skippedCount++;
+        continue;
+      }
+
       const statusRaw = (
         rowObj['trạng thái đơn hàng'] ||
         rowObj['order status'] ||
@@ -2222,8 +2321,6 @@ on('admCsvInput', 'change', async (e) => {
         ''
       ).toLowerCase();
 
-      const totalCommission = parseVnMoney(commRaw);
-      const orderAmount = parseVnMoney(amountRaw);
       totalEstComm += totalCommission;
 
       const status =
@@ -2245,7 +2342,7 @@ on('admCsvInput', 'change', async (e) => {
       const platform = merchantRaw.includes('tiktok') ? 'tiktok' : 'shopee';
 
       rows.push({
-        orderSn: String(orderSn).trim(),
+        orderSn: cleanOrderSn,
         userCode: String(subId1 || 'GUEST').trim(),
         totalCommission,
         orderAmount,
@@ -2267,17 +2364,33 @@ on('admCsvInput', 'change', async (e) => {
     // Batch requests in chunks of 500 rows to prevent payload exhaustion
     const CHUNK_SIZE = 500;
     let totalImported = 0;
+    const allChunkErrors = [];
+
     for (let c = 0; c < rows.length; c += CHUNK_SIZE) {
       const chunk = rows.slice(c, c + CHUNK_SIZE);
+      if (chunk.length === 0) continue;
       const res = await apiFetch('/api/admin/import-orders', {
         method: 'POST',
         body: JSON.stringify({ rows: chunk })
       });
-      totalImported += res.importedCount || chunk.length;
+      if (typeof res?.importedCount === 'number') {
+        totalImported += res.importedCount;
+      }
+      if (Array.isArray(res?.errors) && res.errors.length > 0) {
+        allChunkErrors.push(...res.errors);
+      }
     }
 
-    showToast(`Đã nhập & đối soát thành công ${totalImported} đơn hàng!`);
-    await loadAdminDashboard();
+    if (totalImported === 0) {
+      const errDetail = allChunkErrors.length ? `: ${allChunkErrors[0]}` : '';
+      showToast(`Không có đơn hàng nào được nhập thành công${errDetail}.`);
+    } else if (allChunkErrors.length > 0) {
+      showToast(`Đã nhập ${totalImported} đơn hàng (${allChunkErrors.length} lỗi: ${allChunkErrors[0]}).`);
+      await loadAdminDashboard();
+    } else {
+      showToast(`Đã nhập & đối soát thành công ${totalImported} đơn hàng!`);
+      await loadAdminDashboard();
+    }
   } catch (err) {
     showToast(`Lỗi đọc file CSV: ${err.message}`);
   } finally {
@@ -2467,9 +2580,9 @@ async function initBoot() {
     loadUserDashboard();
   }
 
-  // Restore view from URL hash on load
+  // Restore view from URL hash on load (support both guide and faq routes)
   const initialHash = window.location.hash.replace('#', '');
-  if (initialHash && ['home', 'wallet', 'admin', 'faq', 'terms'].includes(initialHash)) {
+  if (initialHash && ['home', 'wallet', 'admin', 'guide', 'faq', 'terms'].includes(initialHash)) {
     switchView(initialHash, false);
   }
 }
