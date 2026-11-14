@@ -540,19 +540,24 @@ const userLocks = new Map();
 
 /**
  * Per-user async mutex to serialize concurrent financial operations without memory leak.
+ * Provides resilient FIFO queueing that never hangs on preceding error rejections.
  */
-async function withUserLock(userId, fn) {
+async function withUserLock(userId, fn, { syncCache = false } = {}) {
   const key = String(userId || 'global');
   const prev = userLocks.get(key) || Promise.resolve();
   let release;
   const next = new Promise((resolve) => {
     release = resolve;
   });
-  const tail = prev.then(() => next);
+  // Ensure that tail always resolves when release() is invoked, even if prev rejected
+  const tail = prev.catch(() => {}).then(() => next);
   userLocks.set(key, tail);
 
-  await prev;
   try {
+    await prev.catch(() => {});
+    if (syncCache && pgPool && pgSchemaReady) {
+      await reloadStateFromPostgres();
+    }
     return await fn();
   } finally {
     release();
@@ -1143,7 +1148,10 @@ async function batchSyncOrders(client, orders) {
           ELSE EXCLUDED.user_cashback_amount 
         END,
         admin_share_amount = EXCLUDED.admin_share_amount,
-        status = EXCLUDED.status,
+        status = CASE
+          WHEN orders.status IN ('approved', 'cancelled') AND EXCLUDED.status = 'pending' THEN orders.status
+          ELSE EXCLUDED.status
+        END,
         updated_at = NOW()
     `;
     await client.query(query, params);
@@ -1189,6 +1197,187 @@ async function batchSyncClicks(client, clicks) {
       ON CONFLICT (click_id) DO NOTHING
     `;
     await client.query(query, params);
+  }
+}
+
+// ================= GRANULAR POSTGRES PERSISTENCE (NON-OVERWRITING) =================
+
+async function persistOrderToPostgres(order, customClient = null) {
+  if (!pgPool || !pgSchemaReady || !order || !order.orderSn) return null;
+  const client = customClient || (await pgPool.connect());
+  try {
+    const query = `
+      INSERT INTO orders (
+        order_sn, platform, click_id, user_id, user_code, product_name,
+        order_amount, gross_commission, tax_amount, net_commission,
+        user_cashback_amount, admin_share_amount, status, created_at, updated_at
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+      ON CONFLICT (order_sn) DO UPDATE SET
+        user_id = COALESCE(orders.user_id, EXCLUDED.user_id),
+        user_code = CASE WHEN orders.user_code = 'GUEST' THEN EXCLUDED.user_code ELSE orders.user_code END,
+        gross_commission = EXCLUDED.gross_commission,
+        tax_amount = EXCLUDED.tax_amount,
+        net_commission = EXCLUDED.net_commission,
+        user_cashback_amount = CASE 
+          WHEN orders.user_cashback_amount > 0 AND EXCLUDED.user_cashback_amount = 0 THEN orders.user_cashback_amount 
+          ELSE EXCLUDED.user_cashback_amount 
+        END,
+        admin_share_amount = EXCLUDED.admin_share_amount,
+        status = CASE
+          WHEN orders.status IN ('approved', 'cancelled') AND EXCLUDED.status = 'pending' THEN orders.status
+          ELSE EXCLUDED.status
+        END,
+        updated_at = NOW()
+      RETURNING *;
+    `;
+    const params = [
+      order.orderSn,
+      order.platform || 'shopee',
+      order.clickId || null,
+      order.userId || null,
+      order.userCode || 'GUEST',
+      order.productName || '',
+      Math.round(Number(order.orderAmount || 0)),
+      Math.round(Number(order.grossCommission || 0)),
+      Math.round(Number(order.taxAmount || 0)),
+      Math.round(Number(order.netCommission || 0)),
+      Math.round(Number(order.userCashbackAmount || 0)),
+      Math.round(Number(order.adminShareAmount || 0)),
+      order.status || 'pending',
+      order.createdAt ? new Date(order.createdAt) : new Date(),
+      order.updatedAt ? new Date(order.updatedAt) : new Date()
+    ];
+    const res = await client.query(query, params);
+    return res.rows[0];
+  } finally {
+    if (!customClient) client.release();
+  }
+}
+
+async function persistUserToPostgres(user, customClient = null) {
+  if (!pgPool || !pgSchemaReady || !user || !user.id) return null;
+  const client = customClient || (await pgPool.connect());
+  try {
+    const query = `
+      INSERT INTO users (
+        id, code, name, phone, email, password_hash, role, token_version,
+        referred_by, balance_available, balance_pending, total_earned,
+        total_withdrawn, bank_name, bank_account, bank_owner, account_locked
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+      ON CONFLICT (id) DO UPDATE SET
+        code = EXCLUDED.code,
+        name = EXCLUDED.name,
+        phone = EXCLUDED.phone,
+        email = EXCLUDED.email,
+        password_hash = EXCLUDED.password_hash,
+        role = EXCLUDED.role,
+        token_version = EXCLUDED.token_version,
+        referred_by = EXCLUDED.referred_by,
+        balance_available = (SELECT COALESCE(SUM(l.amount), 0) FROM ledger l WHERE l.user_id = users.id),
+        balance_pending = EXCLUDED.balance_pending,
+        total_earned = EXCLUDED.total_earned,
+        total_withdrawn = EXCLUDED.total_withdrawn,
+        bank_name = EXCLUDED.bank_name,
+        bank_account = EXCLUDED.bank_account,
+        bank_owner = EXCLUDED.bank_owner,
+        account_locked = EXCLUDED.account_locked
+      RETURNING *;
+    `;
+    const params = [
+      user.id,
+      user.code,
+      user.name || '',
+      user.phone,
+      user.email || '',
+      user.passwordHash,
+      user.role || 'user',
+      Number(user.tokenVersion || 1),
+      user.referredBy || null,
+      Math.round(Number(user.balanceAvailable || 0)),
+      Math.round(Number(user.balancePending || 0)),
+      Math.round(Number(user.totalEarned || 0)),
+      Math.round(Number(user.totalWithdrawn || 0)),
+      user.bankName || '',
+      user.bankAccount || '',
+      user.bankOwner || '',
+      Boolean(user.accountLocked)
+    ];
+    const res = await client.query(query, params);
+    return res.rows[0];
+  } finally {
+    if (!customClient) client.release();
+  }
+}
+
+async function persistLedgerToPostgres(entry, customClient = null) {
+  if (!pgPool || !pgSchemaReady || !entry || !entry.refId) return null;
+  const client = customClient || (await pgPool.connect());
+  try {
+    const query = `
+      INSERT INTO ledger (id, user_id, type, amount, ref_id, note, created_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      ON CONFLICT (ref_id) DO NOTHING
+      RETURNING *;
+    `;
+    const params = [
+      entry.id,
+      entry.userId,
+      entry.type,
+      Math.round(Number(entry.amount || 0)),
+      entry.refId,
+      entry.note || '',
+      entry.createdAt ? new Date(entry.createdAt) : new Date()
+    ];
+    const res = await client.query(query, params);
+    return res.rows[0] || null;
+  } finally {
+    if (!customClient) client.release();
+  }
+}
+
+async function persistWithdrawalToPostgres(withdrawal, customClient = null) {
+  if (!pgPool || !pgSchemaReady || !withdrawal || !withdrawal.id) return null;
+  const client = customClient || (await pgPool.connect());
+  try {
+    const query = `
+      INSERT INTO withdrawals (
+        id, user_id, user_code, user_name, user_phone, amount,
+        method, bank_name, bank_account, bank_owner, status, created_at, processed_at
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+      ON CONFLICT (id) DO UPDATE SET
+        status = CASE 
+          WHEN withdrawals.status IN ('paid', 'rejected') THEN withdrawals.status 
+          ELSE EXCLUDED.status 
+        END,
+        processed_at = CASE 
+          WHEN withdrawals.status IN ('paid', 'rejected') THEN withdrawals.processed_at 
+          WHEN EXCLUDED.status IN ('paid', 'rejected') THEN NOW() 
+          ELSE withdrawals.processed_at 
+        END
+      RETURNING *;
+    `;
+    const params = [
+      withdrawal.id,
+      withdrawal.userId,
+      withdrawal.userCode || '',
+      withdrawal.userName || '',
+      withdrawal.userPhone || '',
+      Math.round(Number(withdrawal.amount || 0)),
+      withdrawal.method || 'bank',
+      withdrawal.bankName || '',
+      withdrawal.bankAccount || '',
+      withdrawal.bankOwner || '',
+      withdrawal.status || 'pending',
+      withdrawal.createdAt ? new Date(withdrawal.createdAt) : new Date(),
+      withdrawal.processedAt ? new Date(withdrawal.processedAt) : null
+    ];
+    const res = await client.query(query, params);
+    return res.rows[0];
+  } finally {
+    if (!customClient) client.release();
   }
 }
 
@@ -1799,6 +1988,12 @@ async function refundWithdrawal(db, wd, adminUser = {}) {
   const database = db || ensureDbLoaded();
 
   return withUserLock(wd.userId, async () => {
+    if (wd.status === 'paid') {
+      const err = new Error('Không thể hoàn tiền lệnh rút đã chi trả thành công.');
+      err.status = 400;
+      throw err;
+    }
+
     // Idempotency: if already rejected, ensure recalculateUserWallet does not duplicate and return wd
     if (wd.status === 'rejected') {
       logger.warning('refundWithdrawal', 'Lệnh rút tiền đã bị từ chối trước đó, bảo đảm không hoàn tiền trùng lặp', {
@@ -1946,5 +2141,9 @@ module.exports = {
   reloadStateFromPostgres,
   getDefaultPostbackToken,
   withUserLock,
-  getCurrentDbVersion
+  getCurrentDbVersion,
+  persistOrderToPostgres,
+  persistUserToPostgres,
+  persistLedgerToPostgres,
+  persistWithdrawalToPostgres
 };

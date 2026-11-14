@@ -1041,100 +1041,102 @@ function registerCashbackRoutes(app) {
       return res.status(400).json({ error: 'Mã đơn hàng không hợp lệ (6-32 ký tự chữ/số).' });
     }
 
-    const db = ensureDbLoaded();
-    const existing = db.orders.find((o) => String(o.orderSn || '').toUpperCase() === cleanSn);
-    if (existing) {
-      if (existing.userId === user.id) {
-        return res.json({
-          order: existing,
-          autoMatched: true,
-          message: 'Đơn hàng này đã có trong tài khoản của bạn.'
-        });
-      }
-      if (existing.userId && existing.userCode !== 'GUEST') {
-        return res.status(400).json({
-          error: 'Mã đơn hàng này đã được ghi nhận cho một tài khoản khác.'
-        });
-      }
+    return withUserLock(user.id, async () => {
+      const db = ensureDbLoaded();
+      const existing = db.orders.find((o) => String(o.orderSn || '').toUpperCase() === cleanSn);
+      if (existing) {
+        if (existing.userId === user.id) {
+          return res.json({
+            order: existing,
+            autoMatched: true,
+            message: 'Đơn hàng này đã có trong tài khoản của bạn.'
+          });
+        }
+        if (existing.userId && existing.userCode !== 'GUEST') {
+          return res.status(400).json({
+            error: 'Mã đơn hàng này đã được ghi nhận cho một tài khoản khác.'
+          });
+        }
 
-      // Order was previously GUEST or unassigned: Check verifiable ownership attribution proof
-      const isAttributedToUser =
-        (existing.clickId &&
-          db.clicks.some(
-            (c) =>
-              c.clickId === existing.clickId &&
-              (c.userId === user.id ||
-                (c.userCode && String(c.userCode).toUpperCase() === String(user.code).toUpperCase()))
-          )) ||
-        (existing.userCode &&
-          String(existing.userCode).toUpperCase() === String(user.code).toUpperCase());
+        // Order was previously GUEST or unassigned: Check verifiable ownership attribution proof
+        const isAttributedToUser =
+          (existing.clickId &&
+            db.clicks.some(
+              (c) =>
+                c.clickId === existing.clickId &&
+                (c.userId === user.id ||
+                  (c.userCode && String(c.userCode).toUpperCase() === String(user.code).toUpperCase()))
+            )) ||
+          (existing.userCode &&
+            String(existing.userCode).toUpperCase() === String(user.code).toUpperCase());
 
-      if (isAttributedToUser) {
-        // Direct click tracking attribution verified: auto-claim into wallet
-        existing.userId = user.id;
-        existing.userCode = user.code;
+        if (isAttributedToUser) {
+          // Direct click tracking attribution verified: auto-claim into wallet
+          existing.userId = user.id;
+          existing.userCode = user.code;
+          existing.updatedAt = new Date().toISOString();
+          recalculateUserWallet(user.id);
+          await saveDb(db);
+          logger.logLeave('POST /api/user/submit-order', { orderSn: cleanSn, autoClaimed: true });
+          return res.json({
+            order: sanitizeOrderForUser(existing),
+            autoMatched: true,
+            message: 'Đã khớp tự động đơn hàng từ sàn và cộng tiền hoàn vào ví của bạn!'
+          });
+        }
+
+        // No direct tracking attribution proof: queue for manual admin verification to prevent hijacking
+        existing.claimPending = true;
+        existing.claimedByUserId = user.id;
+        existing.claimedByUserCode = user.code;
+        existing.claimRequestedAt = new Date().toISOString();
         existing.updatedAt = new Date().toISOString();
-        recalculateUserWallet(user.id);
         await saveDb(db);
-        logger.logLeave('POST /api/user/submit-order', { orderSn: cleanSn, autoClaimed: true });
+        logger.logLeave('POST /api/user/submit-order', { orderSn: cleanSn, claimPending: true });
         return res.json({
           order: sanitizeOrderForUser(existing),
-          autoMatched: true,
-          message: 'Đã khớp tự động đơn hàng từ sàn và cộng tiền hoàn vào ví của bạn!'
+          claimPending: true,
+          message: 'Đã tiếp nhận yêu cầu đối soát đơn hàng. Ban quản trị sẽ xác minh quyền sở hữu và duyệt hoàn tiền trong 24h.'
         });
       }
 
-      // No direct tracking attribution proof: queue for manual admin verification to prevent hijacking
-      existing.claimPending = true;
-      existing.claimedByUserId = user.id;
-      existing.claimedByUserCode = user.code;
-      existing.claimRequestedAt = new Date().toISOString();
-      existing.updatedAt = new Date().toISOString();
-      await saveDb(db);
-      logger.logLeave('POST /api/user/submit-order', { orderSn: cleanSn, claimPending: true });
-      return res.json({
-        order: sanitizeOrderForUser(existing),
+      // Never trust client for orderAmount or commission; set 0 until network postback/report confirms
+      // Secure attribution: Keep userId null and mark claimPending so a user cannot hijack other buyers' orders
+      const newOrd = {
+        id: `ord_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`,
+        orderSn: cleanSn,
+        platform: String(platform || '').toLowerCase() === 'tiktok' ? 'tiktok' : 'shopee',
+        clickId: null,
+        userCode: 'PENDING_VERIFY',
+        userId: null,
+        submittedByUserId: user.id,
+        submittedByUserCode: user.code,
         claimPending: true,
-        message: 'Đã tiếp nhận yêu cầu đối soát đơn hàng. Ban quản trị sẽ xác minh quyền sở hữu và duyệt hoàn tiền trong 24h.'
+        claimRequestedAt: new Date().toISOString(),
+        productName: String(productName || `Đơn hàng #${cleanSn}`).trim().slice(0, 100),
+        orderAmount: 0,
+        grossCommission: 0,
+        taxAmount: 0,
+        netCommission: 0,
+        totalCommission: 0,
+        cashbackRate: Number(db.settings.cashbackPercent || 70),
+        userCashbackAmount: 0,
+        adminShareAmount: 0,
+        status: 'pending',
+        hasCustomCashback: false,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+
+      db.orders.unshift(newOrd);
+      await saveDb(db);
+      logger.logLeave('POST /api/user/submit-order', { orderSn: cleanSn, created: true, claimPending: true });
+      return res.json({
+        order: sanitizeOrderForUser(newOrd),
+        autoMatched: false,
+        claimPending: true,
+        message: 'Đã ghi nhận mã đơn hàng. Tiền hoàn sẽ tự động cập nhật khi sàn đối soát hoàn tất và xác nhận liên kết tiếp thị!'
       });
-    }
-
-    // Never trust client for orderAmount or commission; set 0 until network postback/report confirms
-    // Secure attribution: Keep userId null and mark claimPending so a user cannot hijack other buyers' orders
-    const newOrd = {
-      id: `ord_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`,
-      orderSn: cleanSn,
-      platform: String(platform || '').toLowerCase() === 'tiktok' ? 'tiktok' : 'shopee',
-      clickId: null,
-      userCode: 'PENDING_VERIFY',
-      userId: null,
-      submittedByUserId: user.id,
-      submittedByUserCode: user.code,
-      claimPending: true,
-      claimRequestedAt: new Date().toISOString(),
-      productName: String(productName || `Đơn hàng #${cleanSn}`).trim().slice(0, 100),
-      orderAmount: 0,
-      grossCommission: 0,
-      taxAmount: 0,
-      netCommission: 0,
-      totalCommission: 0,
-      cashbackRate: Number(db.settings.cashbackPercent || 70),
-      userCashbackAmount: 0,
-      adminShareAmount: 0,
-      status: 'pending',
-      hasCustomCashback: false,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-
-    db.orders.unshift(newOrd);
-    await saveDb(db);
-    logger.logLeave('POST /api/user/submit-order', { orderSn: cleanSn, created: true, claimPending: true });
-    return res.json({
-      order: sanitizeOrderForUser(newOrd),
-      autoMatched: false,
-      claimPending: true,
-      message: 'Đã ghi nhận mã đơn hàng. Tiền hoàn sẽ tự động cập nhật khi sàn đối soát hoàn tất và xác nhận liên kết tiếp thị!'
     });
   }));
 
@@ -1647,18 +1649,31 @@ function registerCashbackRoutes(app) {
     }
 
     try {
-      const order = upsertNetworkOrder(db, {
-        orderSn: cleanSn,
-        rawSubId,
-        grossCommission,
-        orderAmount,
-        status,
-        platform,
-        productName
+      let order;
+      const cleanSub = String(rawSubId || '').split('-')[0].trim();
+      const clickRecord = cleanSub ? db.clicks.find((c) => c.clickId === cleanSub) : null;
+      const matchedUserId = clickRecord?.userId || db.users.find((u) => (u.code && String(u.code).toUpperCase() === cleanSub.toUpperCase()) || u.phone === cleanSub)?.id;
+      const lockKey = matchedUserId || 'global';
+
+      await withUserLock(lockKey, async () => {
+        order = upsertNetworkOrder(db, {
+          orderSn: cleanSn,
+          rawSubId,
+          grossCommission,
+          orderAmount,
+          status,
+          platform,
+          productName
+        });
+
+        if (order?.userId) {
+          recalculateUserWallet(order.userId, { persist: false });
+        } else {
+          recalculateAllWallets({ persist: false });
+        }
+        await saveDb(db);
       });
 
-      recalculateAllWallets({ persist: false });
-      await saveDb(db);
       logger.logLeave('AccessTradePostback', {
         orderSn: order?.orderSn,
         userCode: order?.userCode,
@@ -1724,18 +1739,31 @@ function registerCashbackRoutes(app) {
     const validBilling = Number.isFinite(rawBilling) && rawBilling >= 0 ? rawBilling : 0;
 
     try {
-      const order = upsertNetworkOrder(db, {
-        orderSn,
-        rawSubId: clickId || sub1 || sub_id || '',
-        grossCommission: validComm,
-        orderAmount: validBilling,
-        status: normalizeNetworkStatus(status),
-        platform,
-        productName
+      const cleanSub = String(clickId || sub1 || sub_id || '').split('-')[0].trim();
+      const clickRecord = cleanSub ? db.clicks.find((c) => c.clickId === cleanSub) : null;
+      const matchedUserId = clickRecord?.userId || db.users.find((u) => (u.code && String(u.code).toUpperCase() === cleanSub.toUpperCase()) || u.phone === cleanSub)?.id;
+      const lockKey = matchedUserId || 'global';
+
+      let order;
+      await withUserLock(lockKey, async () => {
+        order = upsertNetworkOrder(db, {
+          orderSn,
+          rawSubId: clickId || sub1 || sub_id || '',
+          grossCommission: validComm,
+          orderAmount: validBilling,
+          status: normalizeNetworkStatus(status),
+          platform,
+          productName
+        });
+
+        if (order?.userId) {
+          recalculateUserWallet(order.userId, { persist: false });
+        } else {
+          recalculateAllWallets({ persist: false });
+        }
+        await saveDb(db);
       });
 
-      recalculateAllWallets({ persist: false });
-      await saveDb(db);
       return res.json({ status: 'ok', orderSn: order?.orderSn });
     } catch (err) {
       logger.error('POST /api/webhooks/postback', 'Error saving postback', { error: err.message });
@@ -2117,8 +2145,11 @@ function registerCashbackRoutes(app) {
       db.orders.unshift(targetOrder);
     }
 
-    recalculateAllWallets({ persist: false });
-    await saveDb(db);
+    const lockKey = targetOrder?.userId || matchedUser?.id || 'global';
+    await withUserLock(lockKey, async () => {
+      recalculateAllWallets({ persist: false });
+      await saveDb(db);
+    });
 
     logger.logLeave('POST /api/admin/orders', { orderSn: targetOrder.orderSn, status: targetOrder.status, cashback: targetOrder.userCashbackAmount });
     return res.json({ order: targetOrder });
@@ -2146,8 +2177,11 @@ function registerCashbackRoutes(app) {
     }
 
     const [deletedOrder] = db.orders.splice(idx, 1);
-    recalculateAllWallets({ persist: false });
-    await saveDb(db);
+    const lockKey = deletedOrder?.userId || 'global';
+    await withUserLock(lockKey, async () => {
+      recalculateAllWallets({ persist: false });
+      await saveDb(db);
+    });
 
     logger.logLeave('POST /api/admin/orders/delete', { orderSn: deletedOrder.orderSn });
     return res.json({ status: 'ok', message: `Đã xóa đơn hàng #${deletedOrder.orderSn} thành công!` });
@@ -2237,6 +2271,16 @@ function registerCashbackRoutes(app) {
     }
 
     await withUserLock(wd.userId, async () => {
+      if (wd.status === 'paid') {
+        const err = new Error('Lệnh rút tiền đã chi trả thành công, không thể thay đổi trạng thái.');
+        err.status = 400;
+        throw err;
+      }
+      if (wd.status === 'rejected') {
+        const err = new Error('Lệnh rút tiền đã bị từ chối trước đó, không thể thay đổi lại.');
+        err.status = 400;
+        throw err;
+      }
       wd.status = 'paid';
       wd.processedAt = new Date().toISOString();
       wd.processedByAdminId = admin?.id || null;
@@ -2299,19 +2343,22 @@ function registerCashbackRoutes(app) {
     if (!targetUser) return res.status(404).json({ error: 'Không tìm thấy người dùng.' });
 
     if (action === 'reset_balance') {
-      const currentAvailable = Number(targetUser.balanceAvailable || 0);
-      if (currentAvailable !== 0) {
-        const refId = `admin_reset_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
-        appendLedgerEntry(
-          targetUser.id,
-          'admin_adjustment',
-          -currentAvailable,
-          refId,
-          'Quản trị viên đặt lại số dư về 0đ'
-        );
-      }
-      recalculateUserWallet(targetUser.id);
-      await saveDb(db);
+      await withUserLock(targetUser.id, async () => {
+        recalculateUserWallet(targetUser.id, { persist: false });
+        const currentAvailable = Number(targetUser.balanceAvailable || 0);
+        if (currentAvailable !== 0) {
+          const refId = `admin_reset_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
+          appendLedgerEntry(
+            targetUser.id,
+            'admin_adjustment',
+            -currentAvailable,
+            refId,
+            'Quản trị viên đặt lại số dư về 0đ'
+          );
+        }
+        recalculateUserWallet(targetUser.id, { persist: false });
+        await saveDb(db);
+      });
       logger.logLeave('POST /api/admin/users/action', { action, userCode: targetUser.code });
       return res.json({
         status: 'ok',
