@@ -3,6 +3,10 @@
  * Verifies Task 11 requirements (Giai đoạn 0 & 1)
  */
 
+if (!process.env.NODE_ENV) {
+  process.env.NODE_ENV = 'test';
+}
+
 const assert = require('assert');
 const express = require('express');
 const http = require('http');
@@ -14,6 +18,7 @@ const {
 } = require('../src/utils/zalo');
 const {
   ensureDbLoaded,
+  saveDb,
   createToken,
   initPostgresIfConfigured
 } = require('../src/services/dbService');
@@ -198,6 +203,8 @@ async function runTests() {
   console.log('\n--- 4. Testing API Endpoints (Public Config & Admin Settings) ---');
   await initPostgresIfConfigured();
   const db = ensureDbLoaded();
+  const originalZaloGroupUrl = db.settings.zaloGroupUrl;
+  const originalZaloWidgetEnabled = db.settings.zaloWidgetEnabled;
 
   const app = express();
   app.use(express.json());
@@ -317,6 +324,13 @@ async function runTests() {
     console.log('  PASS: Re-enabling widget verified in public config.');
 
   } finally {
+    db.settings.zaloGroupUrl =
+      originalZaloGroupUrl && originalZaloGroupUrl !== 'https://zalo.me/g/customtestgroup456'
+        ? originalZaloGroupUrl
+        : DEFAULT_ZALO_GROUP_URL;
+    db.settings.zaloWidgetEnabled =
+      originalZaloWidgetEnabled !== undefined ? originalZaloWidgetEnabled : true;
+    await saveDb(db);
     await new Promise((resolve) => server.close(resolve));
   }
 

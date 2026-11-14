@@ -1,3 +1,7 @@
+if (!process.env.NODE_ENV) {
+  process.env.NODE_ENV = 'test';
+}
+
 const assert = require('assert');
 const http = require('http');
 const express = require('express');
@@ -82,6 +86,14 @@ async function runTestSuite() {
   console.log('\n--- 1. Testing Tiền Hoàn: Rates Locking & Modal Order Edit ---');
 
   // Set global settings
+  const origSettings = {
+    cashbackPercent: db.settings.cashbackPercent,
+    taxDeductPercent: db.settings.taxDeductPercent,
+    shopeeAppSecret: db.settings.shopeeAppSecret,
+    tiktokAppSecret: db.settings.tiktokAppSecret,
+    turnstileSecretKey: db.settings.turnstileSecretKey,
+    postbackToken: db.settings.postbackToken
+  };
   db.settings.cashbackPercent = 70;
   db.settings.taxDeductPercent = 10;
 
@@ -485,8 +497,7 @@ async function runTestSuite() {
 
   // Cleanup test artifacts
   await new Promise((resolve) => server.close(resolve));
-  db.settings.cashbackPercent = 70;
-  db.settings.taxDeductPercent = 10;
+  Object.assign(db.settings, origSettings);
   db.users = db.users.filter((u) => u.id !== testAdmin.id && u.id !== testUser.id && u.id !== activeUser.id);
   db.orders = db.orders.filter((o) => o.orderSn !== testOrderSn1);
   db.withdrawals = db.withdrawals.filter((w) => w.userId !== testUser.id);

@@ -81,6 +81,12 @@ function normalizeZaloTarget(urlStr) {
 function migrateZaloSettings(db) {
   if (!db || !db.settings) return;
   if (
+    process.env.NODE_ENV !== 'test' &&
+    db.settings.zaloGroupUrl === 'https://zalo.me/g/customtestgroup456'
+  ) {
+    db.settings.zaloGroupUrl = DEFAULT_ZALO_GROUP_URL;
+  }
+  if (
     typeof db.settings.supportZalo === 'string' &&
     db.settings.supportZalo.startsWith('https://zalo.me/g/') &&
     !db.settings.zaloGroupUrl
