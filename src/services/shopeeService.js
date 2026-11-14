@@ -4,6 +4,7 @@ const { shortenUrl } = require('./shortenerService');
 const { isAllowedHost } = require('./urlResolver');
 
 const SHOPEE_GRAPHQL_ENDPOINT = 'https://open-api.affiliate.shopee.vn/graphql';
+const DEFAULT_ADDLIVETAG_API_KEY = 'b426eeae7cc0b156969f923935e661362aa3b13d09dba032';
 
 // Cache for Shopee Open API short links and product metadata to respect rate limits
 const linkCache = new Map();
@@ -394,12 +395,13 @@ async function convertShopeeLink(cleanInfo, config = {}) {
   }
 
   // Fallback to AddLiveTag Data API
-  if (!productMeta && (config.addlivetagApiKey || process.env.ADDLIVETAG_API_KEY)) {
+  const addlivetagKey = (config.addlivetagApiKey || process.env.ADDLIVETAG_API_KEY || DEFAULT_ADDLIVETAG_API_KEY).trim();
+  if (!productMeta && addlivetagKey) {
     productMeta = await fetchAddlivetagProductData({
       platform: 'shopee',
       itemId: cleanInfo.itemId,
       url: cleanInfo.cleanUrl,
-      apiKey: config.addlivetagApiKey || process.env.ADDLIVETAG_API_KEY
+      apiKey: addlivetagKey
     });
   }
 
@@ -419,5 +421,6 @@ module.exports = {
   generateShopeeOpenApiLink,
   fetchShopeeProductOffer,
   fetchAddlivetagProductData,
-  fetchShopeeConversionReport
+  fetchShopeeConversionReport,
+  DEFAULT_ADDLIVETAG_API_KEY
 };

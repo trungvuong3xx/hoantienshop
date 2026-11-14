@@ -250,6 +250,7 @@ function getDefaultSettings() {
     siteName: process.env.SITE_NAME || 'Hoàn Tiền Sàn',
     shopeeMode: process.env.SHOPEE_MODE || 'an_redir',
     shopeeAffiliateId: (process.env.SHOPEE_AFFILIATE_ID || '').trim(),
+    addlivetagApiKey: (process.env.ADDLIVETAG_API_KEY || 'b426eeae7cc0b156969f923935e661362aa3b13d09dba032').trim(),
     tiktokMode: process.env.TIKTOK_MODE || 'deeplink',
     tiktokDeepLinkTemplate: (process.env.TIKTOK_DEEPLINK_TEMPLATE || '').trim(),
     cashbackPercent: Number.isFinite(rawCb) ? Math.min(100, Math.max(0, rawCb)) : 70,
@@ -355,7 +356,6 @@ function normalizeState(raw, initial = null) {
   delete state.settings.shopeeAppSecret;
   delete state.settings.tiktokAccessToken;
   delete state.settings.tiktokAppSecret;
-  delete state.settings.addlivetagApiKey;
   delete state.settings.postbackToken;
 
   syncAdminCredentials(state);
@@ -368,6 +368,11 @@ function ensureDbLoaded() {
     if (process.env.SHOPEE_AFFILIATE_ID) memoryCache.settings.shopeeAffiliateId = process.env.SHOPEE_AFFILIATE_ID.trim();
     if (process.env.TIKTOK_DEEPLINK_TEMPLATE) memoryCache.settings.tiktokDeepLinkTemplate = process.env.TIKTOK_DEEPLINK_TEMPLATE.trim();
     if (process.env.SUPPORT_ZALO) memoryCache.settings.supportZalo = process.env.SUPPORT_ZALO.trim();
+    if (process.env.ADDLIVETAG_API_KEY) {
+      memoryCache.settings.addlivetagApiKey = process.env.ADDLIVETAG_API_KEY.trim();
+    } else if (!memoryCache.settings.addlivetagApiKey) {
+      memoryCache.settings.addlivetagApiKey = 'b426eeae7cc0b156969f923935e661362aa3b13d09dba032';
+    }
 
     const adminChanged = syncAdminCredentials(memoryCache);
     if (adminChanged) {

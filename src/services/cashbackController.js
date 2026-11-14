@@ -25,7 +25,8 @@ const { convertTextLinks } = require('./converterService');
 const {
   fetchShopeeConversionReport,
   fetchShopeeProductOffer,
-  fetchAddlivetagProductData
+  fetchAddlivetagProductData,
+  DEFAULT_ADDLIVETAG_API_KEY
 } = require('./shopeeService');
 const { fetchAccessTradeOrders } = require('./tiktokService');
 const {
@@ -1229,7 +1230,7 @@ function registerCashbackRoutes(app) {
         const cleanInfo = cleanShopeeUrl(resolvedUrl, htmlSnippet);
         const appId = s.shopeeAppId || process.env.SHOPEE_APP_ID || '';
         const appSecret = s.shopeeAppSecret || process.env.SHOPEE_APP_SECRET || '';
-        const addlivetagKey = (s.addlivetagApiKey || process.env.ADDLIVETAG_API_KEY || '').trim();
+        const addlivetagKey = (s.addlivetagApiKey || process.env.ADDLIVETAG_API_KEY || DEFAULT_ADDLIVETAG_API_KEY).trim();
 
         let productMeta = null;
         // Priority 1: Official Shopee Open API if credentials configured
@@ -1242,7 +1243,7 @@ function registerCashbackRoutes(app) {
           );
         }
 
-        // Priority 2: AddLiveTag Data API (via user's provided API key)
+        // Priority 2: AddLiveTag Data API (via user's provided API key or system default)
         if (!productMeta && addlivetagKey) {
           productMeta = await fetchAddlivetagProductData({
             platform: 'shopee',
@@ -1266,11 +1267,13 @@ function registerCashbackRoutes(app) {
             hasOffer: Boolean(grossCommission || commRate),
             source: productMeta.dataSource || 'openapi'
           });
+          const title = productMeta.productName || 'Đang cập nhật thông tin sản phẩm';
           return res.json({
             found: true,
             platform: 'shopee',
             hasOffer: Boolean(grossCommission || commRate),
-            productName: productMeta.productName || 'Đang cập nhật thông tin sản phẩm',
+            productName: title,
+            title,
             imageUrl: productMeta.imageUrl || '',
             price,
             priceMin: productMeta.priceMin || price,
@@ -1296,6 +1299,7 @@ function registerCashbackRoutes(app) {
           platform: 'shopee',
           hasOffer: false,
           productName: safeTitle,
+          title: safeTitle,
           imageUrl: '',
           price: 0,
           estimatedCashback: 0,
@@ -1307,7 +1311,7 @@ function registerCashbackRoutes(app) {
 
       if (platform === 'tiktok') {
         const cleanInfo = cleanTikTokUrl(resolvedUrl, htmlSnippet);
-        const addlivetagKey = (s.addlivetagApiKey || process.env.ADDLIVETAG_API_KEY || '').trim();
+        const addlivetagKey = (s.addlivetagApiKey || process.env.ADDLIVETAG_API_KEY || DEFAULT_ADDLIVETAG_API_KEY).trim();
 
         let productMeta = null;
         if (addlivetagKey) {
@@ -1332,11 +1336,13 @@ function registerCashbackRoutes(app) {
             hasOffer: Boolean(grossCommission || commRate),
             source: 'addlivetag'
           });
+          const title = productMeta.productName || cleanInfo.titleHint || 'Sản phẩm TikTok Shop';
           return res.json({
             found: true,
             platform: 'tiktok',
             hasOffer: Boolean(grossCommission || commRate),
-            productName: productMeta.productName || cleanInfo.titleHint || 'Sản phẩm TikTok Shop',
+            productName: title,
+            title,
             imageUrl: productMeta.imageUrl || cleanInfo.imageUrl || '',
             price,
             commissionRate: commRate,
@@ -1349,11 +1355,13 @@ function registerCashbackRoutes(app) {
         }
 
         logger.logLeave('POST /api/preview', { platform: 'tiktok' });
+        const safeTitle = cleanInfo.titleHint || 'Sản phẩm TikTok Shop';
         return res.json({
           found: true,
           platform: 'tiktok',
           hasOffer: Boolean(cleanInfo.imageUrl),
-          productName: cleanInfo.titleHint || 'Sản phẩm TikTok Shop',
+          productName: safeTitle,
+          title: safeTitle,
           imageUrl: cleanInfo.imageUrl || '',
           price: 0,
           estimatedCashback: 0,
@@ -1474,7 +1482,11 @@ function registerCashbackRoutes(app) {
           process.env.TIKTOK_DEEPLINK_TEMPLATE ||
           s.tiktokDeepLinkTemplate ||
           DEFAULT_TIKTOK_DEEPLINK,
-        addlivetagApiKey: (s.addlivetagApiKey || process.env.ADDLIVETAG_API_KEY || '').trim(),
+        addlivetagApiKey: (
+          s.addlivetagApiKey ||
+          process.env.ADDLIVETAG_API_KEY ||
+          DEFAULT_ADDLIVETAG_API_KEY
+        ).trim(),
         shortenerProvider: s.shortenerProvider || 'none'
       };
 

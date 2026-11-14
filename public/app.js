@@ -672,13 +672,13 @@ function renderInstantPreviewCard(data) {
     ? `<span class="plat-badge-inline tiktok">TikTok Shop</span>`
     : '<span>Sàn TMĐT</span>';
 
-  const title = escapeHtml(data.title || 'Sản phẩm hoàn tiền');
+  const title = escapeHtml(data.productName || data.title || 'Sản phẩm hoàn tiền');
   const price = data.price > 0 ? fmtVnd(data.price) : 'Đang cập nhật';
   const estCashback = data.estimatedCashback > 0 ? `+${fmtVnd(data.estimatedCashback)}` : null;
 
   const safeThumbUrl = safeHttpsUrl(data.imageUrl);
   const thumbHtml = safeThumbUrl
-    ? `<img src="${safeThumbUrl}" alt="${title}" class="ip-thumb" referrerpolicy="no-referrer" />`
+    ? `<img src="${safeThumbUrl}" alt="${title}" class="ip-thumb" referrerpolicy="no-referrer" onerror="this.onerror=null;this.style.display='none';" />`
     : `<div class="ip-thumb ip-thumb-fallback">🛍️</div>`;
 
   const cashbackPill = estCashback
@@ -785,7 +785,7 @@ async function handleGetCashbackLink() {
           const safeAffUrl = safeAppOrWebUrl(item.affiliateUrl);
 
           const thumbHtml = safeThumbUrl
-            ? `<img src="${safeThumbUrl}" alt="Sản phẩm" class="product-thumb" referrerpolicy="no-referrer" />`
+            ? `<img src="${safeThumbUrl}" alt="Sản phẩm" class="product-thumb" referrerpolicy="no-referrer" onerror="this.onerror=null;this.style.display='none';" />`
             : `<div class="product-thumb" style="display:flex;align-items:center;justify-content:center;font-size:26px;">🛍️</div>`;
 
           const priceInfoHtml =
@@ -800,9 +800,10 @@ async function handleGetCashbackLink() {
                 )}</strong></span>`
               : `<span class="cashback-badge" style="background:#ecfdf5;color:#059669;">Có hoàn tiền</span>`;
 
+          const rawTitle = item.productName || item.title || '';
           const displayItemTitle =
-            item.title && !item.title.match(/Sản phẩm (Shopee|TikTok)/i)
-              ? item.title
+            rawTitle && !rawTitle.match(/^Sản phẩm (Shopee|TikTok)/i)
+              ? rawTitle
               : isShopee
               ? 'Sản phẩm Shopee'
               : 'Sản phẩm TikTok Shop';

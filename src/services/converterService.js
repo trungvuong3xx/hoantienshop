@@ -7,7 +7,7 @@ const {
   cleanShopeeUrl,
   cleanTikTokUrl
 } = require('./urlResolver');
-const { convertShopeeLink, fetchAddlivetagProductData } = require('./shopeeService');
+const { convertShopeeLink, fetchAddlivetagProductData, DEFAULT_ADDLIVETAG_API_KEY } = require('./shopeeService');
 const { convertTikTokLink } = require('./tiktokService');
 
 function generateClickId() {
@@ -49,6 +49,7 @@ async function processSingleUrl(originalUrl, config = {}) {
         productId: cleanInfo.itemId,
         clickId,
         productName: meta.productName || cleanInfo.titleHint || 'Sản phẩm Shopee',
+        title: meta.productName || cleanInfo.titleHint || 'Sản phẩm Shopee',
         imageUrl: meta.imageUrl || '',
         price: meta.price || 0,
         commissionRate: meta.commissionRate || 0,
@@ -68,11 +69,12 @@ async function processSingleUrl(originalUrl, config = {}) {
       const conv = await convertTikTokLink(cleanInfo, perClickConfig);
 
       let tiktokMeta = null;
-      if (config.addlivetagApiKey || process.env.ADDLIVETAG_API_KEY) {
+      const addlivetagKey = (config.addlivetagApiKey || process.env.ADDLIVETAG_API_KEY || DEFAULT_ADDLIVETAG_API_KEY).trim();
+      if (addlivetagKey) {
         tiktokMeta = await fetchAddlivetagProductData({
           platform: 'tiktok',
           url: resolvedUrl,
-          apiKey: config.addlivetagApiKey || process.env.ADDLIVETAG_API_KEY
+          apiKey: addlivetagKey
         });
       }
 
@@ -85,6 +87,7 @@ async function processSingleUrl(originalUrl, config = {}) {
         productId: conv.productId,
         clickId,
         productName: tiktokMeta?.productName || cleanInfo.titleHint || 'Sản phẩm TikTok Shop',
+        title: tiktokMeta?.productName || cleanInfo.titleHint || 'Sản phẩm TikTok Shop',
         imageUrl: tiktokMeta?.imageUrl || cleanInfo.imageUrl || '',
         price: tiktokMeta?.price || 0,
         commissionRate: tiktokMeta?.commissionRate || 0,

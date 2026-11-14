@@ -70,7 +70,10 @@ app.use(
           'https://*.shopee.vn',
           'https://*.susercontent.com',
           'https://*.tiktokcdn.com',
-          'https://*.ibyteimg.com'
+          'https://*.tiktokcdn-us.com',
+          'https://*.ibyteimg.com',
+          'https://*.ibytedtos.com',
+          'https://*.byteoversea.com'
         ],
         connectSrc: ["'self'", 'https://challenges.cloudflare.com'],
         frameSrc: ['https://challenges.cloudflare.com'],
