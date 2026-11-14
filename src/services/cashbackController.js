@@ -19,7 +19,6 @@ const {
   sanitizeUser,
   getDatabaseStatus,
   reloadStateFromPostgres,
-  getDefaultPostbackToken,
   withUserLock
 } = require('./dbService');
 const { convertTextLinks } = require('./converterService');
@@ -809,6 +808,131 @@ function triggerLazyAutoSyncIfNeeded() {
   } catch (err) {
     logger.warning('triggerLazyAutoSyncIfNeeded', 'Trigger error', { error: err.message });
   }
+}
+
+function getConfiguredPostbackToken(db) {
+  const currentDb = db || (typeof ensureDbLoaded === 'function' ? ensureDbLoaded() : null);
+  return String(
+    process.env.POSTBACK_TOKEN ||
+    process.env.POSTBACK_SECRET ||
+    currentDb?.settings?.postbackToken ||
+    ''
+  ).trim();
+}
+
+function verifyWebhookRequest(req, db) {
+  const configuredToken = getConfiguredPostbackToken(db);
+  if (!configuredToken) {
+    logger.warning('verifyWebhookRequest', 'Postback token is not configured on server');
+    return { status: 403, error: 'Postback webhook not configured.' };
+  }
+
+  // Anti-replay protection: check timestamp header (x-webhook-timestamp, x-postback-timestamp)
+  // or payload timestamp (req.body?.timestamp)
+  const rawTs =
+    req.headers['x-webhook-timestamp'] ||
+    req.headers['x-postback-timestamp'] ||
+    req.body?.timestamp;
+
+  if (rawTs !== undefined && rawTs !== null && rawTs !== '') {
+    const ts = parseTimestamp(rawTs);
+    if (!ts || !Number.isFinite(ts)) {
+      logger.warning('verifyWebhookRequest', 'Invalid webhook timestamp format', { rawTs });
+      return { status: 401, error: 'Invalid webhook timestamp format.' };
+    }
+    const now = Date.now();
+    const diffSec = (now - ts) / 1000;
+    if (diffSec > 300) {
+      logger.warning('verifyWebhookRequest', 'Webhook timestamp expired (>300s)', { ts, now, diffSec });
+      return { status: 401, error: 'Webhook timestamp expired.' };
+    }
+    if (diffSec < -60) {
+      logger.warning('verifyWebhookRequest', 'Webhook timestamp in the future (>60s)', { ts, now, diffSec });
+      return { status: 401, error: 'Webhook timestamp in the future.' };
+    }
+  }
+
+  const isWriteOp = req.method !== 'GET' && req.method !== 'HEAD';
+  const headerSignature = req.headers['x-signature-sha256'] || req.headers['x-postback-signature'];
+  const headerToken =
+    req.headers['x-postback-token'] ||
+    (req.headers.authorization && req.headers.authorization.startsWith('Bearer ')
+      ? req.headers.authorization.slice(7).trim()
+      : '');
+
+  // 1. Signature in headers -> verify HMAC SHA256 over rawBody
+  if (headerSignature) {
+    const cleanSig = String(headerSignature).trim().replace(/^sha256=/i, '');
+    const rawBodyBuf = Buffer.isBuffer(req.rawBody)
+      ? req.rawBody
+      : (typeof req.rawBody === 'string'
+        ? Buffer.from(req.rawBody, 'utf8')
+        : (req.body && typeof req.body === 'object' && Object.keys(req.body).length > 0
+          ? Buffer.from(JSON.stringify(req.body), 'utf8')
+          : Buffer.alloc(0)));
+
+    const expectedSig = crypto
+      .createHmac('sha256', configuredToken)
+      .update(rawBodyBuf)
+      .digest('hex');
+
+    const bufProvided = Buffer.from(cleanSig.toLowerCase());
+    const bufExpected = Buffer.from(expectedSig.toLowerCase());
+
+    if (bufProvided.length !== bufExpected.length || !crypto.timingSafeEqual(bufProvided, bufExpected)) {
+      logger.warning('verifyWebhookRequest', 'Invalid postback signature', {
+        providedLen: bufProvided.length,
+        expectedLen: bufExpected.length
+      });
+      return { status: 401, error: 'Invalid postback signature.' };
+    }
+
+    return { valid: true };
+  }
+
+  // 2. Token in headers -> timing-safe string comparison
+  if (headerToken) {
+    const bufProvided = Buffer.from(headerToken);
+    const bufExpected = Buffer.from(configuredToken);
+
+    if (bufProvided.length !== bufExpected.length || !crypto.timingSafeEqual(bufProvided, bufExpected)) {
+      logger.warning('verifyWebhookRequest', 'Invalid postback token in header');
+      return { status: 401, error: 'Invalid postback token.' };
+    }
+
+    return { valid: true };
+  }
+
+  // 3. For GET requests only: accept token in query parameters (AccessTrade query macro ping/postback)
+  if (!isWriteOp && req.query?.token) {
+    const queryToken = String(req.query.token).trim();
+    const bufProvided = Buffer.from(queryToken);
+    const bufExpected = Buffer.from(configuredToken);
+
+    if (bufProvided.length !== bufExpected.length || !crypto.timingSafeEqual(bufProvided, bufExpected)) {
+      logger.warning('verifyWebhookRequest', 'Invalid postback token in query parameter');
+      return { status: 401, error: 'Invalid postback token.' };
+    }
+
+    return { valid: true };
+  }
+
+  // 4. Reject tokens or signatures in query parameters on write operations
+  if (isWriteOp && (req.query?.token || req.query?.sig)) {
+    logger.warning('verifyWebhookRequest', 'Token or signature in query parameters rejected for write operation', {
+      method: req.method
+    });
+    return {
+      status: 401,
+      error: 'Tokens or signatures in query parameters are not permitted for write operations.'
+    };
+  }
+
+  logger.warning('verifyWebhookRequest', 'Missing postback authentication headers');
+  return {
+    status: 401,
+    error: 'Missing postback token or signature in headers.'
+  };
 }
 
 function registerCashbackRoutes(app) {
@@ -1737,28 +1861,13 @@ function registerCashbackRoutes(app) {
 
   // Official AccessTrade Real-Time Postback (Supports query macros, body, and header token)
   async function handleAccessTradePostback(req, res) {
+    logger.logEnter('AccessTradePostback', { method: req.method });
     const db = ensureDbLoaded();
-    const expectedToken = String(process.env.POSTBACK_SECRET || getDefaultPostbackToken() || '').trim();
-    const providedToken = String(
-      req.headers['x-postback-token'] ||
-      (req.headers.authorization && req.headers.authorization.startsWith('Bearer ')
-        ? req.headers.authorization.slice(7)
-        : '') ||
-      req.body?.token ||
-      req.query?.token ||
-      ''
-    ).trim();
 
-    logger.logEnter('AccessTradePostback', { method: req.method, hasToken: Boolean(providedToken) });
-
-    if (!expectedToken || !providedToken) {
-      return res.status(401).json({ error: 'Missing postback token.' });
-    }
-
-    const a = Buffer.from(providedToken);
-    const b = Buffer.from(expectedToken);
-    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
-      return res.status(401).json({ error: 'Invalid postback token.' });
+    const authResult = verifyWebhookRequest(req, db);
+    if (!authResult.valid) {
+      logger.warning('AccessTradePostback', 'Authentication failed', { error: authResult.error, status: authResult.status });
+      return res.status(authResult.status).json({ error: authResult.error });
     }
 
     const src = req.method === 'GET' ? req.query : { ...(req.query || {}), ...(req.body || {}) };
@@ -1766,6 +1875,7 @@ function registerCashbackRoutes(app) {
       src.order_id || src.conversion_id || src.transaction_id || src.orderSn || '';
     if (!orderSn || String(orderSn).includes('{')) {
       // Respond 200 on AccessTrade test ping with literal macro placeholders
+      logger.logLeave('AccessTradePostback', { testPing: true });
       return res.json({ status: 'ok', testPing: true });
     }
 
@@ -1846,27 +1956,12 @@ function registerCashbackRoutes(app) {
 
   app.post('/api/webhooks/postback', asyncHandler(async (req, res) => {
     logger.logEnter('POST /api/webhooks/postback');
-    const timestampHeader = req.headers['x-postback-timestamp'];
-    if (timestampHeader) {
-      const ts = Number(timestampHeader);
-      if (Number.isFinite(ts) && Math.abs(Date.now() - ts) > 10 * 60 * 1000) {
-        return res.status(401).json({ error: 'Postback request timestamp expired.' });
-      }
-    }
-
     const db = ensureDbLoaded();
-    const secret = process.env.POSTBACK_SECRET || getDefaultPostbackToken();
-    if (!secret) {
-      return res.status(503).json({ error: 'Postback webhook not configured.' });
-    }
 
-    const sig = String(req.headers['x-postback-signature'] || req.query.sig || '');
-    const rawBody = JSON.stringify(req.body || {});
-    const expected = crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
-    const a = Buffer.from(sig);
-    const b = Buffer.from(expected);
-    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
-      return res.status(401).json({ error: 'Invalid postback signature.' });
+    const authResult = verifyWebhookRequest(req, db);
+    if (!authResult.valid) {
+      logger.warning('POST /api/webhooks/postback', 'Authentication failed', { error: authResult.error, status: authResult.status });
+      return res.status(authResult.status).json({ error: authResult.error });
     }
 
     const {
@@ -1917,6 +2012,7 @@ function registerCashbackRoutes(app) {
         await saveDb(db);
       });
 
+      logger.logLeave('POST /api/webhooks/postback', { orderSn: order?.orderSn, status: order?.status });
       return res.json({ status: 'ok', orderSn: order?.orderSn });
     } catch (err) {
       logger.error('POST /api/webhooks/postback', 'Error saving postback', { error: err.message });
@@ -1950,7 +2046,7 @@ function registerCashbackRoutes(app) {
 
     const proto = req.headers['x-forwarded-proto'] || req.protocol || 'https';
     const host = req.headers['x-forwarded-host'] || req.headers.host || process.env.APP_HOST || 'hoantiensan.online';
-    const postbackToken = process.env.POSTBACK_SECRET || getDefaultPostbackToken();
+    const postbackToken = getConfiguredPostbackToken(db);
     const postbackUrlTemplate = `${proto}://${host}/api/webhooks/accesstrade?token={SECRET_POSTBACK_TOKEN}&order_id={order_id}&sub1={sub1}&pub_commission={pub_commission}&billing={billing}&status={status}&merchant={merchant}`;
 
     // Allowlist safe settings before returning to client (including masked secrets)
@@ -2036,7 +2132,7 @@ function registerCashbackRoutes(app) {
     const db = ensureDbLoaded();
     const proto = req.headers['x-forwarded-proto'] || req.protocol || 'https';
     const host = req.headers['x-forwarded-host'] || req.headers.host || 'hoantienshop.vercel.app';
-    const postbackToken = process.env.POSTBACK_SECRET || db.settings.postbackToken || getDefaultPostbackToken();
+    const postbackToken = getConfiguredPostbackToken(db);
     const fullUrl = `${proto}://${host}/api/webhooks/accesstrade?token=${encodeURIComponent(
       postbackToken
     )}&order_id={order_id}&sub1={sub1}&pub_commission={pub_commission}&billing={billing}&status={status}&merchant={merchant}`;
@@ -2653,5 +2749,7 @@ module.exports = {
   AppError,
   upsertNetworkOrder,
   canTransitionOrderStatus,
-  normalizeNetworkStatus
+  normalizeNetworkStatus,
+  verifyWebhookRequest,
+  getConfiguredPostbackToken
 };

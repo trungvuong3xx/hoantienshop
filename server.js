@@ -114,13 +114,15 @@ app.use(
   })
 );
 
-// Default strict 10kb JSON body limit (Admin CSV import route overrides internally)
-app.use((req, res, next) => {
-  if (req.path === '/api/admin/import-orders') {
-    return next();
-  }
-  return express.json({ limit: '10kb' })(req, res, next);
-});
+// Preserve rawBody Buffer for webhook HMAC verification and parse JSON up to 2mb
+app.use(
+  express.json({
+    limit: '2mb',
+    verify: (req, res, buf) => {
+      req.rawBody = buf;
+    }
+  })
+);
 
 // Serve frontend static assets
 app.use(express.static(path.join(__dirname, 'public')));
@@ -211,7 +213,7 @@ app.use((err, req, res, next) => {
   }
 
   if (err.type === 'entity.too.large' || err.status === 413) {
-    return res.status(413).json({ error: 'Dữ liệu gửi lên vượt quá giới hạn cho phép (tối đa 10KB).' });
+    return res.status(413).json({ error: 'Dữ liệu gửi lên vượt quá giới hạn cho phép (tối đa 2MB).' });
   }
 
   if (err instanceof SyntaxError && (err.status === 400 || 'body' in err)) {
