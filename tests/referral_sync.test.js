@@ -149,7 +149,7 @@ async function runReferralSyncSuite() {
     assert.strictEqual(typeof meData.referralCount, 'number', 'meData.referralCount must be a number');
     assert.strictEqual(meData.referralCount, 1, 'Referrer should have exactly 1 referee count');
     assert.strictEqual(typeof meData.referralBountyAmount, 'number', 'meData.referralBountyAmount must be a number');
-    assert.strictEqual(meData.referralBountyAmount, Number(db.settings.referralBountyAmount || 5000), 'referralBountyAmount must match settings');
+    assert.strictEqual(meData.referralBountyAmount, Number(db.settings.referralBountyAmount || 10000), 'referralBountyAmount must match settings');
     console.log('  PASS: /api/user/me returns correct referralCount and referralBountyAmount.');
 
     // -----------------------------------------------------------------------
@@ -164,7 +164,7 @@ async function runReferralSyncSuite() {
     assert.strictEqual(refStatsRes.status, 200, 'GET /api/user/referrals must return 200');
     assert(Array.isArray(refStats.referrals), 'res.body.referrals must be an array');
     assert.strictEqual(refStats.referralCount, 1, 'res.body.referralCount must be 1');
-    assert.strictEqual(refStats.referralBountyAmount, Number(db.settings.referralBountyAmount || 5000), 'referralBountyAmount must match');
+    assert.strictEqual(refStats.referralBountyAmount, Number(db.settings.referralBountyAmount || 10000), 'referralBountyAmount must match');
     assert.strictEqual(refStats.completedFriends, 0, 'completedFriends must be 0 before first approved order');
     assert.strictEqual(refStats.pendingFriends, 1, 'pendingFriends must be 1 before first approved order');
     assert.strictEqual(refStats.totalBountyEarned, 0, 'totalBountyEarned must be 0');

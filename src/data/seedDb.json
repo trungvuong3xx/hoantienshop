@@ -18,6 +18,7 @@
     "cashbackPercent": 70,
     "taxDeductPercent": 10,
     "referralBonusPercent": 5,
+    "referralBountyAmount": 10000,
     "minWithdrawAmount": 50000,
     "supportZalo": "",
     "zaloGroupUrl": "https://zalo.me/g/cl2cmiseoqienusnrbyr",

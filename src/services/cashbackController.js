@@ -1000,7 +1000,7 @@ function registerCashbackRoutes(app) {
     const referralCount = db.users.filter(
       (u) => u.referredBy && String(u.referredBy).toUpperCase() === userCodeUpper && u.id !== user.id
     ).length;
-    const referralBountyAmount = Math.max(0, Math.round(Number(db.settings?.referralBountyAmount ?? 5000)));
+    const referralBountyAmount = Math.max(0, Math.round(Number(db.settings?.referralBountyAmount ?? 10000)));
 
     logger.logLeave('GET /api/user/me', { userCode: user.code, referralCount, referralBountyAmount });
     return res.json({
@@ -1014,7 +1014,7 @@ function registerCashbackRoutes(app) {
     });
   }));
 
-  // 4.1. User Referral Network & Bounty Stats (5.000đ on referee 1st approved order)
+  // 4.1. User Referral Network & Bounty Stats (10.000đ on referee 1st approved order)
   app.get('/api/user/referrals', (req, res) => {
     logger.logEnter('GET /api/user/referrals');
     const user = getAuthUser(req);
@@ -1025,7 +1025,7 @@ function registerCashbackRoutes(app) {
     const db = ensureDbLoaded();
     recalculateUserWallet(user.id);
 
-    const bountyAmount = Math.max(0, Math.round(Number(db.settings.referralBountyAmount ?? 5000)));
+    const bountyAmount = Math.max(0, Math.round(Number(db.settings.referralBountyAmount ?? 10000)));
     const userCodeUpper = String(user.code || '').toUpperCase();
 
     const refereeUsers = db.users.filter(

@@ -435,6 +435,19 @@ function syncAdminCredentials(data) {
   return changed;
 }
 
+/**
+ * Migrates legacy default 5,000đ referral bounty to 10,000đ once without overriding subsequent admin edits.
+ */
+function migrateReferralBountySetting(settings) {
+  if (!settings || typeof settings !== 'object') return;
+  if (!settings.referralBountyV2Migrated) {
+    if (settings.referralBountyAmount === undefined || Number(settings.referralBountyAmount) === 5000) {
+      settings.referralBountyAmount = 10000;
+    }
+    settings.referralBountyV2Migrated = true;
+  }
+}
+
 function normalizeState(raw, initial = null) {
   if (!raw || typeof raw !== 'object') {
     raw = {};
@@ -464,6 +477,7 @@ function normalizeState(raw, initial = null) {
   if (typeof state.settings.zaloWidgetEnabled !== 'boolean') {
     state.settings.zaloWidgetEnabled = true;
   }
+  migrateReferralBountySetting(state.settings);
   return state;
 }
 
@@ -898,6 +912,7 @@ async function loadAuthoritativeStateFromPostgres(client) {
     if (Array.isArray(p.withdrawals)) payloadWithdrawals = p.withdrawals;
     if (Array.isArray(p.auditLogs)) payloadAuditLogs = p.auditLogs;
   }
+  migrateReferralBountySetting(settings);
 
   let finalUsers = [];
   if (usersRes.rows.length > 0) {
@@ -1995,8 +2010,8 @@ function recalculateUserWallet(userId, { persist = false } = {}) {
     }
   }
 
-  // 3.5. Reconcile referral bounties (5.000đ when an invited friend completes their 1st approved order)
-  const bountyAmount = Math.max(0, Math.round(Number(db.settings.referralBountyAmount ?? 5000)));
+  // 3.5. Reconcile referral bounties (10.000đ when an invited friend completes their 1st approved order)
+  const bountyAmount = Math.max(0, Math.round(Number(db.settings.referralBountyAmount ?? 10000)));
   if (bountyAmount > 0 && user.code) {
     const refereeUsers = db.users.filter(
       (u) => u.referredBy && String(u.referredBy).toUpperCase() === userCodeUpper && u.id !== user.id

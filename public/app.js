@@ -620,7 +620,7 @@ function applyPublicSettings(data) {
     el.textContent = fmtVnd(publicConfig.minWithdrawAmount);
   });
   document.querySelectorAll('[data-config="referralBountyAmount"]').forEach((el) => {
-    el.textContent = fmtVnd(publicConfig.referralBountyAmount ?? 5000);
+    el.textContent = fmtVnd(publicConfig.referralBountyAmount ?? 10000);
   });
 
   applyZaloWidget(publicConfig);
@@ -1556,7 +1556,8 @@ on('copyRefCodeBtn', 'click', () => {
 
 on('copyRefLinkBtn', 'click', () => {
   const val = document.getElementById('userReferralLinkInput')?.value;
-  if (val) copyText(val, 'Đã sao chép link giới thiệu! Nhận 5.000đ khi bạn bè hoàn thành đơn đầu tiên.');
+  const bountyText = fmtVnd(publicConfig.referralBountyAmount ?? 10000);
+  if (val) copyText(val, `Đã sao chép link giới thiệu! Nhận ${bountyText} khi bạn bè hoàn thành đơn đầu tiên.`);
 });
 
 on('shareZaloBtn', 'click', () => {
@@ -1837,7 +1838,7 @@ function loadAdminSettings(settings) {
   setVal('admTaxDeductPercent', s.taxDeductPercent ?? 10);
   setVal('admCashbackPercent', s.cashbackPercent ?? 70);
   setVal('admMinWithdraw', s.minWithdrawAmount ?? 50000);
-  setVal('admReferralBounty', s.referralBountyAmount ?? 5000);
+  setVal('admReferralBounty', s.referralBountyAmount ?? 10000);
   setVal('admShortener', s.shortenerProvider || 'none');
   setVal('admSupportZalo', s.supportZalo || '');
   setVal('admZaloGroupUrl', s.zaloGroupUrl || '');
