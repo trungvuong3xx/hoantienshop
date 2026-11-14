@@ -48,7 +48,7 @@ async function runZaloSafetyFaqTests() {
   ) || viewGuideHtml.match(
     /<div class="faq-item"[^>]*id="faq-zalo-safety"[^>]*>[\s\S]*?<\/ul>\s*<\/div>\s*<\/div>/
   ) || viewGuideHtml.match(
-    /<div class="faq-item"[^>]*>[\s\S]*?🛡️[\s\S]*?<\/ul>\s*<\/div>\s*<\/div>/
+    /<div class="faq-item"[^>]*>[\s\S]*?(?:🛡️|<svg[\s\S]*?<\/svg>)[\s\S]*?<\/ul>\s*<\/div>\s*<\/div>/
   );
 
   assert.ok(faqItemMatch, 'Must find valid FAQ item markup containing Zalo community rules');
@@ -56,8 +56,8 @@ async function runZaloSafetyFaqTests() {
 
   // Heading check
   assert.ok(
-    /<h4[^>]*class="faq-question"[^>]*>[\s\S]*?🛡️\s*Quy định an toàn khi tham gia Cộng đồng Zalo<\/h4>/.test(faqItemHtml) ||
-    /<h4[^>]*>[\s\S]*?🛡️\s*Quy định an toàn khi tham gia Cộng đồng Zalo<\/h4>/.test(faqItemHtml),
+    /<h4[^>]*class="faq-question[^"]*"[^>]*>[\s\S]*?(?:🛡️|<svg[\s\S]*?<\/svg>)[\s\S]*?Quy định an toàn khi tham gia Cộng đồng Zalo[\s\S]*?<\/h4>/.test(faqItemHtml) ||
+    /<h4[^>]*>[\s\S]*?(?:🛡️|<svg[\s\S]*?<\/svg>)[\s\S]*?Quy định an toàn khi tham gia Cộng đồng Zalo[\s\S]*?<\/h4>/.test(faqItemHtml),
     'FAQ item must have an <h4> heading with shield icon and safety title'
   );
 

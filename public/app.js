@@ -122,6 +122,29 @@ function safeAppOrWebUrl(rawUrl) {
   }
 }
 
+const UI_ICONS = {
+  eye: '<svg class="svg-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>',
+  eyeOff: '<svg class="svg-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>',
+  checkCircle: '<svg class="svg-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',
+  alertCircle: '<svg class="svg-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>',
+  infoCircle: '<svg class="svg-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>',
+  alertTriangle: '<svg class="svg-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
+  clock: '<svg class="svg-icon" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>',
+  loader: '<svg class="svg-icon svg-spin" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>',
+  sparkles: '<svg class="svg-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>',
+  shoppingBagLg: '<svg class="svg-icon" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>',
+  shoppingCart: '<svg class="svg-icon" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg>',
+  link: '<svg class="svg-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>',
+  copy: '<svg class="svg-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>',
+  refresh: '<svg class="svg-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>',
+  landmark: '<svg class="svg-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="3" y1="22" x2="21" y2="22"/><line x1="6" y1="18" x2="6" y2="11"/><line x1="10" y1="18" x2="10" y2="11"/><line x1="14" y1="18" x2="14" y2="11"/><line x1="18" y1="18" x2="18" y2="11"/><polygon points="12 2 20 7 4 7"/></svg>',
+  shareIos: '<svg class="svg-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>',
+  plusSquare: '<svg class="svg-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>',
+  smartphone: '<svg class="svg-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>',
+  confirmAlert: '<svg class="svg-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
+  confirmCheck: '<svg class="svg-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>'
+};
+
 const STATUS_CLASS_MAP = {
   pending: 'st-pending',
   approved: 'st-approved',
@@ -134,16 +157,35 @@ function getStatusClass(status) {
   return STATUS_CLASS_MAP[String(status).toLowerCase()] || 'st-pending';
 }
 
-function showToast(msg) {
+function showToast(msg, type = 'auto') {
   const t = document.getElementById('toast');
   if (!t) return;
-  t.textContent = msg;
+  const text = String(msg || '');
+  let resolvedType = type;
+  if (resolvedType === 'auto') {
+    if (/lỗi|không thể|vui lòng|chưa đủ|tối thiểu|hết hạn|từ chối|vượt quá|trống|sai|không hợp lệ|thất bại|cần đăng nhập|đã bị khóa/i.test(text)) {
+      resolvedType = 'error';
+    } else if (/đang tải|đang cài|đã đăng xuất|đã hủy thao tác/i.test(text)) {
+      resolvedType = 'info';
+    } else {
+      resolvedType = 'success';
+    }
+  }
+  const iconSvg =
+    resolvedType === 'error'
+      ? UI_ICONS.alertCircle
+      : resolvedType === 'info'
+      ? UI_ICONS.infoCircle
+      : UI_ICONS.checkCircle;
+
+  t.classList.remove('toast-success', 'toast-error', 'toast-info', 'hidden');
+  t.classList.add(`toast-${resolvedType}`);
+  t.innerHTML = `<span class="toast-icon" aria-hidden="true">${iconSvg}</span><span class="toast-text">${escapeHtml(text)}</span>`;
   t.setAttribute('role', 'status');
   t.setAttribute('aria-live', 'polite');
   t.setAttribute('aria-atomic', 'true');
-  t.classList.remove('hidden');
   clearTimeout(showToast._timer);
-  showToast._timer = setTimeout(() => t.classList.add('hidden'), 2800);
+  showToast._timer = setTimeout(() => t.classList.add('hidden'), 3000);
 }
 
 async function copyText(text, msg = 'Đã sao chép thành công!') {
@@ -455,7 +497,9 @@ function updateBalancePrivacyDisplay() {
 
   const privacyBtn = document.getElementById('toggleBalancePrivacyBtn');
   if (privacyBtn) {
-    privacyBtn.textContent = isBalanceHidden ? '👁️ Hiện số dư' : '👁️ Ẩn số dư';
+    privacyBtn.innerHTML = isBalanceHidden
+      ? `${UI_ICONS.eye}<span>Hiện số dư</span>`
+      : `${UI_ICONS.eyeOff}<span>Ẩn số dư</span>`;
     privacyBtn.setAttribute('aria-pressed', isBalanceHidden ? 'true' : 'false');
   }
 }
@@ -476,7 +520,7 @@ function updateWithdrawProgressBar() {
 
   if (available >= minAmount) {
     barBox.classList.add('eligible');
-    textEl.textContent = '✅ Bạn đã đủ điều kiện rút tiền ngay!';
+    textEl.innerHTML = `<span class="inline-icon-row">${UI_ICONS.checkCircle}<span>Bạn đã đủ điều kiện rút tiền ngay!</span></span>`;
   } else {
     barBox.classList.remove('eligible');
     const remaining = Math.max(0, minAmount - available);
@@ -500,10 +544,10 @@ function syncAccountProfileUi() {
   const bankSummaryEl = document.getElementById('accountBankSummary');
   if (bankSummaryEl) {
     if (currentUser.bankName && currentUser.bankAccount) {
-      const ownerPart = currentUser.bankOwner ? ` • ${currentUser.bankOwner}` : '';
-      bankSummaryEl.textContent = `🏦 Tài khoản nhận tiền: ${currentUser.bankName} — ${currentUser.bankAccount}${ownerPart}`;
+      const ownerPart = currentUser.bankOwner ? ` • ${escapeHtml(currentUser.bankOwner)}` : '';
+      bankSummaryEl.innerHTML = `${UI_ICONS.landmark}<span>Tài khoản nhận tiền: ${escapeHtml(currentUser.bankName)} — ${escapeHtml(currentUser.bankAccount)}${ownerPart}</span>`;
     } else {
-      bankSummaryEl.textContent = '🏦 Chưa lưu thông tin ngân hàng nhận tiền (nhập ở mục Ví khi rút lần đầu)';
+      bankSummaryEl.innerHTML = `${UI_ICONS.landmark}<span>Chưa lưu thông tin ngân hàng nhận tiền (nhập ở mục Ví khi rút lần đầu)</span>`;
     }
   }
 }
@@ -960,7 +1004,7 @@ async function fetchInstantPreview(rawText) {
   instantPreviewCard.classList.add('loading');
   instantPreviewCard.innerHTML = `
     <div style="display:flex;align-items:center;gap:10px;color:#64748b;font-size:13.5px;padding:8px 4px;">
-      <span style="display:inline-block;animation:spin 1s linear infinite;font-size:18px;">⏳</span>
+      ${UI_ICONS.loader}
       <span>Đang tra cứu thông tin sản phẩm và tính toán mức hoàn tiền...</span>
     </div>
   `;
@@ -1010,7 +1054,7 @@ function renderInstantPreviewCard(data) {
   const safeThumbUrl = safeHttpsUrl(data.imageUrl);
   const thumbHtml = safeThumbUrl
     ? `<img src="${safeThumbUrl}" alt="${title}" class="ip-thumb" referrerpolicy="no-referrer" />`
-    : `<div class="ip-thumb ip-thumb-fallback">🛍️</div>`;
+    : `<div class="ip-thumb ip-thumb-fallback">${UI_ICONS.shoppingBagLg}</div>`;
 
   const cashbackPill = estCashback
     ? `<span class="cashback-pill">Hoàn tiền ước tính: <strong>${estCashback}</strong></span>`
@@ -1018,13 +1062,14 @@ function renderInstantPreviewCard(data) {
 
   const authNotice = !authToken
     ? `<div class="ip-auth-notice">
-         ⚠️ Bạn chưa đăng nhập. Nhấn Tạo link để nhận liên kết mua hàng, hoặc <button type="button" class="inline-link" data-open-auth="login">Đăng nhập ngay</button> để tích lũy tiền vào ví!
+         <span class="inline-icon-wrap" aria-hidden="true">${UI_ICONS.alertTriangle}</span>
+         <span>Bạn chưa đăng nhập. Nhấn Tạo link để nhận liên kết mua hàng, hoặc <button type="button" class="inline-link" data-open-auth="login">Đăng nhập ngay</button> để tích lũy tiền vào ví!</span>
        </div>`
     : '';
 
   instantPreviewCard.innerHTML = `
     <div class="ip-top-row">
-      <span class="ip-status-badge">✨ Đã tìm thấy sản phẩm</span>
+      <span class="ip-status-badge inline-icon-row">${UI_ICONS.sparkles}<span>Đã tìm thấy sản phẩm</span></span>
       ${platBadge}
     </div>
     <div class="ip-main-row">
@@ -1111,14 +1156,14 @@ async function handleGetCashbackLink() {
                   <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.34 0 .67.06.98.17V8.89a6.45 6.45 0 0 0-.98-.07A6.33 6.33 0 0 0 3 15.16 6.33 6.33 0 0 0 9.34 21.5a6.33 6.33 0 0 0 6.33-6.34V8.47a8.28 8.28 0 0 0 4.81 1.53V6.69h-.89z"/>
                 </svg> TikTok Shop
               </span>`
-            : '🔗 Liên kết';
+            : `<span class="inline-icon-row">${UI_ICONS.link}<span>Liên kết</span></span>`;
 
           const safeThumbUrl = safeHttpsUrl(item.imageUrl);
           const safeAffUrl = safeAppOrWebUrl(item.affiliateUrl);
 
           const thumbHtml = safeThumbUrl
             ? `<img src="${safeThumbUrl}" alt="Sản phẩm" class="product-thumb" referrerpolicy="no-referrer" />`
-            : `<div class="product-thumb" style="display:flex;align-items:center;justify-content:center;font-size:26px;">🛍️</div>`;
+            : `<div class="product-thumb product-thumb-fallback">${UI_ICONS.shoppingBagLg}</div>`;
 
           const priceInfoHtml =
             item.price > 0
@@ -1141,15 +1186,16 @@ async function handleGetCashbackLink() {
               : 'Sản phẩm TikTok Shop';
 
           const ctaButtonHtml = safeAffUrl
-            ? `<a href="${safeAffUrl}" target="_blank" rel="noopener" class="btn btn-cta btn-open-aff">
-                 🛒 ${openAppBtnText} (Mua ngay)
+            ? `<a href="${safeAffUrl}" target="_blank" rel="noopener" class="btn btn-cta btn-open-aff btn-icon-svg">
+                 ${UI_ICONS.shoppingCart}
+                 <span>${openAppBtnText} (Mua ngay)</span>
                </a>`
             : `<div style="color:#dc2626;font-size:13px;padding:8px 0;">Không thể tạo liên kết mở app cho sản phẩm này.</div>`;
 
           return `
             <div class="cashback-product-card">
               <div class="cp-top">
-                <span class="valid-badge">✅ Đã tạo link hoàn tiền</span>
+                <span class="valid-badge inline-icon-row">${UI_ICONS.checkCircle}<span>Đã tạo link hoàn tiền</span></span>
                 ${platLabel}
               </div>
 
@@ -1173,7 +1219,7 @@ async function handleGetCashbackLink() {
               <!-- Rút gọn link aff thành 1 ô ngang duy nhất (Bỏ hoàn toàn mã QR) -->
               <div class="cp-link-single-row">
                 <div class="aff-input-box" title="Bấm để sao chép link">
-                  <span class="aff-link-icon">🔗</span>
+                  <span class="aff-link-icon">${UI_ICONS.link}</span>
                   <input
                     type="text"
                     class="aff-single-input"
@@ -1185,12 +1231,13 @@ async function handleGetCashbackLink() {
                 </div>
                 <button
                   type="button"
-                  class="btn btn-copy-inline"
+                  class="btn btn-copy-inline btn-icon-svg"
                   data-copy="${safeAffUrl}"
                   data-copy-msg="Đã sao chép link mua hàng hoàn tiền!"
                   title="Sao chép link mua hàng"
                 >
-                  📋 Sao chép
+                  ${UI_ICONS.copy}
+                  <span>Sao chép</span>
                 </button>
               </div>
 
@@ -1479,7 +1526,7 @@ async function loadUserDashboard(prefetchedData = null) {
     }
     if (refreshOrdersBtn) {
       refreshOrdersBtn.disabled = false;
-      refreshOrdersBtn.textContent = '🔄 Đồng bộ';
+      refreshOrdersBtn.innerHTML = `${UI_ICONS.refresh}<span>Đồng bộ</span>`;
     }
   }
 }
@@ -1525,8 +1572,8 @@ async function loadUserReferrals() {
           .map((f, i) => {
             const isDone = f.status === 'completed';
             const badge = isDone
-              ? '<span class="status-badge status-approved">✅ Đã có đơn</span>'
-              : '<span class="status-badge status-pending">⏳ Chờ đơn đầu</span>';
+              ? `<span class="status-badge status-approved inline-icon-badge">${UI_ICONS.checkCircle}<span>Đã có đơn</span></span>`
+              : `<span class="status-badge status-pending inline-icon-badge">${UI_ICONS.clock}<span>Chờ đơn đầu</span></span>`;
             const bonusText = isDone
               ? `<strong style="color:#16a34a;">+${fmtVnd(f.bonusEarned)}</strong>`
               : '<span style="color:#94a3b8;">0đ</span>';
@@ -1657,17 +1704,57 @@ on('submitOrderClaimBtn', 'click', async () => {
   }
 });
 
-function askUserConfirm(message, title = 'Xác Nhận Yêu Cầu') {
+function askUserConfirm(message, title = 'Xác Nhận Yêu Cầu', options = {}) {
   const modal = document.getElementById('confirmActionModal');
   const titleEl = document.getElementById('confirmModalTitle');
+  const iconEl = document.getElementById('confirmModalIcon');
   const msgEl = document.getElementById('confirmModalMessage');
   const okBtn = document.getElementById('confirmModalOkBtn');
   const cancelBtn = document.getElementById('confirmModalCancelBtn');
   const closeBtn = document.getElementById('closeConfirmModalBtn');
 
   if (!modal || !msgEl || !okBtn || !cancelBtn) {
-    return Promise.resolve(typeof confirm === 'function' ? confirm(message) : true);
+    return Promise.resolve(false);
   }
+
+  const combinedText = `${title || ''} ${message || ''}`;
+  let variant = options.variant || 'auto';
+  if (variant === 'auto') {
+    if (/xóa|hủy|từ chối|khóa|dọn rác|đặt lại số dư|reset/i.test(combinedText) && !/mở khóa/i.test(combinedText)) {
+      variant = 'danger';
+    } else if (/cảnh báo|chú ý|mở khóa/i.test(combinedText)) {
+      variant = 'warning';
+    } else {
+      variant = 'success';
+    }
+  }
+
+  if (iconEl) {
+    iconEl.classList.remove('is-danger', 'is-warning', 'is-success', 'is-brand', 'is-info', 'is-indigo');
+    if (variant === 'danger') {
+      iconEl.classList.add('is-danger');
+      iconEl.innerHTML = UI_ICONS.confirmAlert;
+    } else if (variant === 'warning') {
+      iconEl.classList.add('is-warning');
+      iconEl.innerHTML = UI_ICONS.confirmAlert;
+    } else {
+      iconEl.classList.add('is-success');
+      iconEl.innerHTML = UI_ICONS.confirmCheck;
+    }
+  }
+
+  okBtn.classList.remove('btn-success', 'btn-danger', 'btn-warning', 'btn-primary');
+  if (variant === 'danger') {
+    okBtn.classList.add('btn-danger');
+    okBtn.textContent = options.okText || (/xóa|dọn rác/i.test(combinedText) ? 'Xác nhận xóa' : 'Xác nhận');
+  } else if (variant === 'warning') {
+    okBtn.classList.add('btn-warning');
+    okBtn.textContent = options.okText || 'Xác nhận';
+  } else {
+    okBtn.classList.add('btn-success');
+    okBtn.textContent = options.okText || 'Xác nhận';
+  }
+  cancelBtn.textContent = options.cancelText || 'Hủy bỏ';
 
   return new Promise((resolve) => {
     if (titleEl) titleEl.textContent = title;
@@ -3255,13 +3342,13 @@ function openPwaGuideModal(type = 'ios') {
       <div class="pwa-step-item">
         <div class="pwa-step-num">1</div>
         <div class="pwa-step-text">
-          Trên trình duyệt Safari của iPhone, nhấn nút <strong>Chia sẻ</strong> (biểu tượng hình vuông có mũi tên hướng lên <span class="pwa-guide-highlight">⬆️</span> ở thanh dưới cùng).
+          Trên trình duyệt Safari của iPhone, nhấn nút <strong>Chia sẻ</strong> (biểu tượng hình vuông có mũi tên hướng lên <span class="pwa-guide-highlight inline-icon-badge">${UI_ICONS.shareIos}<span>Chia sẻ</span></span> ở thanh dưới cùng).
         </div>
       </div>
       <div class="pwa-step-item">
         <div class="pwa-step-num">2</div>
         <div class="pwa-step-text">
-          Cuộn xuống dưới và chọn dòng <span class="pwa-guide-highlight">➕ Thêm vào MH chính</span> (Add to Home Screen).
+          Cuộn xuống dưới và chọn dòng <span class="pwa-guide-highlight inline-icon-badge">${UI_ICONS.plusSquare}<span>Thêm vào MH chính</span></span> (Add to Home Screen).
         </div>
       </div>
       <div class="pwa-step-item">
@@ -3282,7 +3369,7 @@ function openPwaGuideModal(type = 'ios') {
       <div class="pwa-step-item">
         <div class="pwa-step-num">2</div>
         <div class="pwa-step-text">
-          Chọn mục <span class="pwa-guide-highlight">📲 Cài đặt ứng dụng</span> hoặc <strong>Thêm vào màn hình chính</strong>.
+          Chọn mục <span class="pwa-guide-highlight inline-icon-badge">${UI_ICONS.smartphone}<span>Cài đặt ứng dụng</span></span> hoặc <strong>Thêm vào màn hình chính</strong>.
         </div>
       </div>
       <div class="pwa-step-item">
