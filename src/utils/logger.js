@@ -1,9 +1,31 @@
+const { AsyncLocalStorage } = require('async_hooks');
+
 /**
- * Structured logger following [] formatting and | separator convention.
+ * Structured logger following [] formatting and | separator convention
+ * with AsyncLocalStorage request tracing support.
  */
 
+const requestContextStorage = new AsyncLocalStorage();
+
+/**
+ * Run a callback inside a request tracing context carrying requestId.
+ */
+function runWithRequestContext(context, fn) {
+  return requestContextStorage.run(context || {}, fn);
+}
+
+/**
+ * Retrieve the active requestId from AsyncLocalStorage context, if any.
+ */
+function getRequestId() {
+  const store = requestContextStorage.getStore();
+  return store?.requestId || null;
+}
+
 function formatMeta(meta = {}) {
-  const entries = Object.entries(meta).filter(([, v]) => v !== undefined);
+  const ctxReqId = getRequestId();
+  const baseMeta = ctxReqId && meta.reqId === undefined ? { reqId: ctxReqId, ...meta } : meta;
+  const entries = Object.entries(baseMeta).filter(([, v]) => v !== undefined);
   if (entries.length === 0) return '';
   return entries
     .map(([k, v]) => `[${k}: ${typeof v === 'object' ? JSON.stringify(v) : v}]`)
@@ -44,5 +66,7 @@ module.exports = {
   logLeave,
   log,
   warning,
-  error
+  error,
+  runWithRequestContext,
+  getRequestId
 };

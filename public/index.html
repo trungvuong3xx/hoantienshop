@@ -9,19 +9,60 @@
   <meta property="og:title" content="Hoàn Tiền Sàn — Mua Sắm Hoàn Tiền Shopee & TikTok Shop" />
   <meta property="og:description" content="Dán link sản phẩm Shopee hoặc TikTok Shop để nhận tiền hoàn trực tiếp vào ví sau khi nhận hàng." />
   <meta property="og:type" content="website" />
-  <meta property="og:image" content="/icon.svg" />
+  <meta property="og:url" content="https://hoantiensan.online/" />
+  <meta property="og:image" content="/icon-512.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Hoàn Tiền Sàn — Mua Sắm Hoàn Tiền Shopee & TikTok Shop" />
+  <meta name="twitter:description" content="Dán link sản phẩm Shopee hoặc TikTok Shop để nhận tiền hoàn trực tiếp vào ví sau khi nhận hàng." />
+  <meta name="twitter:image" content="/icon-512.png" />
   <link rel="canonical" href="https://hoantiensan.online/" />
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "WebApplication",
+        "name": "Hoàn Tiền Sàn",
+        "url": "https://hoantiensan.online/",
+        "applicationCategory": "ShoppingApplication",
+        "operatingSystem": "All",
+        "description": "Nền tảng nhận hoàn tiền tự động lên đến 70% hoa hồng khi mua sắm trên Shopee và TikTok Shop. Minh bạch, nhanh chóng, rút tiền miễn phí."
+      },
+      {
+        "@type": "FAQPage",
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "Làm thế nào để nhận hoàn tiền khi mua sắm trên Shopee và TikTok Shop?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Sao chép link sản phẩm từ Shopee hoặc TikTok Shop, dán vào ô tạo link trên Hoàn Tiền Sàn, nhấn mở ứng dụng để đặt mua và nhận tiền hoàn tự động vào ví sau khi đơn hàng hoàn tất."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Bao lâu sau khi đặt hàng thì đơn hiển thị trên hệ thống?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Đơn hàng Shopee và TikTok Shop thường đồng bộ lên hệ thống đối soát sau 12h đến 24h kể từ lúc đặt hàng thành công."
+            }
+          }
+        ]
+      }
+    ]
+  }
+  </script>
   <link rel="manifest" href="/manifest.webmanifest" />
   <meta name="theme-color" content="#EE4D2D" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Hoàn Tiền Sàn" />
-  <link rel="apple-touch-icon" href="/icon.svg" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/styles.css" />
+  <link rel="stylesheet" href="/styles.css?v=2.1.0" />
 </head>
 <body>
   <!-- Top Navigation Header -->
@@ -256,10 +297,10 @@
         </div>
 
         <!-- Referral Program Card -->
-        <div class="panel referral-card" style="margin-top: 18px; margin-bottom: 22px; background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%); border: 1.5px solid #fed7aa; border-radius: 12px; padding: 20px;">
-          <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px;">
+        <div class="panel referral-card">
+          <div class="ref-header-row">
             <div>
-              <div style="display: inline-flex; align-items: center; gap: 6px; background: #ea580c; color: #fff; font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 20px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">
+              <div class="ref-kicker-badge">
                 <span>🎁 THƯỞNG GIỚI THIỆU BẠN BÈ</span>
               </div>
               <h3 style="margin: 0 0 6px 0; color: #9a3412; font-size: 18px;">Nhận ngay <span data-config="referralBountyAmount">5.000đ</span> khi mời 1 người bạn!</h3>
@@ -275,10 +316,10 @@
           </div>
 
           <!-- Prominent Referral Code Box -->
-          <div style="display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; align-items: center; background: #ffffff; padding: 12px 14px; border-radius: 10px; border: 1.5px solid #fed7aa;">
+          <div class="ref-code-box">
             <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; flex: 1;">
               <span style="font-size: 13px; color: #64748b; font-weight: 600;">Mã giới thiệu của bạn:</span>
-              <span id="userMyRefCodeDisplay" style="font-family: monospace; font-size: 17px; font-weight: 800; color: #ea580c; background: #ffedd5; padding: 4px 10px; border-radius: 6px; border: 1px dashed #f97316; letter-spacing: 1px;">...</span>
+              <span id="userMyRefCodeDisplay" class="ref-code-pill">...</span>
             </div>
             <button type="button" class="btn btn-sm btn-primary" id="copyRefCodeBtn" style="white-space: nowrap; background: #ea580c; border-color: #ea580c;">
               🔑 Sao Chép Mã
@@ -286,9 +327,9 @@
           </div>
 
           <!-- Link & Action Buttons -->
-          <div style="display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; align-items: center;">
+          <div class="ref-link-row">
             <div style="flex: 1; min-width: 240px; position: relative;">
-              <input type="text" id="userReferralLinkInput" readonly style="width: 100%; background: #ffffff; border: 1px solid #fdba74; border-radius: 8px; padding: 10px 12px; font-weight: 600; font-size: 13px; color: #1e293b; box-sizing: border-box;" value="" placeholder="Đang tải link giới thiệu..." />
+              <input type="text" id="userReferralLinkInput" readonly class="ref-link-input" value="" placeholder="Đang tải link giới thiệu..." />
             </div>
             <button type="button" class="btn btn-outline" id="copyRefLinkBtn" style="white-space: nowrap; border-color: #f97316; color: #c2410c; background: #ffffff;">
               📋 Sao Chép Link
@@ -302,30 +343,30 @@
           </div>
 
           <!-- Mini Referral Stats Grid -->
-          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; margin-top: 16px;">
-            <div style="background: rgba(255,255,255,0.8); border-radius: 8px; padding: 10px; text-align: center; border: 1px solid #fed7aa;">
+          <div class="ref-stats-grid">
+            <div class="ref-stat-card">
               <span style="font-size: 11.5px; color: #7c2d12; display: block;">Tổng bạn bè đã mời</span>
               <strong style="font-size: 16px; color: #9a3412;" id="refTotalFriends">0 người</strong>
             </div>
-            <div style="background: rgba(255,255,255,0.8); border-radius: 8px; padding: 10px; text-align: center; border: 1px solid #fed7aa;">
+            <div class="ref-stat-card">
               <span style="font-size: 11.5px; color: #15803d; display: block;">Đã hoàn thành đơn đầu</span>
               <strong style="font-size: 16px; color: #166534;" id="refCompletedFriends">0 người</strong>
             </div>
-            <div style="background: rgba(255,255,255,0.8); border-radius: 8px; padding: 10px; text-align: center; border: 1px solid #fed7aa;">
+            <div class="ref-stat-card">
               <span style="font-size: 11.5px; color: #b45309; display: block;">Chờ hoàn thành đơn</span>
               <strong style="font-size: 16px; color: #b45309;" id="refPendingFriends">0 người</strong>
             </div>
-            <div style="background: rgba(255,255,255,0.8); border-radius: 8px; padding: 10px; text-align: center; border: 1px solid #fed7aa;">
+            <div class="ref-stat-card">
               <span style="font-size: 11.5px; color: #0369a1; display: block;">Tiền thưởng đã nhận</span>
               <strong style="font-size: 16px; color: #0284c7;" id="refBonusEarned">0đ</strong>
             </div>
           </div>
 
           <!-- Friends List (Collapsible) -->
-          <div id="refFriendsPanel" class="hidden" style="margin-top: 16px; border-top: 1px dashed #fdba74; padding-top: 14px;">
+          <div id="refFriendsPanel" class="ref-friends-panel hidden">
             <h4 style="margin: 0 0 10px 0; color: #9a3412; font-size: 14px;">Danh sách bạn bè đã tham gia</h4>
             <div class="table-responsive" style="background: #ffffff; border-radius: 8px; border: 1px solid #fed7aa;">
-              <table class="data-table" style="margin: 0;">
+              <table class="data-table mobile-card-table" style="margin: 0;">
                 <thead>
                   <tr>
                     <th>STT</th>
@@ -360,9 +401,15 @@
               <button type="button" class="btn btn-primary" id="submitOrderClaimBtn">Lưu đơn</button>
             </div>
 
-            <h4 style="margin-top:14px;">Danh sách đơn hàng của bạn</h4>
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-top:14px;margin-bottom:8px;">
+              <h4 style="margin:0;">Danh sách đơn hàng của bạn</h4>
+              <div style="display:flex;gap:6px;align-items:center;flex:1;min-width:220px;max-width:340px;">
+                <input type="text" id="userOrderSearchInput" placeholder="Tìm mã đơn, tên sản phẩm..." style="flex:1;min-width:140px;" />
+                <button type="button" class="btn btn-outline btn-sm" id="userOrderSearchBtn">Tìm</button>
+              </div>
+            </div>
             <div class="table-responsive">
-              <table class="data-table">
+              <table class="data-table mobile-card-table">
                 <thead>
                   <tr>
                     <th>Mã đơn</th>
@@ -376,10 +423,17 @@
                 </tbody>
               </table>
             </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;gap:8px;flex-wrap:wrap;">
+              <span id="userOrdersPageInfo" style="font-size:13px;color:#64748b;">Trang 1 / 1</span>
+              <div style="display:flex;gap:6px;">
+                <button type="button" class="btn btn-outline btn-xs" id="userOrdersPrevBtn">← Trước</button>
+                <button type="button" class="btn btn-outline btn-xs" id="userOrdersNextBtn">Sau →</button>
+              </div>
+            </div>
 
             <h4 style="margin-top:18px;">Lịch sử biến động số dư (Sổ cái)</h4>
             <div class="table-responsive">
-              <table class="data-table">
+              <table class="data-table mobile-card-table">
                 <thead>
                   <tr>
                     <th>Thời gian</th>
@@ -456,7 +510,7 @@
 
             <h4 style="margin-top:18px;">Lịch sử rút tiền</h4>
             <div class="table-responsive">
-              <table class="data-table">
+              <table class="data-table mobile-card-table">
                 <thead>
                   <tr>
                     <th>Ngày</th>
@@ -550,7 +604,7 @@
           <div class="faq-item">
             <h4>2. Chính sách Bảo vệ Dữ liệu Cá nhân (Tuân thủ Nghị định 13/2023/NĐ-CP)</h4>
             <p>Chúng tôi chỉ thu thập các thông tin tối thiểu cần thiết để định danh ví hoàn tiền và thực hiện chuyển khoản chi trả cho bạn, bao gồm: Họ tên, Số điện thoại và Thông tin tài khoản nhận tiền hoàn (Ngân hàng/MoMo) do chính bạn cung cấp khi tạo yêu cầu rút tiền. Chúng tôi tuyệt đối không yêu cầu mật khẩu Shopee/TikTok hay mã OTP ngân hàng.</p>
-            <p style="margin-top:6px;font-size:13px;color:#475569;">Nhằm vận hành các dịch vụ kỹ thuật an toàn và minh bạch, hệ thống sử dụng các bên xử lý dữ liệu và đối tác dịch vụ bên thứ ba thiết yếu gồm: <strong>Google Fonts</strong> (tải phông chữ hiển thị giao diện), <strong>VietQR</strong> (tạo mã QR chuyển khoản chính xác), <strong>Cloudflare Turnstile</strong> (xác thực chống bot tự động và bảo vệ biểu mẫu), <strong>AddLiveTag</strong> (hỗ trợ chuyển đổi liên kết tiếp thị), cùng CDN chính thức của Shopee/TikTok (hiển thị hình ảnh sản phẩm). Người dùng có toàn quyền yêu cầu tra cứu, điều chỉnh hoặc rút lại sự đồng ý / xóa dữ liệu cá nhân bất kỳ lúc nào theo quy định của Nghị định 13/2023/NĐ-CP qua kênh hỗ trợ của chúng tôi.</p>
+            <p style="margin-top:6px;font-size:13px;color:#475569;">Nhằm vận hành các dịch vụ kỹ thuật an toàn và minh bạch, hệ thống sử dụng các bên xử lý dữ liệu và đối tác dịch vụ bên thứ ba thiết yếu gồm: <strong>Google Fonts</strong> (tải phông chữ hiển thị giao diện), <strong>VietQR</strong> (tạo mã QR chuyển khoản chính xác), <strong>api.qrserver.com</strong> (tạo ảnh mã QR giới thiệu bạn bè), <strong>Cloudflare Turnstile</strong> (xác thực chống bot tự động và bảo vệ biểu mẫu), <strong>AddLiveTag</strong> (hỗ trợ chuyển đổi liên kết tiếp thị), cùng CDN chính thức của Shopee/TikTok (hiển thị hình ảnh sản phẩm). Người dùng có toàn quyền yêu cầu tra cứu, điều chỉnh hoặc rút lại sự đồng ý / xóa dữ liệu cá nhân bất kỳ lúc nào theo quy định của Nghị định 13/2023/NĐ-CP qua kênh hỗ trợ của chúng tôi.</p>
           </div>
           <div class="faq-item">
             <h4>3. Quy định Chống Gian lận & Rút tiền</h4>
@@ -779,14 +833,26 @@
             </div>
           </div>
 
-          <div class="table-responsive" style="margin-top:14px;">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;align-items:center;">
+            <input type="text" id="admOrderSearchInput" placeholder="Tìm mã đơn, mã khách, sản phẩm..." style="flex:1;min-width:180px;" />
+            <select id="admOrderStatusFilter" style="width:150px;">
+              <option value="">Tất cả trạng thái</option>
+              <option value="pending">Chờ đối soát</option>
+              <option value="approved">Đã duyệt</option>
+              <option value="cancelled">Đã huỷ</option>
+            </select>
+            <button type="button" class="btn btn-outline btn-sm" id="admOrderSearchBtn">Tìm</button>
+          </div>
+
+          <div class="table-responsive" style="margin-top:10px;">
             <table class="data-table">
               <thead>
                 <tr>
+                  <th>Ngày</th>
                   <th>Mã Đơn</th>
                   <th>Khách</th>
-                  <th>Giá trị đơn</th>
-                  <th>Sau thuế</th>
+                  <th>Sản phẩm</th>
+                  <th>Hoa hồng</th>
                   <th>Hoàn khách</th>
                   <th>Trạng thái</th>
                   <th>Thao tác</th>
@@ -795,30 +861,59 @@
               <tbody id="admOrdersTableBody"></tbody>
             </table>
           </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;gap:8px;flex-wrap:wrap;">
+            <span id="admOrdersPageInfo" style="font-size:13px;color:#64748b;">Trang 1/1</span>
+            <div style="display:flex;gap:6px;">
+              <button type="button" class="btn btn-outline btn-xs" id="admOrdersPrevBtn">← Trước</button>
+              <button type="button" class="btn btn-outline btn-xs" id="admOrdersNextBtn">Sau →</button>
+            </div>
+          </div>
         </div>
       </div>
 
       <div class="admin-grid" style="margin-top:20px;">
         <div class="panel">
           <h3>3. Yêu Cầu Rút Tiền (Hỗ trợ quét mã VietQR)</h3>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;align-items:center;">
+            <input type="text" id="admWithdrawalSearchInput" placeholder="Tìm mã KH, STK, chủ TK, ngân hàng..." style="flex:1;min-width:180px;" />
+            <select id="admWithdrawalStatusFilter" style="width:160px;">
+              <option value="">Tất cả trạng thái</option>
+              <option value="pending">Chờ thanh toán</option>
+              <option value="paid">Đã chuyển khoản</option>
+              <option value="rejected">Từ chối</option>
+            </select>
+            <button type="button" class="btn btn-outline btn-sm" id="admWithdrawalSearchBtn">Lọc / Tìm</button>
+          </div>
           <div class="table-responsive">
             <table class="data-table">
               <thead>
                 <tr>
+                  <th>Ngày</th>
                   <th>Khách hàng</th>
                   <th>Số tiền</th>
-                  <th>Tài khoản nhận</th>
-                  <th>VietQR</th>
+                  <th>Tài khoản nhận &amp; VietQR</th>
+                  <th>Trạng thái</th>
                   <th>Xử lý</th>
                 </tr>
               </thead>
               <tbody id="admWithdrawalsTableBody"></tbody>
             </table>
           </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;gap:8px;flex-wrap:wrap;">
+            <span id="admWithdrawalsPageInfo" style="font-size:13px;color:#64748b;">Trang 1/1</span>
+            <div style="display:flex;gap:6px;">
+              <button type="button" class="btn btn-outline btn-xs" id="admWithdrawalsPrevBtn">← Trước</button>
+              <button type="button" class="btn btn-outline btn-xs" id="admWithdrawalsNextBtn">Sau →</button>
+            </div>
+          </div>
         </div>
 
         <div class="panel">
           <h3>4. Danh Sách Thành Viên & Quản Lý</h3>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;align-items:center;">
+            <input type="text" id="admUserSearchInput" placeholder="Tìm mã khách, tên, SĐT..." style="flex:1;min-width:180px;" />
+            <button type="button" class="btn btn-outline btn-sm" id="admUserSearchBtn">Tìm</button>
+          </div>
           <div class="table-responsive">
             <table class="data-table">
               <thead>
@@ -833,6 +928,13 @@
               </thead>
               <tbody id="admUsersTableBody"></tbody>
             </table>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;gap:8px;flex-wrap:wrap;">
+            <span id="admUsersPageInfo" style="font-size:13px;color:#64748b;">Trang 1/1</span>
+            <div style="display:flex;gap:6px;">
+              <button type="button" class="btn btn-outline btn-xs" id="admUsersPrevBtn">← Trước</button>
+              <button type="button" class="btn btn-outline btn-xs" id="admUsersNextBtn">Sau →</button>
+            </div>
           </div>
         </div>
       </div>
@@ -849,7 +951,7 @@
 
       <div class="modal-body-form" style="gap: 16px;">
         <input type="hidden" id="manageUserId" />
-        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; font-size: 13.5px;">
+        <div class="modal-info-card">
           <div>Mã khách: <strong id="manageUserCode"></strong></div>
           <div>Họ tên: <strong id="manageUserName"></strong></div>
           <div>SĐT: <strong id="manageUserPhone"></strong></div>
@@ -857,7 +959,7 @@
           <div>Trạng thái: <strong id="manageUserStatus"></strong></div>
         </div>
 
-        <div style="border-top: 1px dashed #cbd5e1; padding-top: 12px;">
+        <div class="modal-section-divider">
           <h4 style="margin: 0 0 8px 0; font-size: 14px;">1. Đổi / Cấp Lại Mật Khẩu</h4>
           <div style="display: flex; gap: 8px;">
             <input type="password" id="manageNewPassword" autocomplete="new-password" minlength="6" maxlength="64" placeholder="Nhập mật khẩu mới (tối thiểu 6 ký tự)..." style="flex: 1;" />
@@ -866,7 +968,7 @@
           </div>
         </div>
 
-        <div style="border-top: 1px dashed #cbd5e1; padding-top: 12px;">
+        <div class="modal-section-divider">
           <h4 style="margin: 0 0 8px 0; font-size: 14px;">2. Điều Chỉnh Số Dư (Ghi Vào Sổ Cái)</h4>
           <div style="display: flex; gap: 8px; margin-bottom: 8px;">
             <select id="manageAdjustType" style="width: 120px;">
@@ -884,7 +986,7 @@
           </div>
         </div>
 
-        <div style="border-top: 1px dashed #cbd5e1; padding-top: 12px; display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap;">
+        <div class="modal-section-divider" style="display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap;">
           <button type="button" class="btn btn-outline btn-sm" id="btnToggleUserLock">🔒 Khóa / Mở Khóa Tài Khoản</button>
           <button type="button" class="btn btn-ghost btn-sm" id="btnDeleteUser" style="color: #dc2626;">🗑️ Xóa Tài Khoản</button>
         </div>
@@ -933,7 +1035,7 @@
             <input type="number" id="editOrdCommission" placeholder="0" />
           </div>
         </div>
-        <div class="form-group" style="background:#f8fafc;padding:12px;border-radius:8px;border:1px solid #e2e8f0;">
+        <div class="form-group cashback-calc-box">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;gap:8px;flex-wrap:wrap;">
             <label style="margin:0;font-weight:600;color:#059669;">Tiền Hoàn Cho Khách (VNĐ)</label>
             <button type="button" class="btn btn-outline btn-xs" id="btnAutoCalcCashback">⚡ Tự tính theo % cấu hình</button>
@@ -1099,6 +1201,47 @@
     </div>
   </div>
 
+  <!-- Confirm Action Modal (In-App WebView & Mobile friendly replacement for window.confirm) -->
+  <div id="confirmActionModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="confirmModalTitle">
+    <div class="modal-box confirm-modal-box">
+      <div class="modal-head">
+        <h3 id="confirmModalTitle">Xác Nhận Yêu Cầu</h3>
+        <button type="button" class="close-btn" id="closeConfirmModalBtn" aria-label="Đóng">✕</button>
+      </div>
+      <div class="modal-body-form">
+        <div id="confirmModalMessage" class="confirm-modal-msg"></div>
+        <div class="confirm-modal-actions">
+          <button type="button" class="btn btn-outline" id="confirmModalCancelBtn">Hủy bỏ</button>
+          <button type="button" class="btn btn-success" id="confirmModalOkBtn">Xác nhận</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Mobile Bottom Navigation Bar -->
+  <nav id="mobileBottomNav" class="mobile-bottom-nav" aria-label="Điều hướng di động">
+    <button type="button" class="nav-btn mobile-nav-item active" data-nav="home">
+      <span class="mobile-nav-icon" aria-hidden="true">🏠</span>
+      <span class="mobile-nav-label">Mua Sắm</span>
+    </button>
+    <button type="button" class="nav-btn mobile-nav-item" data-nav="wallet">
+      <span class="mobile-nav-icon" aria-hidden="true">👛</span>
+      <span class="mobile-nav-label">Ví Tiền</span>
+    </button>
+    <button type="button" class="nav-btn mobile-nav-item" data-nav="guide">
+      <span class="mobile-nav-icon" aria-hidden="true">📖</span>
+      <span class="mobile-nav-label">Hướng Dẫn</span>
+    </button>
+    <button type="button" class="nav-btn mobile-nav-item" data-nav="terms">
+      <span class="mobile-nav-icon" aria-hidden="true">🛡️</span>
+      <span class="mobile-nav-label">Điều Khoản</span>
+    </button>
+    <button type="button" id="mobileNavAdminBtn" class="nav-btn mobile-nav-item hidden" data-nav="admin">
+      <span class="mobile-nav-icon" aria-hidden="true">⚙️</span>
+      <span class="mobile-nav-label">Quản Trị</span>
+    </button>
+  </nav>
+
   <!-- Floating Zalo Community Button -->
   <div id="floatingZaloWidget" class="floating-zalo hidden" role="complementary" aria-label="Cộng đồng Zalo">
     <a
@@ -1124,6 +1267,6 @@
   <!-- Toast -->
   <div id="toast" class="toast hidden" role="status" aria-live="polite" aria-atomic="true"></div>
 
-  <script src="/app.js" defer></script>
+  <script src="/app.js?v=2.1.0" defer></script>
 </body>
 </html>

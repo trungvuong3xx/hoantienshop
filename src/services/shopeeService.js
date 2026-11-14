@@ -4,7 +4,7 @@ const { shortenUrl } = require('./shortenerService');
 const { isAllowedHost } = require('./urlResolver');
 
 const SHOPEE_GRAPHQL_ENDPOINT = 'https://open-api.affiliate.shopee.vn/graphql';
-const DEFAULT_ADDLIVETAG_API_KEY = 'b426eeae7cc0b156969f923935e661362aa3b13d09dba032';
+const DEFAULT_ADDLIVETAG_API_KEY = (process.env.ADDLIVETAG_API_KEY || '').trim();
 
 // Cache for Shopee Open API short links and product metadata to respect rate limits
 const linkCache = new Map();
@@ -219,11 +219,7 @@ async function fetchShopeeProductOffer(itemId, appId, appSecret, shopId = null) 
  * Supports both Shopee (item_id or url) and TikTok Shop (url).
  */
 async function fetchAddlivetagProductData({ platform, itemId, url, apiKey }) {
-  const key = String(
-    apiKey ||
-      process.env.ADDLIVETAG_API_KEY ||
-      'b426eeae7cc0b156969f923935e661362aa3b13d09dba032'
-  ).trim();
+  const key = String(apiKey || process.env.ADDLIVETAG_API_KEY || '').trim();
   if (!key) return null;
 
   const cacheKey = `addlivetag:${platform}:${itemId || url}`;

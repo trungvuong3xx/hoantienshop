@@ -179,6 +179,7 @@ async function copyText(text, msg = 'Đã sao chép thành công!') {
 async function apiFetch(url, options = {}) {
   const headers = {
     'Content-Type': 'application/json',
+    'X-Requested-With': 'XMLHttpRequest',
     ...(options.headers || {})
   };
 
@@ -238,7 +239,7 @@ async function apiFetch(url, options = {}) {
 }
 
 // Navigation & History API
-function switchView(viewName, updateHistory = true) {
+function switchView(viewName, updateHistory = true, options = {}) {
   let targetView = viewName;
   if (targetView === 'faq') {
     targetView = 'guide';
@@ -267,7 +268,7 @@ function switchView(viewName, updateHistory = true) {
     } catch {}
   }
 
-  if (targetView === 'wallet' && authToken) {
+  if (targetView === 'wallet' && authToken && !options.skipReload) {
     loadUserDashboard();
   }
   if (targetView === 'admin' && authToken && currentUser?.role === 'admin') {
@@ -390,6 +391,7 @@ function syncAuthUi() {
   const navAuthArea = document.getElementById('navAuthArea');
   const navUserArea = document.getElementById('navUserArea');
   const navAdminBtn = document.getElementById('navAdminBtn');
+  const mobileNavAdminBtn = document.getElementById('mobileNavAdminBtn');
   const walletGuestPrompt = document.getElementById('walletGuestPrompt');
   const walletAuthenticatedContent = document.getElementById('walletAuthenticatedContent');
 
@@ -404,15 +406,14 @@ function syncAuthUi() {
     const headerBalEl = document.getElementById('headerUserBalance');
     if (headerBalEl) headerBalEl.textContent = fmtVnd(currentUser.balanceAvailable);
 
-    if (currentUser.role === 'admin') {
-      navAdminBtn?.classList.remove('hidden');
-    } else {
-      navAdminBtn?.classList.add('hidden');
-    }
+    const isAdmin = currentUser.role === 'admin';
+    navAdminBtn?.classList.toggle('hidden', !isAdmin);
+    mobileNavAdminBtn?.classList.toggle('hidden', !isAdmin);
   } else {
     navAuthArea?.classList.remove('hidden');
     navUserArea?.classList.add('hidden');
     navAdminBtn?.classList.add('hidden');
+    mobileNavAdminBtn?.classList.add('hidden');
     walletGuestPrompt?.classList.remove('hidden');
     walletAuthenticatedContent?.classList.add('hidden');
   }
@@ -724,6 +725,17 @@ if (productUrlInput) {
       handleGetCashbackLink();
     }
   });
+
+  productUrlInput.addEventListener('paste', () => {
+    setTimeout(() => {
+      const val = productUrlInput.value.trim();
+      clearInputBtn?.classList.toggle('hidden', !val);
+      if (/https?:\/\//i.test(val)) {
+        clearTimeout(previewDebounceTimer);
+        handleGetCashbackLink();
+      }
+    }, 60);
+  });
 }
 
 on('pasteBtn', 'click', async () => {
@@ -736,6 +748,9 @@ on('pasteBtn', 'click', async () => {
         conversionResultSection.classList.add('hidden');
       }
       fetchInstantPreview(text);
+      if (/https?:\/\//i.test(text)) {
+        handleGetCashbackLink();
+      }
     }
   } catch {
     productUrlInput?.focus();
@@ -894,6 +909,7 @@ async function handleGetCashbackLink() {
       instantPreviewArea.classList.add('hidden');
     }
     conversionResultSection?.classList.remove('hidden');
+    conversionResultSection?.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' });
 
     const guestNoticeHtml = !authToken
       ? `<div class="guest-card-note">
@@ -1040,10 +1056,94 @@ if (wdBankAccountInput) {
   });
 }
 
-async function loadUserDashboard() {
+const USER_ORDERS_LIMIT = 10;
+let userOrdersPage = 1;
+let userOrdersTotalPages = 1;
+
+function renderUserOrdersTable(orders) {
+  const ordBody = document.getElementById('userOrdersTableBody');
+  if (!ordBody) return;
+  if (!Array.isArray(orders) || orders.length === 0) {
+    ordBody.innerHTML =
+      '<tr><td colspan="4" class="text-center">Chưa có đơn hàng nào được ghi nhận.</td></tr>';
+    return;
+  }
+  ordBody.innerHTML = orders
+    .map((o) => {
+      const stCls = getStatusClass(o.status);
+      const stLabel =
+        o.status === 'approved'
+          ? 'Đã cộng vào ví'
+          : o.status === 'cancelled'
+          ? 'Đã huỷ'
+          : 'Đang đối soát';
+      const plat = String(o.platform || '').toLowerCase();
+      const platBadge =
+        plat === 'tiktok'
+          ? '<span class="plat-badge-inline tiktok" style="font-size:10.5px;padding:1px 6px;">TikTok</span>'
+          : '<span class="plat-badge-inline shopee" style="font-size:10.5px;padding:1px 6px;">Shopee</span>';
+      const dt = o.createdAt ? new Date(o.createdAt).toLocaleDateString('vi-VN') : '—';
+      const orderAmtStr = Number(o.orderAmount) > 0 ? ` • Giá đơn: ${fmtVnd(o.orderAmount)}` : '';
+      return `
+        <tr>
+          <td data-label="Mã đơn">
+            <div><strong>${escapeHtml(o.orderSn)}</strong> ${platBadge}</div>
+            <div style="font-size:11.5px;color:#64748b;margin-top:2px;">${dt}${orderAmtStr}</div>
+          </td>
+          <td data-label="Sản phẩm">${escapeHtml(o.productName)}</td>
+          <td data-label="Tiền hoàn"><strong style="color:#059669;">+${fmtVnd(o.userCashbackAmount)}</strong></td>
+          <td data-label="Trạng thái"><span class="status-badge ${stCls}">${stLabel}</span></td>
+        </tr>
+      `;
+    })
+    .join('');
+}
+
+async function loadUserOrdersPage(page = 1) {
   if (!authToken) return;
   try {
-    const data = await apiFetch('/api/user/me');
+    const q = document.getElementById('userOrderSearchInput')?.value?.trim() || '';
+    const params = new URLSearchParams({
+      orderPage: String(Math.max(1, Number(page) || 1)),
+      orderLimit: String(USER_ORDERS_LIMIT)
+    });
+    if (q) params.set('q', q);
+    const data = await apiFetch('/api/user/me?' + params.toString());
+    const orders = data.orders || [];
+    renderUserOrdersTable(orders);
+    const state = updateAdminPaginationUi({
+      infoId: 'userOrdersPageInfo',
+      prevBtnId: 'userOrdersPrevBtn',
+      nextBtnId: 'userOrdersNextBtn',
+      pagination: data.ordersPagination,
+      fallbackTotal: orders.length,
+      itemLabel: 'đơn'
+    });
+    userOrdersPage = state.page;
+    userOrdersTotalPages = state.totalPages;
+  } catch (err) {
+    showToast(err.message);
+  }
+}
+
+async function loadUserDashboard(prefetchedData = null) {
+  if (!authToken) return;
+  const refreshBtn = document.getElementById('refreshWalletBtn');
+  if (refreshBtn) {
+    refreshBtn.disabled = true;
+    refreshBtn.textContent = 'Đang tải...';
+  }
+  try {
+    const q = document.getElementById('userOrderSearchInput')?.value?.trim() || '';
+    const params = new URLSearchParams({
+      orderPage: String(userOrdersPage),
+      orderLimit: String(USER_ORDERS_LIMIT)
+    });
+    if (q) params.set('q', q);
+    const data =
+      prefetchedData && prefetchedData.user
+        ? prefetchedData
+        : await apiFetch('/api/user/me?' + params.toString());
     currentUser = data.user;
     safeStorage.set(
       USER_KEY,
@@ -1086,34 +1186,18 @@ async function loadUserDashboard() {
     wdPasswordConfirmGroup?.classList.add('hidden');
 
     // Orders Table
-    const ordBody = document.getElementById('userOrdersTableBody');
     const orders = data.orders || [];
-    if (ordBody) {
-      if (orders.length === 0) {
-        ordBody.innerHTML =
-          '<tr><td colspan="4" class="text-center">Chưa có đơn hàng nào được ghi nhận.</td></tr>';
-      } else {
-        ordBody.innerHTML = orders
-          .map((o) => {
-            const stCls = getStatusClass(o.status);
-            const stLabel =
-              o.status === 'approved'
-                ? 'Đã cộng vào ví'
-                : o.status === 'cancelled'
-                ? 'Đã huỷ'
-                : 'Đang đối soát';
-            return `
-              <tr>
-                <td><strong>${escapeHtml(o.orderSn)}</strong></td>
-                <td>${escapeHtml(o.productName)}</td>
-                <td><strong style="color:#059669;">+${fmtVnd(o.userCashbackAmount)}</strong></td>
-                <td><span class="status-badge ${stCls}">${stLabel}</span></td>
-              </tr>
-            `;
-          })
-          .join('');
-      }
-    }
+    renderUserOrdersTable(orders);
+    const ordPagState = updateAdminPaginationUi({
+      infoId: 'userOrdersPageInfo',
+      prevBtnId: 'userOrdersPrevBtn',
+      nextBtnId: 'userOrdersNextBtn',
+      pagination: data.ordersPagination,
+      fallbackTotal: orders.length,
+      itemLabel: 'đơn'
+    });
+    userOrdersPage = ordPagState.page;
+    userOrdersTotalPages = ordPagState.totalPages;
 
     // Ledger Table
     const ledBody = document.getElementById('userLedgerTableBody');
@@ -1131,9 +1215,9 @@ async function loadUserDashboard() {
             const dt = l.createdAt ? new Date(l.createdAt).toLocaleDateString('vi-VN') : '—';
             return `
               <tr>
-                <td>${dt}</td>
-                <td>${escapeHtml(l.note)}</td>
-                <td><strong style="color:${color};">${prefix}${fmtVnd(l.amount)}</strong></td>
+                <td data-label="Thời gian">${dt}</td>
+                <td data-label="Nội dung">${escapeHtml(l.note)}</td>
+                <td data-label="Số tiền"><strong style="color:${color};">${prefix}${fmtVnd(l.amount)}</strong></td>
               </tr>
             `;
           })
@@ -1161,10 +1245,10 @@ async function loadUserDashboard() {
             const dt = w.createdAt ? new Date(w.createdAt).toLocaleDateString('vi-VN') : '—';
             return `
               <tr>
-                <td>${dt}</td>
-                <td><strong>${fmtVnd(w.amount)}</strong></td>
-                <td>${escapeHtml(w.bankName)} - ${escapeHtml(w.bankAccount)}</td>
-                <td><span class="status-badge ${stCls}">${stLabel}</span></td>
+                <td data-label="Ngày">${dt}</td>
+                <td data-label="Số tiền"><strong>${fmtVnd(w.amount)}</strong></td>
+                <td data-label="Tài khoản">${escapeHtml(w.bankName)} - ${escapeHtml(w.bankAccount)}</td>
+                <td data-label="Trạng thái"><span class="status-badge ${stCls}">${stLabel}</span></td>
               </tr>
             `;
           })
@@ -1173,6 +1257,11 @@ async function loadUserDashboard() {
     }
   } catch (err) {
     showToast(err.message);
+  } finally {
+    if (refreshBtn) {
+      refreshBtn.disabled = false;
+      refreshBtn.textContent = 'Làm mới số dư';
+    }
   }
 }
 
@@ -1225,11 +1314,11 @@ async function loadUserReferrals() {
             const dStr = f.createdAt ? new Date(f.createdAt).toLocaleDateString('vi-VN') : '-';
             return `
             <tr>
-              <td>${i + 1}</td>
-              <td><strong>${escapeHtml(f.maskedPhone)}</strong></td>
-              <td>${dStr}</td>
-              <td>${badge}</td>
-              <td>${bonusText}</td>
+              <td data-label="STT">${i + 1}</td>
+              <td data-label="SĐT bạn bè"><strong>${escapeHtml(f.maskedPhone)}</strong></td>
+              <td data-label="Ngày tham gia">${dStr}</td>
+              <td data-label="Trạng thái">${badge}</td>
+              <td data-label="Tiền thưởng">${bonusText}</td>
             </tr>
           `;
           })
@@ -1296,7 +1385,20 @@ on('toggleRefFriendsBtn', 'click', () => {
   panel.classList.toggle('hidden');
 });
 
-on('refreshWalletBtn', 'click', loadUserDashboard);
+on('refreshWalletBtn', 'click', () => loadUserDashboard());
+on('userOrderSearchBtn', 'click', () => loadUserOrdersPage(1));
+on('userOrderSearchInput', 'keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    loadUserOrdersPage(1);
+  }
+});
+on('userOrdersPrevBtn', 'click', () => {
+  if (userOrdersPage > 1) loadUserOrdersPage(userOrdersPage - 1);
+});
+on('userOrdersNextBtn', 'click', () => {
+  if (userOrdersPage < userOrdersTotalPages) loadUserOrdersPage(userOrdersPage + 1);
+});
 
 on('submitOrderClaimBtn', 'click', async () => {
   const platform = document.getElementById('claimPlatform')?.value || 'shopee';
@@ -1330,10 +1432,58 @@ on('submitOrderClaimBtn', 'click', async () => {
   } finally {
     if (btn) {
       btn.disabled = false;
-      btn.textContent = 'Gửi Mã Đơn Hàng';
+      btn.textContent = 'Lưu đơn';
     }
   }
 });
+
+function askUserConfirm(message, title = 'Xác Nhận Yêu Cầu') {
+  const modal = document.getElementById('confirmActionModal');
+  const titleEl = document.getElementById('confirmModalTitle');
+  const msgEl = document.getElementById('confirmModalMessage');
+  const okBtn = document.getElementById('confirmModalOkBtn');
+  const cancelBtn = document.getElementById('confirmModalCancelBtn');
+  const closeBtn = document.getElementById('closeConfirmModalBtn');
+
+  if (!modal || !msgEl || !okBtn || !cancelBtn) {
+    return Promise.resolve(typeof confirm === 'function' ? confirm(message) : true);
+  }
+
+  return new Promise((resolve) => {
+    if (titleEl) titleEl.textContent = title;
+    msgEl.textContent = message;
+    modal.classList.remove('hidden');
+
+    let settled = false;
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      modal.classList.add('hidden');
+      okBtn.removeEventListener('click', onOk);
+      cancelBtn.removeEventListener('click', onCancel);
+      closeBtn?.removeEventListener('click', onCancel);
+      modal.removeEventListener('click', onBackdrop);
+      document?.removeEventListener('keydown', onEsc);
+      resolve(result);
+    };
+
+    const onOk = () => finish(true);
+    const onCancel = () => finish(false);
+    const onBackdrop = (e) => {
+      if (e.target === modal) finish(false);
+    };
+    const onEsc = (e) => {
+      if (e.key === 'Escape') finish(false);
+    };
+
+    okBtn.addEventListener('click', onOk);
+    cancelBtn.addEventListener('click', onCancel);
+    closeBtn?.addEventListener('click', onCancel);
+    modal.addEventListener('click', onBackdrop);
+    document?.addEventListener('keydown', onEsc);
+    okBtn.focus?.();
+  });
+}
 
 on('submitWithdrawBtn', 'click', async () => {
   const method = document.getElementById('wdMethod')?.value || 'bank';
@@ -1364,10 +1514,11 @@ on('submitWithdrawBtn', 'click', async () => {
     return;
   }
 
-  const ok = confirm(
-    `XÁC NHẬN YÊU CẦU RÚT TIỀN:\n\n• Số tiền: ${fmtVnd(
+  const ok = await askUserConfirm(
+    `• Số tiền: ${fmtVnd(
       amount
-    )}\n• Ngân hàng: ${bankName}\n• Số tài khoản: ${bankAccount}\n• Chủ tài khoản: ${bankOwner}\n\nBạn có chắc chắn muốn gửi yêu cầu rút tiền này không?`
+    )}\n• Ngân hàng: ${bankName}\n• Số tài khoản: ${bankAccount}\n• Chủ tài khoản: ${bankOwner}\n\nBạn có chắc chắn muốn gửi yêu cầu rút tiền này không?`,
+    'Xác Nhận Yêu Cầu Rút Tiền'
   );
   if (!ok) return;
 
@@ -1480,6 +1631,248 @@ function loadAdminSettings(settings) {
   }
 }
 
+const ADMIN_PAGE_LIMIT = 50;
+let adminOrdersPage = 1;
+let adminOrdersTotalPages = 1;
+let adminUsersPage = 1;
+let adminUsersTotalPages = 1;
+let adminWithdrawalsPage = 1;
+let adminWithdrawalsTotalPages = 1;
+let latestAdminWithdrawals = [];
+
+function updateAdminPaginationUi({ infoId, prevBtnId, nextBtnId, pagination, fallbackTotal, itemLabel }) {
+  const page = Math.max(1, Number(pagination?.page) || 1);
+  const total = Number.isFinite(Number(pagination?.total)) ? Number(pagination.total) : fallbackTotal;
+  const totalPages = Math.max(1, Number(pagination?.totalPages) || 1);
+  const infoEl = document.getElementById(infoId);
+  if (infoEl) {
+    infoEl.textContent = `Trang ${page} / ${totalPages} (${total} ${itemLabel})`;
+  }
+  const prevBtn = document.getElementById(prevBtnId);
+  if (prevBtn) prevBtn.disabled = page <= 1;
+  const nextBtn = document.getElementById(nextBtnId);
+  if (nextBtn) nextBtn.disabled = page >= totalPages;
+  return { page, totalPages };
+}
+
+function renderAdminOrdersTable(orders) {
+  const ordTbody = document.getElementById('admOrdersTableBody');
+  if (!ordTbody) return;
+  if (!Array.isArray(orders) || orders.length === 0) {
+    ordTbody.innerHTML =
+      '<tr><td colspan="8" class="text-center">Chưa có đơn hàng nào.</td></tr>';
+    return;
+  }
+  ordTbody.innerHTML = orders
+    .map((o) => {
+      const ordKey = escapeHtml(o.id || o.orderSn);
+      const ordSnEsc = escapeHtml(o.orderSn);
+      const actionButtons =
+        o.status === 'pending'
+          ? `<button type="button" class="btn btn-success btn-xs" data-ord-action="approve" data-ord-id="${ordKey}" data-ord-sn="${ordSnEsc}" title="Duyệt đơn và cộng tiền hoàn vào ví khách">Duyệt</button>
+             <button type="button" class="btn btn-warning btn-xs" data-ord-action="cancel" data-ord-id="${ordKey}" data-ord-sn="${ordSnEsc}" title="Hủy đơn này">Hủy</button>
+             <button type="button" class="btn btn-outline btn-xs" data-ord-action="edit" data-ord-id="${ordKey}" data-ord-sn="${ordSnEsc}" title="Chỉnh sửa chi tiết & số tiền hoàn">Sửa</button>
+             <button type="button" class="btn btn-ghost btn-xs text-danger" data-ord-action="delete" data-ord-id="${ordKey}" data-ord-sn="${ordSnEsc}" title="Xóa vĩnh viễn đơn này">Xóa</button>`
+          : o.status === 'approved'
+          ? `<button type="button" class="btn btn-secondary btn-xs" data-ord-action="unapprove" data-ord-id="${ordKey}" data-ord-sn="${ordSnEsc}" title="Hủy duyệt và thu hồi tiền hoàn về chờ duyệt">↩️ Hủy duyệt</button>
+             <button type="button" class="btn btn-warning btn-xs" data-ord-action="cancel" data-ord-id="${ordKey}" data-ord-sn="${ordSnEsc}" title="Hủy đơn này">Hủy</button>
+             <button type="button" class="btn btn-outline btn-xs" data-ord-action="edit" data-ord-id="${ordKey}" data-ord-sn="${ordSnEsc}" title="Chỉnh sửa">Sửa</button>
+             <button type="button" class="btn btn-ghost btn-xs text-danger" data-ord-action="delete" data-ord-id="${ordKey}" data-ord-sn="${ordSnEsc}" title="Xóa vĩnh viễn">Xóa</button>`
+          : `<button type="button" class="btn btn-outline btn-xs" data-ord-action="reopen" data-ord-id="${ordKey}" data-ord-sn="${ordSnEsc}" title="Khôi phục về trạng thái chờ duyệt">Khôi phục</button>
+             <button type="button" class="btn btn-outline btn-xs" data-ord-action="edit" data-ord-id="${ordKey}" data-ord-sn="${ordSnEsc}" title="Chỉnh sửa">Sửa</button>
+             <button type="button" class="btn btn-ghost btn-xs text-danger" data-ord-action="delete" data-ord-id="${ordKey}" data-ord-sn="${ordSnEsc}" title="Xóa vĩnh viễn">Xóa</button>`;
+
+      const dt = o.createdAt ? new Date(o.createdAt).toLocaleDateString('vi-VN') : '—';
+      const stCls = getStatusClass(o.status);
+      return `
+        <tr>
+          <td>${dt}</td>
+          <td><strong>${ordSnEsc}</strong></td>
+          <td><span style="font-weight:600;color:#2563eb;">${escapeHtml(
+            o.userCode || 'GUEST'
+          )}</span></td>
+          <td>${escapeHtml(o.productName)}</td>
+          <td><strong>${fmtVnd(o.grossCommission || o.totalCommission)}</strong></td>
+          <td><strong style="color:#059669;">${fmtVnd(o.userCashbackAmount)}</strong></td>
+          <td><span class="status-badge ${stCls}">${escapeHtml(o.status)}</span></td>
+          <td><div style="display:flex;gap:6px;flex-wrap:wrap;">${actionButtons}</div></td>
+        </tr>
+      `;
+    })
+    .join('');
+}
+
+function renderAdminUsersTable(users) {
+  const userTbody = document.getElementById('admUsersTableBody');
+  if (!userTbody) return;
+  if (!Array.isArray(users) || users.length === 0) {
+    userTbody.innerHTML =
+      '<tr><td colspan="6" class="text-center">Chưa có người dùng nào.</td></tr>';
+    return;
+  }
+  userTbody.innerHTML = users
+    .map((u) => {
+      const lockBadge = u.accountLocked
+        ? '<span class="status-badge st-cancelled">Đã khóa</span>'
+        : '<span class="status-badge st-approved">Hoạt động</span>';
+      return `
+        <tr>
+          <td><strong>${escapeHtml(u.code)}</strong></td>
+          <td>
+            <div>${escapeHtml(u.name || 'Chưa cập nhật')}</div>
+            <div style="font-size:12px;color:#64748b;">${escapeHtml(u.phone)}</div>
+          </td>
+          <td><strong style="color:#059669;">${fmtVnd(u.balanceAvailable)}</strong></td>
+          <td>${fmtVnd(u.balancePending)}</td>
+          <td>${lockBadge}</td>
+          <td>
+            <button type="button" class="btn btn-outline btn-xs" data-manage-user="${escapeHtml(
+              u.id
+            )}">Quản lý</button>
+          </td>
+        </tr>
+      `;
+    })
+    .join('');
+}
+
+async function loadAdminOrdersPage(page = 1) {
+  try {
+    const q = document.getElementById('admOrderSearchInput')?.value?.trim() || '';
+    const status = document.getElementById('admOrderStatusFilter')?.value?.trim() || '';
+    const params = new URLSearchParams({
+      page: String(Math.max(1, Number(page) || 1)),
+      limit: String(ADMIN_PAGE_LIMIT)
+    });
+    if (q) params.set('q', q);
+    if (status) params.set('status', status);
+    const data = await apiFetch('/api/admin/orders?' + params.toString());
+    latestAdminOrders = data.orders || [];
+    renderAdminOrdersTable(latestAdminOrders);
+    const state = updateAdminPaginationUi({
+      infoId: 'admOrdersPageInfo',
+      prevBtnId: 'admOrdersPrevBtn',
+      nextBtnId: 'admOrdersNextBtn',
+      pagination: data.pagination,
+      fallbackTotal: latestAdminOrders.length,
+      itemLabel: 'đơn'
+    });
+    adminOrdersPage = state.page;
+    adminOrdersTotalPages = state.totalPages;
+  } catch (err) {
+    showToast(err.message);
+  }
+}
+
+async function loadAdminUsersPage(page = 1) {
+  try {
+    const q = document.getElementById('admUserSearchInput')?.value?.trim() || '';
+    const params = new URLSearchParams({
+      page: String(Math.max(1, Number(page) || 1)),
+      limit: String(ADMIN_PAGE_LIMIT)
+    });
+    if (q) params.set('q', q);
+    const data = await apiFetch('/api/admin/users?' + params.toString());
+    latestAdminUsers = data.users || [];
+    renderAdminUsersTable(latestAdminUsers);
+    const state = updateAdminPaginationUi({
+      infoId: 'admUsersPageInfo',
+      prevBtnId: 'admUsersPrevBtn',
+      nextBtnId: 'admUsersNextBtn',
+      pagination: data.pagination,
+      fallbackTotal: latestAdminUsers.length,
+      itemLabel: 'tài khoản'
+    });
+    adminUsersPage = state.page;
+    adminUsersTotalPages = state.totalPages;
+  } catch (err) {
+    showToast(err.message);
+  }
+}
+
+function renderAdminWithdrawalsTable(withdrawals) {
+  const wdTbody = document.getElementById('admWithdrawalsTableBody');
+  if (!wdTbody) return;
+  if (!Array.isArray(withdrawals) || withdrawals.length === 0) {
+    wdTbody.innerHTML =
+      '<tr><td colspan="6" class="text-center">Chưa có lệnh rút tiền nào.</td></tr>';
+    return;
+  }
+  wdTbody.innerHTML = withdrawals
+    .map((w) => {
+      const qrBtnHtml = w.vietQrUrl
+        ? `<button type="button" class="btn btn-outline btn-xs" data-vietqr="${escapeHtml(
+            w.vietQrUrl
+          )}" data-vietqr-info="Chuyển ${fmtVnd(w.amount)} tới ${escapeHtml(
+            w.bankName
+          )} - ${escapeHtml(w.bankAccount)} (${escapeHtml(
+            w.bankOwner
+          )})" style="background:#eff6ff;color:#1e40af;border-color:#bfdbfe;">📱 Mã QR Chuyển Tiền</button>`
+        : '';
+
+      const wdActions =
+        w.status === 'pending'
+          ? `<button type="button" class="btn btn-success btn-xs" data-wd-action="paid" data-wd-id="${escapeHtml(
+              w.id
+            )}">Đã chuyển</button>
+             <button type="button" class="btn btn-danger btn-xs" data-wd-action="rejected" data-wd-id="${escapeHtml(
+               w.id
+             )}">Từ chối</button>
+             <button type="button" class="btn btn-ghost btn-xs text-danger" data-wd-delete="${escapeHtml(
+               w.id
+             )}">Hủy</button>`
+          : '<span style="color:#94a3b8;font-size:12px;">—</span>';
+
+      const dt = w.createdAt ? new Date(w.createdAt).toLocaleDateString('vi-VN') : '—';
+      const stCls = getStatusClass(w.status);
+      return `
+        <tr>
+          <td>${dt}</td>
+          <td><strong>${escapeHtml(w.userCode || w.userId)}</strong></td>
+          <td><strong style="color:#059669;">${fmtVnd(w.amount)}</strong></td>
+          <td>
+            <div>${escapeHtml(w.bankName)} - <strong>${escapeHtml(
+        w.bankAccount
+      )}</strong></div>
+            <div style="font-size:12px;color:#64748b;">${escapeHtml(w.bankOwner)}</div>
+            <div style="margin-top:4px;">${qrBtnHtml}</div>
+          </td>
+          <td><span class="status-badge ${stCls}">${escapeHtml(w.status)}</span></td>
+          <td><div style="display:flex;gap:6px;flex-wrap:wrap;">${wdActions}</div></td>
+        </tr>
+      `;
+    })
+    .join('');
+}
+
+async function loadAdminWithdrawalsPage(page = 1) {
+  try {
+    const q = document.getElementById('admWithdrawalSearchInput')?.value?.trim() || '';
+    const status = document.getElementById('admWithdrawalStatusFilter')?.value?.trim() || '';
+    const params = new URLSearchParams({
+      page: String(Math.max(1, Number(page) || 1)),
+      limit: String(ADMIN_PAGE_LIMIT)
+    });
+    if (q) params.set('q', q);
+    if (status) params.set('status', status);
+    const data = await apiFetch('/api/admin/withdrawals?' + params.toString());
+    latestAdminWithdrawals = data.withdrawals || [];
+    renderAdminWithdrawalsTable(latestAdminWithdrawals);
+    const state = updateAdminPaginationUi({
+      infoId: 'admWithdrawalsPageInfo',
+      prevBtnId: 'admWithdrawalsPrevBtn',
+      nextBtnId: 'admWithdrawalsNextBtn',
+      pagination: data.pagination,
+      fallbackTotal: latestAdminWithdrawals.length,
+      itemLabel: 'lệnh rút'
+    });
+    adminWithdrawalsPage = state.page;
+    adminWithdrawalsTotalPages = state.totalPages;
+  } catch (err) {
+    showToast(err.message);
+  }
+}
+
 async function loadAdminDashboard() {
   try {
     const data = await apiFetch('/api/admin/dashboard');
@@ -1488,6 +1881,50 @@ async function loadAdminDashboard() {
     currentAdminSettings = s;
     latestAdminOrders = data.orders || [];
     latestAdminUsers = data.users || [];
+    latestAdminWithdrawals = data.withdrawals || [];
+    const dashPag = data.pagination || {};
+    const ordPagState = updateAdminPaginationUi({
+      infoId: 'admOrdersPageInfo',
+      prevBtnId: 'admOrdersPrevBtn',
+      nextBtnId: 'admOrdersNextBtn',
+      pagination: data.ordersPagination || (dashPag.ordersTotalPages ? {
+        page: dashPag.page || 1,
+        total: dashPag.totalOrders,
+        totalPages: dashPag.ordersTotalPages
+      } : null),
+      fallbackTotal: latestAdminOrders.length,
+      itemLabel: 'đơn'
+    });
+    adminOrdersPage = ordPagState.page;
+    adminOrdersTotalPages = ordPagState.totalPages;
+    const wdPagState = updateAdminPaginationUi({
+      infoId: 'admWithdrawalsPageInfo',
+      prevBtnId: 'admWithdrawalsPrevBtn',
+      nextBtnId: 'admWithdrawalsNextBtn',
+      pagination: data.withdrawalsPagination || (dashPag.withdrawalsTotalPages ? {
+        page: dashPag.page || 1,
+        total: dashPag.totalWithdrawals,
+        totalPages: dashPag.withdrawalsTotalPages
+      } : null),
+      fallbackTotal: latestAdminWithdrawals.length,
+      itemLabel: 'lệnh rút'
+    });
+    adminWithdrawalsPage = wdPagState.page;
+    adminWithdrawalsTotalPages = wdPagState.totalPages;
+    const usrPagState = updateAdminPaginationUi({
+      infoId: 'admUsersPageInfo',
+      prevBtnId: 'admUsersPrevBtn',
+      nextBtnId: 'admUsersNextBtn',
+      pagination: data.usersPagination || (dashPag.usersTotalPages ? {
+        page: dashPag.page || 1,
+        total: dashPag.totalUsers,
+        totalPages: dashPag.usersTotalPages
+      } : null),
+      fallbackTotal: latestAdminUsers.length,
+      itemLabel: 'tài khoản'
+    });
+    adminUsersPage = usrPagState.page;
+    adminUsersTotalPages = usrPagState.totalPages;
     const dbStatus = data.dbStatus || {};
 
     const dbTextEl = document.getElementById('admDbStatusText');
@@ -1518,147 +1955,62 @@ async function loadAdminDashboard() {
     loadAdminSettings(s);
 
     // Orders Table
-    const ordTbody = document.getElementById('admOrdersTableBody');
-    if (ordTbody) {
-      if (latestAdminOrders.length === 0) {
-        ordTbody.innerHTML =
-          '<tr><td colspan="7" class="text-center">Chưa có đơn hàng nào.</td></tr>';
-      } else {
-        ordTbody.innerHTML = latestAdminOrders
-          .map((o) => {
-            const ordKey = escapeHtml(o.id || o.orderSn);
-            const ordSnEsc = escapeHtml(o.orderSn);
-            const actionButtons =
-              o.status === 'pending'
-                ? `<button type="button" class="btn btn-success btn-xs" data-ord-action="approve" data-ord-id="${ordKey}" data-ord-sn="${ordSnEsc}" title="Duyệt đơn và cộng tiền hoàn vào ví khách">Duyệt</button>
-                   <button type="button" class="btn btn-warning btn-xs" data-ord-action="cancel" data-ord-id="${ordKey}" data-ord-sn="${ordSnEsc}" title="Hủy đơn này">Hủy</button>
-                   <button type="button" class="btn btn-outline btn-xs" data-ord-action="edit" data-ord-id="${ordKey}" data-ord-sn="${ordSnEsc}" title="Chỉnh sửa chi tiết & số tiền hoàn">Sửa</button>
-                   <button type="button" class="btn btn-ghost btn-xs text-danger" data-ord-action="delete" data-ord-id="${ordKey}" data-ord-sn="${ordSnEsc}" title="Xóa vĩnh viễn đơn này">Xóa</button>`
-                : o.status === 'approved'
-                ? `<button type="button" class="btn btn-secondary btn-xs" data-ord-action="unapprove" data-ord-id="${ordKey}" data-ord-sn="${ordSnEsc}" title="Hủy duyệt và thu hồi tiền hoàn về chờ duyệt">↩️ Hủy duyệt</button>
-                   <button type="button" class="btn btn-warning btn-xs" data-ord-action="cancel" data-ord-id="${ordKey}" data-ord-sn="${ordSnEsc}" title="Hủy đơn này">Hủy</button>
-                   <button type="button" class="btn btn-outline btn-xs" data-ord-action="edit" data-ord-id="${ordKey}" data-ord-sn="${ordSnEsc}" title="Chỉnh sửa">Sửa</button>
-                   <button type="button" class="btn btn-ghost btn-xs text-danger" data-ord-action="delete" data-ord-id="${ordKey}" data-ord-sn="${ordSnEsc}" title="Xóa vĩnh viễn">Xóa</button>`
-                : `<button type="button" class="btn btn-outline btn-xs" data-ord-action="reopen" data-ord-id="${ordKey}" data-ord-sn="${ordSnEsc}" title="Khôi phục về trạng thái chờ duyệt">Khôi phục</button>
-                   <button type="button" class="btn btn-outline btn-xs" data-ord-action="edit" data-ord-id="${ordKey}" data-ord-sn="${ordSnEsc}" title="Chỉnh sửa">Sửa</button>
-                   <button type="button" class="btn btn-ghost btn-xs text-danger" data-ord-action="delete" data-ord-id="${ordKey}" data-ord-sn="${ordSnEsc}" title="Xóa vĩnh viễn">Xóa</button>`;
-
-            const dt = o.createdAt ? new Date(o.createdAt).toLocaleDateString('vi-VN') : '—';
-            const stCls = getStatusClass(o.status);
-            return `
-              <tr>
-                <td>${dt}</td>
-                <td><strong>${ordSnEsc}</strong></td>
-                <td><span style="font-weight:600;color:#2563eb;">${escapeHtml(
-                  o.userCode || 'GUEST'
-                )}</span></td>
-                <td>${escapeHtml(o.productName)}</td>
-                <td><strong>${fmtVnd(o.grossCommission || o.totalCommission)}</strong></td>
-                <td><strong style="color:#059669;">${fmtVnd(o.userCashbackAmount)}</strong></td>
-                <td><span class="status-badge ${stCls}">${escapeHtml(o.status)}</span></td>
-                <td><div style="display:flex;gap:6px;flex-wrap:wrap;">${actionButtons}</div></td>
-              </tr>
-            `;
-          })
-          .join('');
-      }
-    }
+    renderAdminOrdersTable(latestAdminOrders);
 
     // Withdrawals Table
-    const wdTbody = document.getElementById('admWithdrawalsTableBody');
-    const wds = data.withdrawals || [];
-    if (wdTbody) {
-      if (wds.length === 0) {
-        wdTbody.innerHTML =
-          '<tr><td colspan="6" class="text-center">Chưa có lệnh rút tiền nào.</td></tr>';
-      } else {
-        wdTbody.innerHTML = wds
-          .map((w) => {
-            const qrBtnHtml = w.vietQrUrl
-              ? `<button type="button" class="btn btn-outline btn-xs" data-vietqr="${escapeHtml(
-                  w.vietQrUrl
-                )}" data-vietqr-info="Chuyển ${fmtVnd(w.amount)} tới ${escapeHtml(
-                  w.bankName
-                )} - ${escapeHtml(w.bankAccount)} (${escapeHtml(
-                  w.bankOwner
-                )})" style="background:#eff6ff;color:#1e40af;border-color:#bfdbfe;">📱 Mã QR Chuyển Tiền</button>`
-              : '';
-
-            const wdActions =
-              w.status === 'pending'
-                ? `<button type="button" class="btn btn-success btn-xs" data-wd-action="paid" data-wd-id="${escapeHtml(
-                    w.id
-                  )}">Đã chuyển</button>
-                   <button type="button" class="btn btn-danger btn-xs" data-wd-action="rejected" data-wd-id="${escapeHtml(
-                     w.id
-                   )}">Từ chối</button>
-                   <button type="button" class="btn btn-ghost btn-xs text-danger" data-wd-delete="${escapeHtml(
-                     w.id
-                   )}">Hủy</button>`
-                : '<span style="color:#94a3b8;font-size:12px;">—</span>';
-
-            const dt = w.createdAt ? new Date(w.createdAt).toLocaleDateString('vi-VN') : '—';
-            const stCls = getStatusClass(w.status);
-            return `
-              <tr>
-                <td>${dt}</td>
-                <td><strong>${escapeHtml(w.userCode || w.userId)}</strong></td>
-                <td><strong style="color:#059669;">${fmtVnd(w.amount)}</strong></td>
-                <td>
-                  <div>${escapeHtml(w.bankName)} - <strong>${escapeHtml(
-              w.bankAccount
-            )}</strong></div>
-                  <div style="font-size:12px;color:#64748b;">${escapeHtml(w.bankOwner)}</div>
-                  <div style="margin-top:4px;">${qrBtnHtml}</div>
-                </td>
-                <td><span class="status-badge ${stCls}">${escapeHtml(w.status)}</span></td>
-                <td><div style="display:flex;gap:6px;flex-wrap:wrap;">${wdActions}</div></td>
-              </tr>
-            `;
-          })
-          .join('');
-      }
-    }
+    renderAdminWithdrawalsTable(latestAdminWithdrawals);
 
     // Users Table
-    const userTbody = document.getElementById('admUsersTableBody');
-    if (userTbody) {
-      if (latestAdminUsers.length === 0) {
-        userTbody.innerHTML =
-          '<tr><td colspan="6" class="text-center">Chưa có người dùng nào.</td></tr>';
-      } else {
-        userTbody.innerHTML = latestAdminUsers
-          .map((u) => {
-            const lockBadge = u.accountLocked
-              ? '<span class="status-badge st-cancelled">Đã khóa</span>'
-              : '<span class="status-badge st-approved">Hoạt động</span>';
-            return `
-              <tr>
-                <td><strong>${escapeHtml(u.code)}</strong></td>
-                <td>
-                  <div>${escapeHtml(u.name || 'Chưa cập nhật')}</div>
-                  <div style="font-size:12px;color:#64748b;">${escapeHtml(u.phone)}</div>
-                </td>
-                <td><strong style="color:#059669;">${fmtVnd(u.balanceAvailable)}</strong></td>
-                <td>${fmtVnd(u.balancePending)}</td>
-                <td>${lockBadge}</td>
-                <td>
-                  <button type="button" class="btn btn-outline btn-xs" data-manage-user="${escapeHtml(
-                    u.id
-                  )}">Quản lý</button>
-                </td>
-              </tr>
-            `;
-          })
-          .join('');
-      }
-    }
+    renderAdminUsersTable(latestAdminUsers);
   } catch (err) {
     showToast(err.message);
   }
 }
 
 on('refreshAdminBtn', 'click', loadAdminDashboard);
+on('admOrderSearchBtn', 'click', () => loadAdminOrdersPage(1));
+on('admOrderSearchInput', 'keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    loadAdminOrdersPage(1);
+  }
+});
+on('admOrderStatusFilter', 'change', () => loadAdminOrdersPage(1));
+on('admOrdersPrevBtn', 'click', () => {
+  if (adminOrdersPage > 1) loadAdminOrdersPage(adminOrdersPage - 1);
+});
+on('admOrdersNextBtn', 'click', () => {
+  if (adminOrdersPage < adminOrdersTotalPages) loadAdminOrdersPage(adminOrdersPage + 1);
+});
+
+on('admUserSearchBtn', 'click', () => loadAdminUsersPage(1));
+on('admUserSearchInput', 'keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    loadAdminUsersPage(1);
+  }
+});
+on('admUsersPrevBtn', 'click', () => {
+  if (adminUsersPage > 1) loadAdminUsersPage(adminUsersPage - 1);
+});
+on('admUsersNextBtn', 'click', () => {
+  if (adminUsersPage < adminUsersTotalPages) loadAdminUsersPage(adminUsersPage + 1);
+});
+
+on('admWithdrawalSearchBtn', 'click', () => loadAdminWithdrawalsPage(1));
+on('admWithdrawalSearchInput', 'keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    loadAdminWithdrawalsPage(1);
+  }
+});
+on('admWithdrawalStatusFilter', 'change', () => loadAdminWithdrawalsPage(1));
+on('admWithdrawalsPrevBtn', 'click', () => {
+  if (adminWithdrawalsPage > 1) loadAdminWithdrawalsPage(adminWithdrawalsPage - 1);
+});
+on('admWithdrawalsNextBtn', 'click', () => {
+  if (adminWithdrawalsPage < adminWithdrawalsTotalPages) loadAdminWithdrawalsPage(adminWithdrawalsPage + 1);
+});
 
 on('syncShopeeNowBtn', 'click', async () => {
   const btn = document.getElementById('syncShopeeNowBtn');
@@ -2023,9 +2375,15 @@ on('closeUserManageModalBtn', 'click', () => {
 
 on('btnGenerateRandomPwd', 'click', () => {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%';
+  if (!window.crypto || typeof window.crypto.getRandomValues !== 'function') {
+    showToast('Trình duyệt không hỗ trợ tạo mật khẩu an toàn.');
+    return;
+  }
+  const rand = new Uint32Array(12);
+  window.crypto.getRandomValues(rand);
   let pwd = '';
   for (let i = 0; i < 12; i++) {
-    pwd += chars.charAt(Math.floor(Math.random() * chars.length));
+    pwd += chars.charAt(rand[i] % chars.length);
   }
   const input = document.getElementById('manageNewPassword');
   if (input) {
@@ -2651,32 +3009,17 @@ setTimeout(() => {
 
 // ================= BOOTSTRAP INITIALIZATION =================
 async function initBoot() {
-  await initPublicConfig();
   syncAuthUi();
 
-  if (authToken) {
-    try {
-      const data = await apiFetch('/api/user/me');
-      if (data?.user) {
-        currentUser = data.user;
-        safeStorage.set(
-          USER_KEY,
-          JSON.stringify({
-            code: currentUser.code,
-            name: currentUser.name,
-            role: currentUser.role
-          })
-        );
-        syncAuthUi();
-      }
-    } catch {}
-    loadUserDashboard();
-  }
+  await Promise.all([
+    initPublicConfig(),
+    authToken ? loadUserDashboard() : Promise.resolve()
+  ]);
 
   // Restore view from URL hash on load (support both guide and faq routes)
   const initialHash = window.location.hash.replace('#', '');
   if (initialHash && ['home', 'wallet', 'admin', 'guide', 'faq', 'terms'].includes(initialHash)) {
-    switchView(initialHash, false);
+    switchView(initialHash, false, { skipReload: initialHash === 'wallet' });
   }
 }
 
@@ -2690,7 +3033,8 @@ if (typeof document !== 'undefined') {
         'orderEditModal',
         'vietQrModal',
         'refQrModal',
-        'pwaGuideModal'
+        'pwaGuideModal',
+        'confirmActionModal'
       ];
       for (const mId of modalIds) {
         const el = document.getElementById(mId);

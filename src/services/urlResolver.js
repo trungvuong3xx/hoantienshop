@@ -149,10 +149,65 @@ function normalizeHost(host) {
   return host.toLowerCase().trim().replace(/:\d+$/, '');
 }
 
+const ALLOWED_AFFILIATE_REDIRECT_HOSTS = new Set([
+  'go.isclix.com',
+  'is.gd',
+  'tinyurl.com',
+  's.shopee.vn',
+  'shp.ee',
+  'vt.tiktok.com',
+  'vm.tiktok.com'
+]);
+
 function isAllowedHost(hostname) {
   const h = normalizeHost(hostname);
   if (!h) return false;
   return ALL_ALLOWED_HOSTS.has(h);
+}
+
+/**
+ * Validates outbound /go/:clickId redirect URLs (Shopee/TikTok hosts, trusted shorteners & AccessTrade deeplinks).
+ */
+function isAllowedAffiliateRedirectUrl(rawUrl, customTemplateUrl = '') {
+  logger.logEnter('isAllowedAffiliateRedirectUrl', { url: sanitizeUrlForLog(rawUrl) });
+  if (!rawUrl || typeof rawUrl !== 'string') {
+    logger.logLeave('isAllowedAffiliateRedirectUrl', { allowed: false, reason: 'empty' });
+    return false;
+  }
+  try {
+    const parsed = new URL(rawUrl.trim());
+    if (parsed.protocol !== 'https:' || parsed.username || parsed.password) {
+      logger.logLeave('isAllowedAffiliateRedirectUrl', { allowed: false, reason: 'protocol_or_auth' });
+      return false;
+    }
+    const hostname = normalizeHost(parsed.hostname);
+    if (!hostname) {
+      logger.logLeave('isAllowedAffiliateRedirectUrl', { allowed: false, reason: 'empty_host' });
+      return false;
+    }
+
+    if (isAllowedHost(hostname) || ALLOWED_AFFILIATE_REDIRECT_HOSTS.has(hostname)) {
+      logger.logLeave('isAllowedAffiliateRedirectUrl', { allowed: true, host: hostname });
+      return true;
+    }
+
+    if (customTemplateUrl && typeof customTemplateUrl === 'string') {
+      try {
+        const tplParsed = new URL(customTemplateUrl.trim());
+        const tplHost = normalizeHost(tplParsed.hostname);
+        if (tplParsed.protocol === 'https:' && tplHost && hostname === tplHost) {
+          logger.logLeave('isAllowedAffiliateRedirectUrl', { allowed: true, customTemplateHost: tplHost });
+          return true;
+        }
+      } catch {}
+    }
+
+    logger.logLeave('isAllowedAffiliateRedirectUrl', { allowed: false, host: hostname });
+    return false;
+  } catch {
+    logger.logLeave('isAllowedAffiliateRedirectUrl', { allowed: false, reason: 'parse_error' });
+    return false;
+  }
 }
 
 function isAllowedCdnImage(urlStr) {
@@ -1090,6 +1145,7 @@ module.exports = {
   cleanShopeeUrl,
   cleanTikTokUrl,
   isAllowedHost,
+  isAllowedAffiliateRedirectUrl,
   isAllowedCdnImage,
   isPrivateIp,
   safeDecode,

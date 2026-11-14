@@ -26,7 +26,10 @@ const TEST_SUITES = [
   'test_zalo_safety_faq.js',
   'test_url_resolver.js',
   'test_audit_round2.js',
-  'test_manual_checklist_simulation.js'
+  'test_manual_checklist_simulation.js',
+  'test_due_diligence_fixes.js',
+  'test_phase2_phase3_due_diligence.js',
+  'test_mobile_first_and_ux_upgrade.js'
 ];
 
 async function runAllTests() {

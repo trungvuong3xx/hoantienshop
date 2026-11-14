@@ -7,6 +7,8 @@ const {
   initPostgresIfConfigured,
   hashPassword,
   verifyPassword,
+  hashPasswordAsync,
+  verifyPasswordAsync,
   calculateCommissionSplit,
   recalculateUserWallet,
   recalculateAllWallets,
@@ -33,17 +35,19 @@ const {
 const { fetchAccessTradeOrders } = require('./tiktokService');
 const {
   isAllowedHost,
+  isAllowedAffiliateRedirectUrl,
   safeResolve,
   detectPlatform,
   cleanShopeeUrl,
   cleanTikTokUrl,
   extractUrlsFromText
-} = require('./urlResolver');
+} = require('../utils/urlResolver');
 const {
   getClientIp,
   createRateLimiter,
   verifyTurnstileIfEnabled,
-  buildVietQrImageUrl
+  buildVietQrImageUrl,
+  createCsrfGuard
 } = require('../utils/securityMiddleware');
 const { cleanExpiredClicks } = require('../utils/clickManager');
 const {
@@ -52,6 +56,24 @@ const {
   normalizeZaloTarget,
   migrateZaloSettings
 } = require('../utils/zalo');
+const {
+  ALLOWED_ORDER_TRANSITIONS,
+  parseTimestamp,
+  canTransitionOrderStatus,
+  sanitizeOrderForUser,
+  normalizeNetworkStatus,
+  sanitizeFiniteNumber,
+  parseShopeeReportNodes
+} = require('./orderReconciliationService');
+const {
+  getConfiguredPostbackToken,
+  verifyWebhookRequest
+} = require('./webhookSecurityService');
+const {
+  queryOrdersPaginated,
+  queryUsersPaginated,
+  queryWithdrawalsPaginated
+} = require('../repositories/postgresRepository');
 
 class AppError extends Error {
   constructor(status, publicMessage) {
@@ -65,74 +87,6 @@ class AppError extends Error {
 
 const asyncHandler = (fn) => (req, res, next) =>
   Promise.resolve(fn(req, res, next)).catch(next);
-
-const ALLOWED_ORDER_TRANSITIONS = {
-  pending: ['approved', 'cancelled'],
-  approved: ['cancelled'],
-  cancelled: ['approved']
-};
-
-function parseTimestamp(val) {
-  if (!val) return 0;
-  if (typeof val === 'number') {
-    if (!Number.isFinite(val)) return 0;
-    return val < 1e11 ? val * 1000 : val;
-  }
-  if (val instanceof Date) {
-    const t = val.getTime();
-    return Number.isFinite(t) ? t : 0;
-  }
-  const str = String(val).trim();
-  const num = Number(str);
-  if (Number.isFinite(num) && !str.includes('-') && !str.includes('T')) {
-    return num < 1e11 ? num * 1000 : num;
-  }
-  const parsed = new Date(str).getTime();
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
-function canTransitionOrderStatus(from, to, { fromEventTime = 0, currentStatusUpdatedAt = 0 } = {}) {
-  if (!from) return true;
-  if (from === to) return true;
-  const allowed = Boolean(ALLOWED_ORDER_TRANSITIONS[from]?.includes(to));
-  if (!allowed) {
-    logger.warning('canTransitionOrderStatus', 'Bỏ qua chuyển đổi trạng thái không hợp lệ', {
-      from,
-      to
-    });
-    return false;
-  }
-  if (fromEventTime && currentStatusUpdatedAt && fromEventTime < currentStatusUpdatedAt) {
-    logger.warning('canTransitionOrderStatus', 'Bỏ qua sự kiện cũ hơn trạng thái hiện tại', {
-      from,
-      to,
-      fromEventTime,
-      currentStatusUpdatedAt
-    });
-    return false;
-  }
-  return true;
-}
-
-function sanitizeOrderForUser(o) {
-  if (!o) return null;
-  return {
-    id: o.id,
-    orderSn: o.orderSn,
-    platform: o.platform,
-    productName: o.productName,
-    orderAmount: o.orderAmount,
-    cashbackRate: o.cashbackRate,
-    userCashbackAmount: o.userCashbackAmount,
-    status: o.status,
-    claimPending: Boolean(o.claimPending),
-    claimVerified: Boolean(o.claimVerified),
-    claimRejected: Boolean(o.claimRejected),
-    claimRejectReason: o.claimRejectReason || null,
-    createdAt: o.createdAt,
-    updatedAt: o.updatedAt
-  };
-}
 
 let activeResolves = 0;
 const MAX_CONCURRENT_RESOLVES = 5;
@@ -238,51 +192,6 @@ function generateUserCode(phone, existingUsers) {
 function maskSecret(val) {
   if (!val || typeof val !== 'string' || !val.trim()) return '';
   return '***';
-}
-
-function normalizeNetworkStatus(rawStatus) {
-  const s = String(rawStatus ?? '').trim().toUpperCase();
-  if (
-    s === '1' ||
-    s === 'COMPLETED' ||
-    s === 'APPROVED' ||
-    s.endsWith('_COMPLETED') ||
-    s.endsWith('_APPROVED') ||
-    s.includes('HOÀN THÀNH') ||
-    s.includes('ĐÃ DUYỆT')
-  ) {
-    return 'approved';
-  }
-  if (
-    s === '2' ||
-    s === '-1' ||
-    s === 'CANCELLED' ||
-    s === 'CANCELED' ||
-    s === 'INVALID' ||
-    s === 'REJECTED' ||
-    s.endsWith('_CANCELLED') ||
-    s.endsWith('_CANCELED') ||
-    s.includes('HUỶ') ||
-    s.includes('HỦY')
-  ) {
-    return 'cancelled';
-  }
-  if (
-    s === '0' ||
-    s === 'PENDING' ||
-    s === 'PROCESSING' ||
-    s === 'NEW' ||
-    s === 'UNPAID' ||
-    s.endsWith('_PENDING') ||
-    s.endsWith('_UNPAID') ||
-    s.includes('CHỜ')
-  ) {
-    return 'pending';
-  }
-  logger.warning('normalizeNetworkStatus', 'Trạng thái sàn không khớp whitelist, gán mặc định pending', {
-    rawStatus
-  });
-  return 'pending';
 }
 
 /**
@@ -601,324 +510,6 @@ function upsertNetworkOrder(db, {
 }
 
 /**
- * Sanitize any numeric input to a finite number, defaulting to defaultVal if NaN or non-finite.
- */
-function sanitizeFiniteNumber(val, defaultVal = 0) {
-  if (val === null || val === undefined || val === '') return defaultVal;
-  if (typeof val === 'number') {
-    return Number.isFinite(val) ? val : defaultVal;
-  }
-  const str = String(val).replace(/,/g, '').trim();
-  if (!str) return defaultVal;
-  const num = Number(str);
-  return Number.isFinite(num) ? num : defaultVal;
-}
-
-/**
- * Parse Shopee conversion nodes adhering to Shopee Open API v2 and Affiliate GraphQL schemas.
- * Strictly eliminates arbitrary equal-split fallbacks and preserves actual order total commissions.
- * Sanitizes all numeric fields with Number.isFinite.
- */
-function parseShopeeReportNodes(reportNodes) {
-  logger.logEnter('parseShopeeReportNodes', {
-    count: Array.isArray(reportNodes) ? reportNodes.length : (reportNodes ? 1 : 0)
-  });
-
-  if (!reportNodes) {
-    logger.logLeave('parseShopeeReportNodes', { parsedCount: 0 });
-    return [];
-  }
-
-  const nodes = Array.isArray(reportNodes) ? reportNodes : [reportNodes];
-  const results = [];
-
-  for (const node of nodes) {
-    if (!node || typeof node !== 'object') continue;
-
-    try {
-      const rawSubId = String(
-        node.utm_content ??
-        node.utmContent ??
-        node.sub_id_1 ??
-        node.sub_id1 ??
-        node.sub1 ??
-        node.subId1 ??
-        node.subId ??
-        ''
-      ).split('-')[0].trim();
-
-      const nodeGrossComm = sanitizeFiniteNumber(
-        node.total_commission ??
-        node.totalCommission ??
-        node.net_commission ??
-        node.netCommission ??
-        node.commission ??
-        node.actual_amount ??
-        node.actualAmount,
-        0
-      );
-
-      const nodePurchaseTime =
-        node.purchase_time ??
-        node.purchaseTime ??
-        node.create_time ??
-        node.createTime ??
-        node.order_time ??
-        node.orderTime ??
-        null;
-
-      let subOrders = [];
-      if (Array.isArray(node.orders) && node.orders.length > 0) {
-        subOrders = node.orders;
-      } else if (Array.isArray(node.order_list) && node.order_list.length > 0) {
-        subOrders = node.order_list;
-      } else if (Array.isArray(node.sub_orders) && node.sub_orders.length > 0) {
-        subOrders = node.sub_orders;
-      } else if (
-        node.purchase_order_id ||
-        node.purchaseOrderId ||
-        node.order_sn ||
-        node.orderSn ||
-        node.order_id ||
-        node.orderId
-      ) {
-        subOrders = [node];
-      }
-
-      if (subOrders.length === 0) continue;
-
-      // First pass: extract structured candidate objects for each sub-order
-      const orderCandidates = [];
-
-      for (const ord of subOrders) {
-        if (!ord || typeof ord !== 'object') continue;
-
-        const orderSn = String(
-          ord.purchase_order_id ??
-          ord.purchaseOrderId ??
-          ord.order_sn ??
-          ord.orderSn ??
-          ord.order_id ??
-          ord.orderId ??
-          (subOrders.length === 1 ? (node.conversion_id ?? node.conversionId ?? '') : '')
-        ).trim().toUpperCase();
-
-        if (!orderSn) continue;
-
-        const rawStatus =
-          ord.order_status ??
-          ord.orderStatus ??
-          ord.purchase_order_status ??
-          ord.purchaseOrderStatus ??
-          node.order_status ??
-          node.orderStatus ??
-          node.purchase_order_status ??
-          node.purchaseOrderStatus;
-        const status = normalizeNetworkStatus(rawStatus);
-
-        const ordSubId = String(
-          ord.sub_id_1 ??
-          ord.sub_id1 ??
-          ord.sub1 ??
-          ord.subId1 ??
-          ord.subId ??
-          ord.utm_content ??
-          ord.utmContent ??
-          rawSubId
-        ).split('-')[0].trim();
-
-        const purchaseTime =
-          ord.purchase_time ??
-          ord.purchaseTime ??
-          ord.create_time ??
-          ord.createTime ??
-          ord.order_time ??
-          ord.orderTime ??
-          nodePurchaseTime;
-
-        const rawItems = Array.isArray(ord.item_list)
-          ? ord.item_list
-          : Array.isArray(ord.itemList)
-          ? ord.itemList
-          : Array.isArray(ord.items)
-          ? ord.items
-          : Array.isArray(ord.order_items)
-          ? ord.order_items
-          : Array.isArray(ord.orderItems)
-          ? ord.orderItems
-          : (subOrders.length === 1 && (
-              Array.isArray(node.item_list) ? node.item_list :
-              Array.isArray(node.items) ? node.items :
-              Array.isArray(node.order_items) ? node.order_items : []
-            )) || [];
-
-        let itemsTotalAmount = 0;
-        let sumItemComm = 0;
-        let hasItemBreakdown = false;
-        const itemNames = [];
-
-        for (const it of rawItems) {
-          if (!it || typeof it !== 'object') continue;
-          const name = it.item_name ?? it.itemName ?? it.product_name ?? it.productName ?? it.name;
-          if (name) itemNames.push(name);
-
-          const price = Math.max(0, sanitizeFiniteNumber(it.item_price ?? it.itemPrice ?? it.price, 0));
-          const rawQty = it.qty ?? it.quantity ?? it.item_count ?? it.itemCount ?? it.count;
-          const qty = rawQty !== undefined && rawQty !== null && String(rawQty).trim() !== ''
-            ? Math.max(1, sanitizeFiniteNumber(rawQty, 1))
-            : 1;
-          itemsTotalAmount += (price * qty);
-
-          const rawComm = it.item_commission ?? it.itemCommission ?? it.commission;
-          if (rawComm !== undefined && rawComm !== null && String(rawComm).trim() !== '') {
-            hasItemBreakdown = true;
-            sumItemComm += Math.max(0, sanitizeFiniteNumber(rawComm, 0));
-          }
-        }
-
-        const rawOrdAmount =
-          ord.total_order_amount ??
-          ord.totalOrderAmount ??
-          ord.order_amount ??
-          ord.orderAmount ??
-          ord.gmv ??
-          ord.total_amount ??
-          ord.totalAmount;
-
-        let orderAmount = 0;
-        if (rawOrdAmount !== undefined && rawOrdAmount !== null && String(rawOrdAmount).trim() !== '') {
-          orderAmount = Math.max(0, sanitizeFiniteNumber(rawOrdAmount, 0));
-        } else if (itemsTotalAmount > 0) {
-          orderAmount = itemsTotalAmount;
-        } else if (subOrders.length === 1) {
-          const rawNodeAmount =
-            node.total_order_amount ??
-            node.totalOrderAmount ??
-            node.order_amount ??
-            node.orderAmount ??
-            node.gmv ??
-            node.total_amount ??
-            node.totalAmount;
-          if (rawNodeAmount !== undefined && rawNodeAmount !== null && String(rawNodeAmount).trim() !== '') {
-            orderAmount = Math.max(0, sanitizeFiniteNumber(rawNodeAmount, 0));
-          }
-        }
-        orderAmount = Math.max(0, sanitizeFiniteNumber(orderAmount, 0));
-
-        const rawProductName = itemNames.length > 0
-          ? itemNames.join(', ')
-          : (ord.product_name ?? ord.productName ?? node.product_name ?? node.productName ?? `Đơn Shopee #${orderSn}`);
-        const productName = String(rawProductName).slice(0, 150);
-
-        const rawOrdComm =
-          ord.total_commission ??
-          ord.totalCommission ??
-          ord.commission ??
-          ord.net_commission ??
-          ord.netCommission ??
-          ord.actual_amount ??
-          ord.actualAmount;
-
-        const hasDirectOrdComm = rawOrdComm !== undefined && rawOrdComm !== null && String(rawOrdComm).trim() !== '';
-        let explicitComm = null;
-
-        if (hasDirectOrdComm) {
-          const parsedOrdComm = Math.max(0, sanitizeFiniteNumber(rawOrdComm, 0));
-          if (parsedOrdComm > 0) {
-            explicitComm = parsedOrdComm;
-          } else if (hasItemBreakdown && sumItemComm > 0) {
-            explicitComm = sumItemComm;
-          } else {
-            explicitComm = 0;
-          }
-        } else if (hasItemBreakdown) {
-          explicitComm = Math.max(0, sanitizeFiniteNumber(sumItemComm, 0));
-        }
-
-        orderCandidates.push({
-          orderSn,
-          rawSubId: ordSubId,
-          status,
-          purchaseTime,
-          orderAmount,
-          productName,
-          explicitComm,
-          hasItemBreakdown
-        });
-      }
-
-      // Second pass: Commission allocation without equal-split distortion
-      const activeWithoutComm = orderCandidates.filter(
-        (o) => o.status !== 'cancelled' && o.explicitComm === null
-      );
-      const sumExplicitComm = orderCandidates.reduce(
-        (sum, o) => sum + (o.explicitComm !== null ? o.explicitComm : 0),
-        0
-      );
-      const remainingNodeComm = Math.max(0, nodeGrossComm - sumExplicitComm);
-      const totalAmountWithoutComm = activeWithoutComm.reduce(
-        (sum, o) => sum + o.orderAmount,
-        0
-      );
-
-      for (const o of orderCandidates) {
-        let grossCommission = 0;
-        let isEstimated = false;
-
-        if (o.explicitComm !== null) {
-          grossCommission = o.explicitComm;
-          isEstimated = false;
-        } else if (o.status === 'cancelled') {
-          grossCommission = 0;
-          isEstimated = false;
-        } else if (remainingNodeComm > 0) {
-          if (activeWithoutComm.length === 1) {
-            grossCommission = remainingNodeComm;
-            isEstimated = true;
-          } else if (totalAmountWithoutComm > 0) {
-            grossCommission = Math.round(remainingNodeComm * (o.orderAmount / totalAmountWithoutComm));
-            isEstimated = true;
-            logger.log('parseShopeeReportNodes', 'Phân bổ hoa hồng node theo tỷ lệ giá trị đơn', {
-              orderSn: o.orderSn,
-              grossCommission,
-              commissionEstimated: true
-            });
-          } else {
-            // Strictly eliminate arbitrary equal-split fallback
-            grossCommission = 0;
-            isEstimated = true;
-            logger.warning('parseShopeeReportNodes', 'Bỏ qua chia đều tùy tiện khi không có giá trị đơn và chi tiết hoa hồng', {
-              orderSn: o.orderSn,
-              remainingNodeComm
-            });
-          }
-        }
-
-        grossCommission = Math.max(0, sanitizeFiniteNumber(grossCommission, 0));
-        const finalOrderAmount = Math.max(0, sanitizeFiniteNumber(o.orderAmount, 0));
-
-        results.push({
-          orderSn: o.orderSn,
-          rawSubId: o.rawSubId,
-          grossCommission,
-          orderAmount: finalOrderAmount,
-          status: o.status,
-          platform: 'shopee',
-          productName: o.productName,
-          commissionEstimated: isEstimated,
-          purchaseTime: o.purchaseTime
-        });
-      }
-    } catch (nodeErr) {
-      logger.warning('parseShopeeReportNodes', 'Lỗi xử lý node báo cáo Shopee', { error: nodeErr.message });
-    }
-  }
-
-  logger.logLeave('parseShopeeReportNodes', { parsedCount: results.length });
-  return results;
-}
-
-/**
  * Shared logic to synchronize orders from Shopee Open API conversionReport.
  */
 async function runShopeeAutoSync() {
@@ -1117,131 +708,6 @@ function triggerLazyAutoSyncIfNeeded() {
   }
 }
 
-function getConfiguredPostbackToken(db) {
-  const currentDb = db || (typeof ensureDbLoaded === 'function' ? ensureDbLoaded() : null);
-  return String(
-    process.env.POSTBACK_TOKEN ||
-    process.env.POSTBACK_SECRET ||
-    currentDb?.settings?.postbackToken ||
-    ''
-  ).trim();
-}
-
-function verifyWebhookRequest(req, db) {
-  const configuredToken = getConfiguredPostbackToken(db);
-  if (!configuredToken) {
-    logger.warning('verifyWebhookRequest', 'Postback token is not configured on server');
-    return { status: 403, error: 'Postback webhook not configured.' };
-  }
-
-  // Anti-replay protection: check timestamp header (x-webhook-timestamp, x-postback-timestamp)
-  // or payload timestamp (req.body?.timestamp)
-  const rawTs =
-    req.headers['x-webhook-timestamp'] ||
-    req.headers['x-postback-timestamp'] ||
-    req.body?.timestamp;
-
-  if (rawTs !== undefined && rawTs !== null && rawTs !== '') {
-    const ts = parseTimestamp(rawTs);
-    if (!ts || !Number.isFinite(ts)) {
-      logger.warning('verifyWebhookRequest', 'Invalid webhook timestamp format', { rawTs });
-      return { status: 401, error: 'Invalid webhook timestamp format.' };
-    }
-    const now = Date.now();
-    const diffSec = (now - ts) / 1000;
-    if (diffSec > 300) {
-      logger.warning('verifyWebhookRequest', 'Webhook timestamp expired (>300s)', { ts, now, diffSec });
-      return { status: 401, error: 'Webhook timestamp expired.' };
-    }
-    if (diffSec < -60) {
-      logger.warning('verifyWebhookRequest', 'Webhook timestamp in the future (>60s)', { ts, now, diffSec });
-      return { status: 401, error: 'Webhook timestamp in the future.' };
-    }
-  }
-
-  const isWriteOp = req.method !== 'GET' && req.method !== 'HEAD';
-  const headerSignature = req.headers['x-signature-sha256'] || req.headers['x-postback-signature'];
-  const headerToken =
-    req.headers['x-postback-token'] ||
-    (req.headers.authorization && req.headers.authorization.startsWith('Bearer ')
-      ? req.headers.authorization.slice(7).trim()
-      : '');
-
-  // 1. Signature in headers -> verify HMAC SHA256 over rawBody
-  if (headerSignature) {
-    const cleanSig = String(headerSignature).trim().replace(/^sha256=/i, '');
-    const rawBodyBuf = Buffer.isBuffer(req.rawBody)
-      ? req.rawBody
-      : (typeof req.rawBody === 'string'
-        ? Buffer.from(req.rawBody, 'utf8')
-        : (req.body && typeof req.body === 'object' && Object.keys(req.body).length > 0
-          ? Buffer.from(JSON.stringify(req.body), 'utf8')
-          : Buffer.alloc(0)));
-
-    const expectedSig = crypto
-      .createHmac('sha256', configuredToken)
-      .update(rawBodyBuf)
-      .digest('hex');
-
-    const bufProvided = Buffer.from(cleanSig.toLowerCase());
-    const bufExpected = Buffer.from(expectedSig.toLowerCase());
-
-    if (bufProvided.length !== bufExpected.length || !crypto.timingSafeEqual(bufProvided, bufExpected)) {
-      logger.warning('verifyWebhookRequest', 'Invalid postback signature', {
-        providedLen: bufProvided.length,
-        expectedLen: bufExpected.length
-      });
-      return { status: 401, error: 'Invalid postback signature.' };
-    }
-
-    return { valid: true };
-  }
-
-  // 2. Token in headers -> timing-safe string comparison
-  if (headerToken) {
-    const bufProvided = Buffer.from(headerToken);
-    const bufExpected = Buffer.from(configuredToken);
-
-    if (bufProvided.length !== bufExpected.length || !crypto.timingSafeEqual(bufProvided, bufExpected)) {
-      logger.warning('verifyWebhookRequest', 'Invalid postback token in header');
-      return { status: 401, error: 'Invalid postback token.' };
-    }
-
-    return { valid: true };
-  }
-
-  // 3. For GET requests only: accept token in query parameters (AccessTrade query macro ping/postback)
-  if (!isWriteOp && req.query?.token) {
-    const queryToken = String(req.query.token).trim();
-    const bufProvided = Buffer.from(queryToken);
-    const bufExpected = Buffer.from(configuredToken);
-
-    if (bufProvided.length !== bufExpected.length || !crypto.timingSafeEqual(bufProvided, bufExpected)) {
-      logger.warning('verifyWebhookRequest', 'Invalid postback token in query parameter');
-      return { status: 401, error: 'Invalid postback token.' };
-    }
-
-    return { valid: true };
-  }
-
-  // 4. Reject tokens or signatures in query parameters on write operations
-  if (isWriteOp && (req.query?.token || req.query?.sig)) {
-    logger.warning('verifyWebhookRequest', 'Token or signature in query parameters rejected for write operation', {
-      method: req.method
-    });
-    return {
-      status: 401,
-      error: 'Tokens or signatures in query parameters are not permitted for write operations.'
-    };
-  }
-
-  logger.warning('verifyWebhookRequest', 'Missing postback authentication headers');
-  return {
-    status: 401,
-    error: 'Missing postback token or signature in headers.'
-  };
-}
-
 function registerCashbackRoutes(app) {
   try {
     const startupDb = ensureDbLoaded();
@@ -1249,6 +715,9 @@ function registerCashbackRoutes(app) {
   } catch (err) {
     logger.warning('registerCashbackRoutes', 'Initial db load migration warning', { error: err.message });
   }
+
+  // Enforce CSRF checks on cookie-authenticated API mutations
+  app.use(createCsrfGuard());
 
   const authLimiter = createRateLimiter({
     windowMs: 60000,
@@ -1288,18 +757,26 @@ function registerCashbackRoutes(app) {
     const db = ensureDbLoaded();
     const click = db.clicks.find((c) => c.clickId === req.params.clickId);
     if (!click || !click.affiliateUrl) {
+      logger.logLeave('GET /go/:clickId', { redirect: 'home_missing' });
       return res.redirect(302, '/');
     }
 
     try {
-      const target = new URL(click.affiliateUrl);
-      if (target.protocol !== 'https:' || !isAllowedHost(target.hostname)) {
+      const customTpl = db?.settings?.tiktokDeepLinkTemplate || '';
+      if (!isAllowedAffiliateRedirectUrl(click.affiliateUrl, customTpl)) {
+        logger.warning('GET /go/:clickId', 'Chặn chuyển hướng tới tên miền không nằm trong allowlist', {
+          clickId: req.params.clickId
+        });
+        logger.logLeave('GET /go/:clickId', { blocked: true });
         return res.status(400).send('Liên kết đích không hợp lệ.');
       }
+      const target = new URL(click.affiliateUrl);
       res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
       res.setHeader('Cache-Control', 'no-store');
+      logger.logLeave('GET /go/:clickId', { host: target.hostname });
       return res.redirect(302, target.toString());
     } catch {
+      logger.logLeave('GET /go/:clickId', { redirect: 'home_error' });
       return res.redirect(302, '/');
     }
   });
@@ -1320,7 +797,7 @@ function registerCashbackRoutes(app) {
       supportZalo: s.supportZalo || '',
       zaloGroupUrl: s.zaloGroupUrl || DEFAULT_ZALO_GROUP_URL,
       zaloWidgetEnabled: s.zaloWidgetEnabled ?? true,
-      turnstileSiteKey: process.env.TURNSTILE_SITE_KEY || '',
+      turnstileSiteKey: process.env.TURNSTILE_SITE_KEY || s.turnstileSiteKey || '',
       hasShopeeConfigured: Boolean(s.shopeeAffiliateId || s.shopeeAppId)
     });
     logger.logLeave('GET /api/public-config');
@@ -1341,7 +818,7 @@ function registerCashbackRoutes(app) {
       supportZalo: s.supportZalo || '',
       zaloGroupUrl: s.zaloGroupUrl || DEFAULT_ZALO_GROUP_URL,
       zaloWidgetEnabled: s.zaloWidgetEnabled ?? true,
-      turnstileSiteKey: process.env.TURNSTILE_SITE_KEY || '',
+      turnstileSiteKey: process.env.TURNSTILE_SITE_KEY || s.turnstileSiteKey || '',
       hasShopeeConfigured: Boolean(s.shopeeAffiliateId || s.shopeeAppId)
     });
     logger.logLeave('GET /api/settings');
@@ -1352,8 +829,11 @@ function registerCashbackRoutes(app) {
     logger.logEnter('POST /api/auth/register');
     try {
       const { name, phone, email, password, refCode, turnstileToken } = req.body || {};
+      const db = ensureDbLoaded();
 
-      const turnstileOk = await verifyTurnstileIfEnabled(turnstileToken, getClientIp(req));
+      const turnstileOk = await verifyTurnstileIfEnabled(turnstileToken, getClientIp(req), {
+        settings: db?.settings
+      });
       if (!turnstileOk) {
         return res.status(400).json({ error: 'Xác thực chống bot không hợp lệ. Vui lòng thử lại.' });
       }
@@ -1366,7 +846,6 @@ function registerCashbackRoutes(app) {
         });
       }
 
-      const db = ensureDbLoaded();
       const exists = db.users.find(
         (u) =>
           (u.phone && (String(u.phone).trim() === cleanPhone || normalizePhoneNumber(u.phone) === cleanPhone)) ||
@@ -1392,13 +871,14 @@ function registerCashbackRoutes(app) {
         }
       }
 
+      const passwordHash = await hashPasswordAsync(password);
       const newUser = {
         id: `usr_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`,
         code: generateUserCode(cleanPhone, db.users),
         name: String(name || cleanPhone).trim().slice(0, 60),
         phone: cleanPhone,
         email: String(email || '').trim().slice(0, 80),
-        passwordHash: hashPassword(password),
+        passwordHash,
         role: 'user',
         tokenVersion: 1,
         referredBy: validReferrerCode,
@@ -1434,14 +914,16 @@ function registerCashbackRoutes(app) {
         return res.status(400).json({ error: 'Vui lòng nhập Số điện thoại và Mật khẩu.' });
       }
 
-      const turnstileOk = await verifyTurnstileIfEnabled(turnstileToken, getClientIp(req));
+      const db = ensureDbLoaded();
+      const turnstileOk = await verifyTurnstileIfEnabled(turnstileToken, getClientIp(req), {
+        settings: db?.settings
+      });
       if (!turnstileOk) {
         return res.status(400).json({ error: 'Xác thực chống bot không hợp lệ.' });
       }
 
       const cleanId = String(identifier).trim().toLowerCase();
       const normId = normalizePhoneNumber(cleanId);
-      const db = ensureDbLoaded();
 
       const user = db.users.find(
         (u) =>
@@ -1450,13 +932,13 @@ function registerCashbackRoutes(app) {
           (u.code && String(u.code).toLowerCase() === cleanId)
       );
 
-      if (!user || !verifyPassword(password, user.passwordHash)) {
+      if (!user || !(await verifyPasswordAsync(password, user.passwordHash))) {
         return res.status(401).json({ error: 'Thông tin đăng nhập không chính xác.' });
       }
 
       // Automatically upgrade legacy hash to scrypt
       if (!String(user.passwordHash).startsWith('scrypt$')) {
-        user.passwordHash = hashPassword(password);
+        user.passwordHash = await hashPasswordAsync(password);
         await saveDb(db);
       }
 
@@ -1485,7 +967,7 @@ function registerCashbackRoutes(app) {
   });
 
   // 4. Current User Dashboard (Includes Orders, Withdrawals, Immutable Ledger & Referral Count)
-  app.get('/api/user/me', (req, res) => {
+  app.get('/api/user/me', asyncHandler(async (req, res) => {
     logger.logEnter('GET /api/user/me');
     const user = getAuthUser(req);
     if (!user) {
@@ -1496,13 +978,14 @@ function registerCashbackRoutes(app) {
     const db = ensureDbLoaded();
     recalculateUserWallet(user.id);
 
-    const userOrders = db.orders
-      .filter(
-        (o) =>
-          o.userId === user.id ||
-          (o.userCode && o.userCode.toUpperCase() === user.code.toUpperCase())
-      )
-      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    const { items: userOrders, pagination: ordersPagination } = await queryOrdersPaginated(db, {
+      userId: user.id,
+      userCode: user.code,
+      page: req.query.orderPage || req.query.page || 1,
+      limit: req.query.orderLimit || req.query.limit || 200,
+      q: req.query.q || '',
+      status: req.query.orderStatus || req.query.status || ''
+    });
 
     const userWithdrawals = db.withdrawals
       .filter((w) => w.userId === user.id)
@@ -1522,12 +1005,13 @@ function registerCashbackRoutes(app) {
     return res.json({
       user: sanitizeUser(user),
       orders: userOrders.map(sanitizeOrderForUser),
+      ordersPagination,
       withdrawals: userWithdrawals,
       ledger: userLedger,
       referralCount,
       referralBountyAmount
     });
-  });
+  }));
 
   // 4.1. User Referral Network & Bounty Stats (5.000đ on referee 1st approved order)
   app.get('/api/user/referrals', (req, res) => {
@@ -1632,7 +1116,7 @@ function registerCashbackRoutes(app) {
 
     if (isAccChanged || isBankChanged) {
       const pwd = password || currentPassword;
-      if (!pwd || !verifyPassword(pwd, user.passwordHash)) {
+      if (!pwd || !(await verifyPasswordAsync(pwd, user.passwordHash))) {
         return res.status(400).json({
           error: 'Vui lòng nhập đúng mật khẩu hiện tại khi thay đổi thông tin ngân hàng.'
         });
@@ -1800,7 +1284,7 @@ function registerCashbackRoutes(app) {
     // Security check: if user already had a different bank account saved OR has no bank account saved yet,
     // require password verification to bind or alter payout coordinates
     if (!user.bankAccount || user.bankAccount !== cleanAcc) {
-      if (!currentPassword || !verifyPassword(currentPassword, user.passwordHash)) {
+      if (!currentPassword || !(await verifyPasswordAsync(currentPassword, user.passwordHash))) {
         return res.status(403).json({
           error: 'Vui lòng nhập mật khẩu đăng nhập để xác nhận thông tin nhận tiền rút.'
         });
@@ -2165,9 +1649,8 @@ function registerCashbackRoutes(app) {
 
       for (const item of result.items) {
         item.cashbackPercent = cashbackPercent;
-        item.qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(
-          item.affiliateUrl
-        )}`;
+        // Never leak affiliateUrl + user sub_id to third-party QR image servers
+        item.qrUrl = null;
 
         if (item.commission > 0 || (item.price > 0 && item.commissionRate > 0)) {
           const estGross =
@@ -2476,22 +1959,24 @@ function registerCashbackRoutes(app) {
     safeSettings.addlivetagApiKey = shouldReveal ? (db.settings.addlivetagApiKey || '') : '***';
     safeSettings.postbackUrlTemplate = postbackUrlTemplate;
 
-    const withdrawalsWithQr = db.withdrawals.map((w) => ({
-      ...w,
-      vietQrUrl: buildVietQrImageUrl(
-        w.bankName,
-        w.bankAccount,
-        w.amount,
-        w.bankOwner,
-        `Hoan tien ${w.userCode}`
-      )
-    }));
-
-    const rawLimit = Number(req.query.limit);
-    const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(200, Math.round(rawLimit)) : 50;
-    const rawPage = Number(req.query.page);
-    const page = Number.isFinite(rawPage) && rawPage > 0 ? Math.round(rawPage) : 1;
-    const offset = (page - 1) * limit;
+    const ordersPageResult = await queryOrdersPaginated(db, {
+      page: req.query.page || 1,
+      limit: req.query.limit || 50,
+      q: req.query.q || '',
+      status: req.query.orderStatus || '',
+      platform: req.query.platform || ''
+    });
+    const withdrawalsPageResult = queryWithdrawalsPaginated(db, {
+      page: req.query.page || 1,
+      limit: req.query.limit || 50,
+      q: req.query.q || '',
+      status: req.query.withdrawalStatus || ''
+    });
+    const usersPageResult = queryUsersPaginated(db, {
+      page: req.query.page || 1,
+      limit: req.query.limit || 50,
+      q: req.query.q || ''
+    });
 
     return res.json({
       dbStatus: getDatabaseStatus(),
@@ -2505,18 +1990,75 @@ function registerCashbackRoutes(app) {
         pendingWithdrawals: db.withdrawals.filter((w) => w.status === 'pending').length
       },
       settings: safeSettings,
-      orders: db.orders.slice(offset, offset + limit),
-      withdrawals: withdrawalsWithQr.slice(offset, offset + limit),
-      users: db.users.slice(offset, offset + limit).map(sanitizeUser),
+      orders: ordersPageResult.items,
+      withdrawals: withdrawalsPageResult.items,
+      users: usersPageResult.items,
       clicks: db.clicks.slice(0, 50),
       pagination: {
-        page,
-        limit,
-        totalOrders: db.orders.length,
-        totalUsers: db.users.length,
-        totalWithdrawals: db.withdrawals.length
+        page: ordersPageResult.pagination.page,
+        limit: ordersPageResult.pagination.limit,
+        totalOrders: ordersPageResult.pagination.total,
+        totalUsers: usersPageResult.pagination.total,
+        totalWithdrawals: withdrawalsPageResult.pagination.total,
+        ordersTotalPages: ordersPageResult.pagination.totalPages,
+        usersTotalPages: usersPageResult.pagination.totalPages,
+        withdrawalsTotalPages: withdrawalsPageResult.pagination.totalPages
       }
     });
+  }));
+
+  // Dedicated server-side paginated & searchable admin endpoints
+  app.get('/api/admin/orders', requireAdmin, asyncHandler(async (req, res) => {
+    logger.logEnter('GET /api/admin/orders');
+    await reloadStateFromPostgres();
+    const db = ensureDbLoaded();
+    const result = await queryOrdersPaginated(db, {
+      page: req.query.page || 1,
+      limit: req.query.limit || 50,
+      q: req.query.q || '',
+      status: req.query.status || '',
+      platform: req.query.platform || '',
+      preferSql: req.query.preferSql === 'true'
+    });
+    logger.logLeave('GET /api/admin/orders', {
+      page: result.pagination.page,
+      total: result.pagination.total
+    });
+    return res.json({ orders: result.items, pagination: result.pagination });
+  }));
+
+  app.get('/api/admin/users', requireAdmin, asyncHandler(async (req, res) => {
+    logger.logEnter('GET /api/admin/users');
+    await reloadStateFromPostgres();
+    const db = ensureDbLoaded();
+    const result = queryUsersPaginated(db, {
+      page: req.query.page || 1,
+      limit: req.query.limit || 50,
+      q: req.query.q || '',
+      includeDeleted: req.query.includeDeleted === 'true'
+    });
+    logger.logLeave('GET /api/admin/users', {
+      page: result.pagination.page,
+      total: result.pagination.total
+    });
+    return res.json({ users: result.items, pagination: result.pagination });
+  }));
+
+  app.get('/api/admin/withdrawals', requireAdmin, asyncHandler(async (req, res) => {
+    logger.logEnter('GET /api/admin/withdrawals');
+    await reloadStateFromPostgres();
+    const db = ensureDbLoaded();
+    const result = queryWithdrawalsPaginated(db, {
+      page: req.query.page || 1,
+      limit: req.query.limit || 50,
+      q: req.query.q || '',
+      status: req.query.status || ''
+    });
+    logger.logLeave('GET /api/admin/withdrawals', {
+      page: result.pagination.page,
+      total: result.pagination.total
+    });
+    return res.json({ withdrawals: result.items, pagination: result.pagination });
   }));
 
   // Reveal raw postback URL on explicit admin request
@@ -2679,10 +2221,10 @@ function registerCashbackRoutes(app) {
       if (!adminUser) {
         return res.status(400).json({ error: 'Không tìm thấy tài khoản quản trị viên.' });
       }
-      if (!body.currentPassword || !verifyPassword(body.currentPassword, adminUser.passwordHash)) {
+      if (!body.currentPassword || !(await verifyPasswordAsync(body.currentPassword, adminUser.passwordHash))) {
         return res.status(400).json({ error: 'Mật khẩu hiện tại không đúng hoặc chưa được cung cấp.' });
       }
-      adminUser.passwordHash = hashPassword(cleanNewPass);
+      adminUser.passwordHash = await hashPasswordAsync(cleanNewPass);
       adminUser.tokenVersion = Number(adminUser.tokenVersion || 1) + 1;
     }
 
@@ -2938,29 +2480,43 @@ function registerCashbackRoutes(app) {
     }
 
     const db = ensureDbLoaded();
-    const idx = db.orders.findIndex(
+    const preliminary = db.orders.find(
       (o) =>
         (id && o.id === id) ||
         (orderSn && String(o.orderSn || '').toUpperCase() === String(orderSn).trim().toUpperCase())
     );
-
-    if (idx === -1) {
+    if (!preliminary) {
       return res.status(404).json({ error: 'Không tìm thấy đơn hàng cần xóa.' });
     }
 
-    const [deletedOrder] = db.orders.splice(idx, 1);
-    recordAuditLog(db, {
-      adminId: req.adminUser?.id || 'admin',
-      adminName: req.adminUser?.name || 'Quản Trị Viên',
-      action: 'delete_order',
-      targetId: deletedOrder.id,
-      details: { orderSn: deletedOrder.orderSn }
-    });
-    const lockKey = deletedOrder?.userId || 'global';
-    await withUserLock(lockKey, async () => {
+    const lockKey = preliminary.userId || 'global';
+    const deletedOrder = await withUserLock(lockKey, async () => {
+      const idx = db.orders.findIndex(
+        (o) =>
+          (id && o.id === id) ||
+          (orderSn && String(o.orderSn || '').toUpperCase() === String(orderSn).trim().toUpperCase())
+      );
+      if (idx === -1) return null;
+
+      const [removed] = db.orders.splice(idx, 1);
+      recordAuditLog(db, {
+        adminId: req.adminUser?.id || 'admin',
+        adminName: req.adminUser?.name || 'Quản Trị Viên',
+        action: 'delete_order',
+        targetId: removed.id,
+        details: { orderSn: removed.orderSn, previousStatus: removed.status, userId: removed.userId || null }
+      });
+      if (removed.userId) {
+        recalculateUserWallet(removed.userId, { persist: false });
+      }
       recalculateAllWallets({ persist: false });
       await saveDb(db);
+      return removed;
     });
+
+    if (!deletedOrder) {
+      return res.status(404).json({ error: 'Không tìm thấy đơn hàng cần xóa.' });
+    }
 
     logger.logLeave('POST /api/admin/orders/delete', { orderSn: deletedOrder.orderSn });
     return res.json({ status: 'ok', message: `Đã xóa đơn hàng #${deletedOrder.orderSn} thành công!` });
@@ -3184,7 +2740,7 @@ function registerCashbackRoutes(app) {
       if (!newPassword || String(newPassword).trim().length < 6) {
         return res.status(400).json({ error: 'Mật khẩu mới phải có ít nhất 6 ký tự.' });
       }
-      targetUser.passwordHash = hashPassword(String(newPassword).trim());
+      targetUser.passwordHash = await hashPasswordAsync(String(newPassword).trim());
       targetUser.tokenVersion = Number(targetUser.tokenVersion || 1) + 1;
       await saveDb(db);
       recordAuditLog(db, {

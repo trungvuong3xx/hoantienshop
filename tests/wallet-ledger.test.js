@@ -204,6 +204,7 @@ async function runWalletLedgerTests() {
     body: JSON.stringify({ id: apiWd.id })
   });
   assert.strictEqual(cancelAgainRes.status, 400, 'Cancelling already cancelled withdrawal must return 400');
+  await cancelAgainRes.json().catch(() => null);
 
   recalculateUserWallet(testUserId);
   assert.strictEqual(testUser.balanceAvailable, 1000000, 'Balance must stay 1,000,000đ (no double refund)');
@@ -364,7 +365,7 @@ async function runWalletLedgerTests() {
   await saveDb(db);
 
   console.log('\n=== ALL WALLET LEDGER TESTS PASSED SUCCESSFULLY! ===\n');
-  process.exit(0);
+  setTimeout(() => process.exit(0), 100);
 }
 
 runWalletLedgerTests().catch((err) => {

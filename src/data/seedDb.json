@@ -5,21 +5,25 @@
     "shopeeAffiliateId": "17346310715",
     "shopeeAppId": "",
     "shopeeAppSecret": "",
-    "addlivetagApiKey": "b426eeae7cc0b156969f923935e661362aa3b13d09dba032",
+    "addlivetagApiKey": "",
     "tiktokMode": "deeplink",
     "tiktokAppKey": "",
     "tiktokAppSecret": "",
     "tiktokAccessToken": "",
     "tiktokDeepLinkTemplate": "https://go.isclix.com/deep_link/v6/7110811489339796158/6648523843406889655?sub4=oneatweb",
     "accesstradeApiKey": "",
-    "postbackToken": "4e1a2721f82797a7309bb59e5d52eb52",
+    "postbackToken": "",
     "lastAutoSyncAt": null,
     "shortenerProvider": "none",
     "cashbackPercent": 70,
     "taxDeductPercent": 10,
     "referralBonusPercent": 5,
     "minWithdrawAmount": 50000,
-    "supportZalo": "0329992448",
+    "supportZalo": "",
+    "zaloGroupUrl": "https://zalo.me/g/cl2cmiseoqienusnrbyr",
+    "zaloWidgetEnabled": true,
+    "turnstileSiteKey": "",
+    "turnstileSecretKey": "",
     "tiktokCookie": ""
   },
   "users": [
@@ -31,27 +35,6 @@
       "email": "trungvuong3x@hoantiensan.online",
       "passwordHash": "scrypt$e577945eeef79b24110c723a11142295$410f56f617dfc087dcd49377d0d5ce37da3b92b290f795f4a7b6a8b999b093572fd552321e241a69970a81ccfcc5f3f824bf7ee54d409a5be47499308b851907",
       "role": "admin",
-      "balanceAvailable": 22050,
-      "balancePending": 0,
-      "totalEarned": 22050,
-      "totalWithdrawn": 0,
-      "bankName": "MBBank",
-      "bankAccount": "",
-      "bankOwner": "TRUNG VUONG",
-      "createdAt": "2026-11-11T03:51:32.662Z",
-      "hasNegativeBalance": false,
-      "tokenVersion": 3
-    },
-    {
-      "id": "usr_1794458605769_1fd080",
-      "code": "U244843",
-      "name": "Ngô Trung Vương",
-      "phone": "0329992448",
-      "email": "",
-      "passwordHash": "scrypt$cc2c8433a883fd2fca5fb194c4466808$62337ac819a7ee4e4e71ff34686f43389409ab41d3f3db77b802e3c158f119e2d23e4fe4893a10770689e295228d5b1fbdc9625b092ad0189d5ea54ebab4e79b",
-      "role": "user",
-      "tokenVersion": 2,
-      "referredBy": null,
       "balanceAvailable": 0,
       "balancePending": 0,
       "totalEarned": 0,
@@ -59,69 +42,14 @@
       "bankName": "",
       "bankAccount": "",
       "bankOwner": "",
-      "createdAt": "2026-11-12T04:43:25.808Z",
-      "hasNegativeBalance": false
+      "createdAt": "2026-11-11T03:51:32.662Z",
+      "hasNegativeBalance": false,
+      "tokenVersion": 3
     }
   ],
   "clicks": [],
-  "orders": [
-    {
-      "id": "ord_demo_1",
-      "orderSn": "261111ABC8899",
-      "platform": "shopee",
-      "userCode": "ADMIN",
-      "userId": "usr_admin",
-      "productName": "Tai nghe Bluetooth Chống Ồn Hoco W35 Chính Hãng",
-      "orderAmount": 250000,
-      "totalCommission": 31500,
-      "cashbackRate": 70,
-      "userCashbackAmount": 22050,
-      "adminShareAmount": 9450,
-      "status": "approved",
-      "createdAt": "2026-11-11T03:51:32.662Z",
-      "updatedAt": "2026-11-12T04:46:13.709Z",
-      "grossCommission": 35000,
-      "taxAmount": 3500,
-      "netCommission": 31500
-    }
-  ],
-  "ledger": [
-    {
-      "id": "led_1794459153334_c06c80aa",
-      "userId": "usr_1794459116119_526148",
-      "type": "admin_adjustment",
-      "amount": 50000,
-      "refId": "admin_adj_1794459153334_533d61",
-      "note": "Thuong su kien",
-      "createdAt": "2026-11-12T04:52:33.334Z"
-    },
-    {
-      "id": "led_1794458515533_fd75d4f3",
-      "userId": "usr_admin",
-      "type": "order_cashback",
-      "amount": 22050,
-      "refId": "order_credit_261111ABC8899",
-      "note": "Hoàn tiền đơn hàng #261111ABC8899",
-      "createdAt": "2026-11-12T04:41:55.533Z"
-    },
-    {
-      "id": "led_1794380799260_abc96a",
-      "userId": "usr_1794380798946_8f2b3b",
-      "type": "order_cashback",
-      "amount": 31500,
-      "refId": "order_credit_TT_GUEST_2002",
-      "note": "Hoàn tiền đơn hàng #TT_GUEST_2002",
-      "createdAt": "2026-11-11T07:06:39.260Z"
-    },
-    {
-      "id": "led_1794380799234_c3c86b",
-      "userId": "usr_1794380798946_8f2b3b",
-      "type": "order_cashback",
-      "amount": 63000,
-      "refId": "order_credit_TT_AUTO_1001",
-      "note": "Hoàn tiền đơn hàng #TT_AUTO_1001",
-      "createdAt": "2026-11-11T07:06:39.234Z"
-    }
-  ],
-  "withdrawals": []
+  "orders": [],
+  "ledger": [],
+  "withdrawals": [],
+  "auditLogs": []
 }

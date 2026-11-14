@@ -37,14 +37,24 @@ function loadEnvConfig() {
 loadEnvConfig();
 
 const express = require('express');
+const crypto = require('crypto');
 const helmet = require('helmet');
 const cors = require('cors');
 const logger = require('./src/utils/logger');
+const { createCsrfGuard } = require('./src/utils/securityMiddleware');
 const { registerCashbackRoutes } = require('./src/services/cashbackController');
 const { ensureDbLoaded, getDatabaseStatus, initPostgresIfConfigured } = require('./src/services/dbService');
 
 const app = express();
 const PORT = process.env.PORT || 3456;
+
+// Distributed request tracing middleware attaching requestId to response and AsyncLocalStorage
+app.use((req, res, next) => {
+  const requestId = req.headers['x-request-id'] || crypto.randomUUID();
+  req.requestId = requestId;
+  res.setHeader('X-Request-Id', requestId);
+  logger.runWithRequestContext({ requestId }, () => next());
+});
 
 // Configurable trust proxy based on deployment environment (1 on Vercel, loopback locally)
 const trustProxyConfig = process.env.TRUST_PROXY
@@ -76,7 +86,7 @@ app.use(
           'https://*.byteoversea.com'
         ],
         connectSrc: ["'self'", 'https://challenges.cloudflare.com'],
-        frameSrc: ['https://challenges.cloudflare.com'],
+        frameSrc: ["'self'", 'https://challenges.cloudflare.com'],
         frameAncestors: ["'none'"]
       }
     }
@@ -95,8 +105,12 @@ const allowedOrigins = (process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGIN
   .map((o) => o.trim())
   .filter(Boolean);
 
-app.use(
-  cors({
+app.use((req, res, next) => {
+  const fullPath = req.originalUrl || req.path || '';
+  if (fullPath.startsWith('/api/webhooks/')) {
+    return next();
+  }
+  return cors({
     origin(origin, callback) {
       if (!origin) {
         return callback(null, true);
@@ -104,15 +118,28 @@ app.use(
       if (allowedOrigins.includes(origin)) {
         return callback(null, true);
       }
+      try {
+        const parsedOrigin = new URL(origin);
+        const reqHost = String(typeof req.get === 'function' ? req.get('host') : req.headers?.host || '')
+          .split(',')[0]
+          .trim();
+        if (reqHost && parsedOrigin.host === reqHost) {
+          return callback(null, true);
+        }
+      } catch {
+        // Ignore malformed Origin header
+      }
       // Allow only preview deployments belonging to this specific project (hoantienshop-*.vercel.app)
       const isProjectVercelPreview = /^https:\/\/hoantienshop(-[a-z0-9-]+)?\.vercel\.app$/i.test(origin);
       if (isProjectVercelPreview) {
         return callback(null, true);
       }
-      return callback(new Error('Origin not allowed by CORS'));
+      const corsErr = new Error('Origin not allowed by CORS');
+      corsErr.status = 403;
+      return callback(corsErr);
     }
-  })
-);
+  })(req, res, next);
+});
 
 // Preserve rawBody Buffer for webhook HMAC verification and parse JSON up to 2mb
 app.use(
@@ -124,8 +151,24 @@ app.use(
   })
 );
 
-// Serve frontend static assets
-app.use(express.static(path.join(__dirname, 'public')));
+// CSRF protection middleware for cookie-authenticated API mutations
+app.use(createCsrfGuard({ allowedOrigins }));
+
+// Serve frontend static assets with strict revalidation for mutable shell files
+app.use(express.static(path.join(__dirname, 'public'), {
+  setHeaders(res, filePath) {
+    const base = path.basename(filePath);
+    if (
+      base.endsWith('.html') ||
+      base === 'app.js' ||
+      base === 'styles.css' ||
+      base === 'sw.js' ||
+      base === 'manifest.webmanifest'
+    ) {
+      res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate');
+    }
+  }
+}));
 
 // Ensure Postgres is ready before serving API or health checks
 app.use(async (req, res, next) => {

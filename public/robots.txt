@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /go/
+
+Sitemap: https://hoantiensan.online/sitemap.xml

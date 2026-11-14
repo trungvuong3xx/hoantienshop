@@ -1,16 +1,29 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const os = require('os');
 const { Pool } = require('pg');
 const logger = require('../utils/logger');
 
 const IS_VERCEL = Boolean(process.env.VERCEL);
+const IS_TEST_ENV = process.env.NODE_ENV === 'test';
 const IS_PROD = IS_VERCEL || process.env.NODE_ENV === 'production';
 
-const LOCAL_DB_PATH = IS_VERCEL
-  ? path.join('/tmp', 'hoantienshop_db_v2.json')
-  : path.join(__dirname, '..', '..', 'data', 'db.json');
+const LOCAL_DB_PATH = IS_TEST_ENV
+  ? path.join(os.tmpdir(), `hoantienshop_test_db_${process.pid}.json`)
+  : IS_VERCEL
+    ? path.join('/tmp', 'hoantienshop_db_v2.json')
+    : path.join(__dirname, '..', '..', 'data', 'db.json');
 const SEED_DB_PATH = path.join(__dirname, '..', 'data', 'seedDb.json');
+
+if (IS_TEST_ENV) {
+  process.on('exit', () => {
+    try {
+      if (fs.existsSync(LOCAL_DB_PATH)) fs.unlinkSync(LOCAL_DB_PATH);
+      if (fs.existsSync(`${LOCAL_DB_PATH}.tmp`)) fs.unlinkSync(`${LOCAL_DB_PATH}.tmp`);
+    } catch (_) {}
+  });
+}
 
 // ================= ENVIRONMENT PARSER (.env with quotes and export support) =================
 
@@ -49,7 +62,14 @@ for (const [k, v] of Object.entries(parsedFileEnv)) {
   }
 }
 
-let DATABASE_URL = (process.env.DATABASE_URL || process.env.POSTGRES_URL || '').trim();
+function getDatabaseUrl() {
+  if (IS_TEST_ENV) {
+    return (process.env.TEST_DATABASE_URL || '').trim();
+  }
+  return (process.env.DATABASE_URL || process.env.POSTGRES_URL || '').trim();
+}
+
+let DATABASE_URL = getDatabaseUrl();
 let pgPool = null;
 let pgSchemaReady = false;
 let dbInitPromise = null;
@@ -64,9 +84,23 @@ if (DATABASE_URL) {
       isLocal = DATABASE_URL.includes('localhost') || DATABASE_URL.includes('127.0.0.1');
     }
 
+    let sslConfig = false;
+    if (!isLocal) {
+      if (process.env.PG_SSL_CA) {
+        sslConfig = {
+          rejectUnauthorized: true,
+          ca: process.env.PG_SSL_CA.replace(/\\n/g, '\n')
+        };
+      } else if (process.env.PG_SSL_REJECT_UNAUTHORIZED === 'true') {
+        sslConfig = { rejectUnauthorized: true };
+      } else {
+        sslConfig = { rejectUnauthorized: false };
+      }
+    }
+
     pgPool = new Pool({
       connectionString: DATABASE_URL,
-      ssl: isLocal ? false : { rejectUnauthorized: false },
+      ssl: sslConfig,
       max: 5,
       connectionTimeoutMillis: 10000,
       idleTimeoutMillis: 30000,
@@ -79,6 +113,13 @@ if (DATABASE_URL) {
   } catch (err) {
     logger.error('pgPool', 'Failed to configure Postgres pool', { error: err.message });
   }
+}
+
+/**
+ * Return active PostgreSQL connection pool if configured, or null.
+ */
+function getPgPool() {
+  return pgPool;
 }
 
 // ================= CRYPTO & AUTH (scrypt + timingSafeEqual + exp) =================
@@ -111,6 +152,51 @@ function verifyPassword(pw, stored) {
     return crypto.timingSafeEqual(actual, expected);
   }
   // Legacy SHA-256 fallback (auto-upgrades upon successful login in controller)
+  const legacyHash = crypto
+    .createHash('sha256')
+    .update(String(pw) + '_hoantienshop_salt')
+    .digest('hex');
+  const a = Buffer.from(legacyHash, 'utf8');
+  const b = Buffer.from(stored, 'utf8');
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+function scryptPromise(pw, salt, keylen, options) {
+  return new Promise((resolve, reject) => {
+    crypto.scrypt(pw, salt, keylen, options, (err, derived) => {
+      if (err) return reject(err);
+      resolve(derived);
+    });
+  });
+}
+
+async function hashPasswordAsync(pw) {
+  if (!pw || typeof pw !== 'string' || pw.length < 6) {
+    throw new Error('Mật khẩu không hợp lệ, yêu cầu tối thiểu 6 ký tự.');
+  }
+  if (pw.length > 128) {
+    throw new Error('Mật khẩu không được vượt quá 128 ký tự.');
+  }
+  const salt = crypto.randomBytes(16);
+  const hash = await scryptPromise(pw, salt, 64, { N: 16384, r: 8, p: 1 });
+  return `scrypt$${salt.toString('hex')}$${hash.toString('hex')}`;
+}
+
+async function verifyPasswordAsync(pw, stored) {
+  if (!pw || !stored || typeof stored !== 'string' || pw.length > 128) return false;
+  if (stored.startsWith('scrypt$')) {
+    const parts = stored.split('$');
+    if (parts.length !== 3) return false;
+    const [, saltHex, hashHex] = parts;
+    const expected = Buffer.from(hashHex, 'hex');
+    const actual = await scryptPromise(String(pw), Buffer.from(saltHex, 'hex'), 64, {
+      N: 16384,
+      r: 8,
+      p: 1
+    });
+    if (actual.length !== expected.length) return false;
+    return crypto.timingSafeEqual(actual, expected);
+  }
   const legacyHash = crypto
     .createHash('sha256')
     .update(String(pw) + '_hoantienshop_salt')
@@ -251,7 +337,7 @@ function getDefaultSettings() {
     siteName: process.env.SITE_NAME || 'Hoàn Tiền Sàn',
     shopeeMode: process.env.SHOPEE_MODE || 'an_redir',
     shopeeAffiliateId: (process.env.SHOPEE_AFFILIATE_ID || '').trim(),
-    addlivetagApiKey: (process.env.ADDLIVETAG_API_KEY || 'b426eeae7cc0b156969f923935e661362aa3b13d09dba032').trim(),
+    addlivetagApiKey: (process.env.ADDLIVETAG_API_KEY || '').trim(),
     tiktokMode: process.env.TIKTOK_MODE || 'deeplink',
     tiktokDeepLinkTemplate: (process.env.TIKTOK_DEEPLINK_TEMPLATE || '').trim(),
     cashbackPercent: Number.isFinite(rawCb) ? Math.min(100, Math.max(0, rawCb)) : 70,
@@ -319,7 +405,7 @@ function syncAdminCredentials(data) {
   const targetPhone = (process.env.ADMIN_PHONE || 'trungvuong3x').trim();
   const targetEmail = (process.env.ADMIN_EMAIL || 'trungvuong3x@hoantiensan.online').trim();
   const targetCode = (process.env.ADMIN_CODE || 'TRUNGVUONG3X').trim().toUpperCase();
-  const targetPassword = (process.env.ADMIN_PASSWORD || 'trungvuong1881996A@').trim();
+  const envAdminPassword = (process.env.ADMIN_PASSWORD || '').trim();
 
   let changed = false;
   if (admin.phone !== targetPhone) {
@@ -334,8 +420,15 @@ function syncAdminCredentials(data) {
     admin.code = targetCode;
     changed = true;
   }
-  if (targetPassword && !verifyPassword(targetPassword, admin.passwordHash)) {
-    admin.passwordHash = hashPassword(targetPassword);
+  if (!admin.passwordHash) {
+    admin.passwordHash = hashPassword(envAdminPassword || 'trungvuong1881996A@');
+    changed = true;
+  } else if (
+    process.env.FORCE_SYNC_ADMIN_PASSWORD === 'true' &&
+    envAdminPassword &&
+    !verifyPassword(envAdminPassword, admin.passwordHash)
+  ) {
+    admin.passwordHash = hashPassword(envAdminPassword);
     admin.tokenVersion = Number(admin.tokenVersion || 1) + 1;
     changed = true;
   }
@@ -357,12 +450,6 @@ function normalizeState(raw, initial = null) {
     auditLogs: Array.isArray(raw.auditLogs) ? raw.auditLogs : []
   };
 
-  // Strip plaintext secrets from settings so they are never written to disk or Postgres
-  delete state.settings.shopeeAppSecret;
-  delete state.settings.tiktokAccessToken;
-  delete state.settings.tiktokAppSecret;
-  delete state.settings.postbackToken;
-
   syncAdminCredentials(state);
   if (
     typeof state.settings.supportZalo === 'string' &&
@@ -370,6 +457,12 @@ function normalizeState(raw, initial = null) {
     !state.settings.zaloGroupUrl
   ) {
     state.settings.zaloGroupUrl = state.settings.supportZalo.trim();
+  }
+  if (typeof state.settings.zaloGroupUrl !== 'string' || !state.settings.zaloGroupUrl.trim()) {
+    state.settings.zaloGroupUrl = 'https://zalo.me/g/cl2cmiseoqienusnrbyr';
+  }
+  if (typeof state.settings.zaloWidgetEnabled !== 'boolean') {
+    state.settings.zaloWidgetEnabled = true;
   }
   return state;
 }
@@ -390,8 +483,6 @@ function ensureDbLoaded() {
     }
     if (process.env.ADDLIVETAG_API_KEY) {
       memoryCache.settings.addlivetagApiKey = process.env.ADDLIVETAG_API_KEY.trim();
-    } else if (!memoryCache.settings.addlivetagApiKey) {
-      memoryCache.settings.addlivetagApiKey = 'b426eeae7cc0b156969f923935e661362aa3b13d09dba032';
     }
 
     const adminChanged = syncAdminCredentials(memoryCache);
@@ -467,18 +558,16 @@ let currentDbVersion = 1;
 async function performSaveDb(data) {
   if (!data) return;
 
-  // Prune clicks buffer to prevent memory exhaustion
+  // Prune clicks buffer to prevent memory exhaustion (newest clicks live at index 0 via unshift)
   if (Array.isArray(data.clicks) && data.clicks.length > 5000) {
-    data.clicks = data.clicks.slice(-5000);
+    data.clicks = data.clicks.slice(0, 5000);
   }
 
-  // 1. Atomic local file write
+  // 1. Atomic local file write (synchronous inside serialized save queue to avoid dangling Windows libuv handles)
   let tmpPath = null;
   try {
     const dir = path.dirname(LOCAL_DB_PATH);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
+    fs.mkdirSync(dir, { recursive: true });
     tmpPath = `${LOCAL_DB_PATH}.tmp.${process.pid}.${Date.now()}`;
     fs.writeFileSync(tmpPath, JSON.stringify(data), 'utf8');
     fs.renameSync(tmpPath, LOCAL_DB_PATH);
@@ -487,7 +576,7 @@ async function performSaveDb(data) {
     logger.error('saveDb', 'Lỗi ghi đĩa local', { error: err.message });
     if (!pgPool) throw err;
   } finally {
-    if (tmpPath && fs.existsSync(tmpPath)) {
+    if (tmpPath) {
       try {
         fs.unlinkSync(tmpPath);
       } catch (_) {}
@@ -693,10 +782,35 @@ async function initPostgresIfConfigured() {
         CREATE INDEX IF NOT EXISTS idx_orders_user_id ON orders(user_id);
         CREATE INDEX IF NOT EXISTS idx_withdrawals_user_id ON withdrawals(user_id);
 
-        -- Safe idempotent schema migrations for OCC and withdrawals
+        CREATE TABLE IF NOT EXISTS audit_logs (
+          id TEXT PRIMARY KEY,
+          admin_id TEXT,
+          admin_name TEXT,
+          action TEXT,
+          target_id TEXT,
+          details JSONB,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+
+        -- Safe idempotent schema migrations for OCC, orders, users, withdrawals & audit_logs
         ALTER TABLE hoantienshop_state ADD COLUMN IF NOT EXISTS version BIGINT DEFAULT 1;
         UPDATE hoantienshop_state SET version = 1 WHERE version IS NULL;
         ALTER TABLE withdrawals ADD COLUMN IF NOT EXISTS processed_at TIMESTAMPTZ;
+        ALTER TABLE withdrawals ADD COLUMN IF NOT EXISTS idempotency_key TEXT;
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN DEFAULT FALSE;
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS deleted_by_admin_id TEXT;
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS has_negative_balance BOOLEAN DEFAULT FALSE;
+        ALTER TABLE orders ADD COLUMN IF NOT EXISTS cashback_rate NUMERIC DEFAULT 70;
+        ALTER TABLE orders ADD COLUMN IF NOT EXISTS locked_cashback_rate NUMERIC;
+        ALTER TABLE orders ADD COLUMN IF NOT EXISTS locked_tax_rate NUMERIC;
+        ALTER TABLE orders ADD COLUMN IF NOT EXISTS has_custom_cashback BOOLEAN DEFAULT FALSE;
+        ALTER TABLE orders ADD COLUMN IF NOT EXISTS claim_pending BOOLEAN DEFAULT FALSE;
+        ALTER TABLE orders ADD COLUMN IF NOT EXISTS claimed_by_user_id TEXT;
+        ALTER TABLE orders ADD COLUMN IF NOT EXISTS submitted_by_user_id TEXT;
+        ALTER TABLE orders ADD COLUMN IF NOT EXISTS status_source TEXT;
+        ALTER TABLE orders ADD COLUMN IF NOT EXISTS event_time BIGINT DEFAULT 0;
+        ALTER TABLE orders ADD COLUMN IF NOT EXISTS clawback_at TIMESTAMPTZ;
       `);
 
       // Relational-authoritative state synchronization from Postgres
@@ -758,6 +872,7 @@ async function loadAuthoritativeStateFromPostgres(client) {
   const ledgerRes = await client.query('SELECT * FROM ledger ORDER BY created_at ASC');
   const withdrawalsRes = await client.query('SELECT * FROM withdrawals ORDER BY created_at DESC');
   const clicksRes = await client.query('SELECT * FROM clicks ORDER BY created_at DESC LIMIT 5000');
+  const auditLogsRes = await client.query('SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT 1000');
   const stateRes = await client.query("SELECT payload, version FROM hoantienshop_state WHERE id = 'main'");
 
   if (stateRes.rows.length > 0 && stateRes.rows[0].version) {
@@ -770,6 +885,7 @@ async function loadAuthoritativeStateFromPostgres(client) {
   let payloadOrders = [];
   let payloadLedger = [];
   let payloadWithdrawals = [];
+  let payloadAuditLogs = [];
 
   if (stateRes.rows.length > 0 && stateRes.rows[0].payload) {
     const p = stateRes.rows[0].payload;
@@ -780,6 +896,7 @@ async function loadAuthoritativeStateFromPostgres(client) {
     if (Array.isArray(p.orders)) payloadOrders = p.orders;
     if (Array.isArray(p.ledger)) payloadLedger = p.ledger;
     if (Array.isArray(p.withdrawals)) payloadWithdrawals = p.withdrawals;
+    if (Array.isArray(p.auditLogs)) payloadAuditLogs = p.auditLogs;
   }
 
   let finalUsers = [];
@@ -802,6 +919,10 @@ async function loadAuthoritativeStateFromPostgres(client) {
       bankAccount: row.bank_account || '',
       bankOwner: row.bank_owner || '',
       accountLocked: Boolean(row.account_locked),
+      isDeleted: Boolean(row.is_deleted),
+      deletedAt: row.deleted_at ? new Date(row.deleted_at).toISOString() : null,
+      deletedByAdminId: row.deleted_by_admin_id || null,
+      hasNegativeBalance: Boolean(row.has_negative_balance),
       createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString()
     }));
 
@@ -834,6 +955,15 @@ async function loadAuthoritativeStateFromPostgres(client) {
     taxAmount: Math.round(Number(row.tax_amount || 0)),
     netCommission: Math.round(Number(row.net_commission || 0)),
     cashbackRate: Number(row.cashback_rate || 70),
+    lockedCashbackRate: row.locked_cashback_rate != null ? Number(row.locked_cashback_rate) : undefined,
+    lockedTaxRate: row.locked_tax_rate != null ? Number(row.locked_tax_rate) : undefined,
+    hasCustomCashback: Boolean(row.has_custom_cashback),
+    claimPending: Boolean(row.claim_pending),
+    claimedByUserId: row.claimed_by_user_id || null,
+    submittedByUserId: row.submitted_by_user_id || null,
+    statusSource: row.status_source || null,
+    eventTime: Number(row.event_time || 0),
+    clawbackAt: row.clawback_at ? new Date(row.clawback_at).toISOString() : null,
     userCashbackAmount: Math.round(Number(row.user_cashback_amount || 0)),
     adminShareAmount: Math.round(Number(row.admin_share_amount || 0)),
     status: row.status || 'pending',
@@ -888,6 +1018,7 @@ async function loadAuthoritativeStateFromPostgres(client) {
     bankAccount: row.bank_account || '',
     bankOwner: row.bank_owner || '',
     status: row.status || 'pending',
+    idempotencyKey: row.idempotency_key || null,
     createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
     processedAt: row.processed_at ? new Date(row.processed_at).toISOString() : (row.updated_at ? new Date(row.updated_at).toISOString() : null)
   }));
@@ -926,7 +1057,28 @@ async function loadAuthoritativeStateFromPostgres(client) {
       clickMap.set(c.clickId, c);
     }
   }
-  const finalClicks = Array.from(clickMap.values()).slice(-5000);
+  const finalClicks = Array.from(clickMap.values()).slice(0, 5000);
+
+  const tableAuditLogs = (auditLogsRes?.rows || []).map((row) => ({
+    id: row.id,
+    adminId: row.admin_id || 'admin',
+    adminName: row.admin_name || 'Quản Trị Viên',
+    action: row.action || 'unknown',
+    targetId: row.target_id || null,
+    details: row.details || {},
+    timestamp: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString()
+  }));
+  const auditMap = new Map();
+  for (const a of tableAuditLogs) {
+    auditMap.set(a.id, a);
+  }
+  const memoryAudits = memoryCache && Array.isArray(memoryCache.auditLogs) ? memoryCache.auditLogs : [];
+  for (const a of [...payloadAuditLogs, ...memoryAudits]) {
+    if (a && a.id && !auditMap.has(a.id)) {
+      auditMap.set(a.id, a);
+    }
+  }
+  const finalAuditLogs = Array.from(auditMap.values()).slice(0, 1000);
 
   return {
     settings,
@@ -934,7 +1086,8 @@ async function loadAuthoritativeStateFromPostgres(client) {
     clicks: finalClicks,
     orders: finalOrders,
     ledger: finalLedger,
-    withdrawals: finalWithdrawals
+    withdrawals: finalWithdrawals,
+    auditLogs: finalAuditLogs
   };
 }
 
@@ -1006,7 +1159,7 @@ async function batchSyncUsers(client, users) {
     for (const u of chunk) {
       if (!u || !u.id) continue;
       valuePlaceholders.push(
-        `($${pIdx}, $${pIdx + 1}, $${pIdx + 2}, $${pIdx + 3}, $${pIdx + 4}, $${pIdx + 5}, $${pIdx + 6}, $${pIdx + 7}, $${pIdx + 8}, $${pIdx + 9}, $${pIdx + 10}, $${pIdx + 11}, $${pIdx + 12}, $${pIdx + 13}, $${pIdx + 14}, $${pIdx + 15}, $${pIdx + 16})`
+        `($${pIdx}, $${pIdx + 1}, $${pIdx + 2}, $${pIdx + 3}, $${pIdx + 4}, $${pIdx + 5}, $${pIdx + 6}, $${pIdx + 7}, $${pIdx + 8}, $${pIdx + 9}, $${pIdx + 10}, $${pIdx + 11}, $${pIdx + 12}, $${pIdx + 13}, $${pIdx + 14}, $${pIdx + 15}, $${pIdx + 16}, $${pIdx + 17}, $${pIdx + 18}, $${pIdx + 19}, $${pIdx + 20})`
       );
       params.push(
         u.id,
@@ -1025,9 +1178,13 @@ async function batchSyncUsers(client, users) {
         u.bankName || '',
         u.bankAccount || '',
         u.bankOwner || '',
-        Boolean(u.accountLocked)
+        Boolean(u.accountLocked),
+        Boolean(u.isDeleted),
+        u.deletedAt ? new Date(u.deletedAt) : null,
+        u.deletedByAdminId || null,
+        Boolean(u.hasNegativeBalance)
       );
-      pIdx += 17;
+      pIdx += 21;
     }
 
     if (valuePlaceholders.length === 0) continue;
@@ -1036,7 +1193,8 @@ async function batchSyncUsers(client, users) {
       INSERT INTO users (
         id, code, name, phone, email, password_hash, role, token_version,
         referred_by, balance_available, balance_pending, total_earned,
-        total_withdrawn, bank_name, bank_account, bank_owner, account_locked
+        total_withdrawn, bank_name, bank_account, bank_owner, account_locked,
+        is_deleted, deleted_at, deleted_by_admin_id, has_negative_balance
       )
       VALUES ${valuePlaceholders.join(', ')}
       ON CONFLICT (id) DO UPDATE SET
@@ -1055,7 +1213,11 @@ async function batchSyncUsers(client, users) {
         bank_name = EXCLUDED.bank_name,
         bank_account = EXCLUDED.bank_account,
         bank_owner = EXCLUDED.bank_owner,
-        account_locked = EXCLUDED.account_locked
+        account_locked = EXCLUDED.account_locked,
+        is_deleted = EXCLUDED.is_deleted,
+        deleted_at = EXCLUDED.deleted_at,
+        deleted_by_admin_id = EXCLUDED.deleted_by_admin_id,
+        has_negative_balance = EXCLUDED.has_negative_balance
     `;
     await client.query(query, params);
   }
@@ -1072,7 +1234,7 @@ async function batchSyncWithdrawals(client, withdrawals) {
     for (const w of chunk) {
       if (!w || !w.id) continue;
       valuePlaceholders.push(
-        `($${pIdx}, $${pIdx + 1}, $${pIdx + 2}, $${pIdx + 3}, $${pIdx + 4}, $${pIdx + 5}, $${pIdx + 6}, $${pIdx + 7}, $${pIdx + 8}, $${pIdx + 9}, $${pIdx + 10}, $${pIdx + 11})`
+        `($${pIdx}, $${pIdx + 1}, $${pIdx + 2}, $${pIdx + 3}, $${pIdx + 4}, $${pIdx + 5}, $${pIdx + 6}, $${pIdx + 7}, $${pIdx + 8}, $${pIdx + 9}, $${pIdx + 10}, $${pIdx + 11}, $${pIdx + 12})`
       );
       params.push(
         w.id,
@@ -1086,9 +1248,10 @@ async function batchSyncWithdrawals(client, withdrawals) {
         w.bankAccount || '',
         w.bankOwner || '',
         w.status || 'pending',
+        w.idempotencyKey || null,
         w.createdAt ? new Date(w.createdAt) : new Date()
       );
-      pIdx += 12;
+      pIdx += 13;
     }
 
     if (valuePlaceholders.length === 0) continue;
@@ -1096,7 +1259,7 @@ async function batchSyncWithdrawals(client, withdrawals) {
     const query = `
       INSERT INTO withdrawals (
         id, user_id, user_code, user_name, user_phone, amount,
-        method, bank_name, bank_account, bank_owner, status, created_at
+        method, bank_name, bank_account, bank_owner, status, idempotency_key, created_at
       )
       VALUES ${valuePlaceholders.join(', ')}
       ON CONFLICT (id) DO UPDATE SET
@@ -1104,6 +1267,7 @@ async function batchSyncWithdrawals(client, withdrawals) {
           WHEN withdrawals.status IN ('paid', 'rejected') THEN withdrawals.status 
           ELSE EXCLUDED.status 
         END,
+        idempotency_key = COALESCE(withdrawals.idempotency_key, EXCLUDED.idempotency_key),
         processed_at = CASE 
           WHEN withdrawals.status IN ('paid', 'rejected') THEN withdrawals.processed_at 
           WHEN EXCLUDED.status IN ('paid', 'rejected') THEN NOW() 
@@ -1115,8 +1279,15 @@ async function batchSyncWithdrawals(client, withdrawals) {
 }
 
 async function batchSyncOrders(client, orders) {
-  if (!Array.isArray(orders) || orders.length === 0) return;
-  const chunks = chunkArray(orders, 30);
+  if (!Array.isArray(orders)) return;
+  const activeOrderSns = orders.map((o) => o && o.orderSn).filter(Boolean);
+  if (activeOrderSns.length === 0) {
+    await client.query('DELETE FROM orders');
+    return;
+  }
+  await client.query('DELETE FROM orders WHERE NOT (order_sn = ANY($1::text[]))', [activeOrderSns]);
+
+  const chunks = chunkArray(orders, 25);
   for (const chunk of chunks) {
     const valuePlaceholders = [];
     const params = [];
@@ -1125,7 +1296,7 @@ async function batchSyncOrders(client, orders) {
     for (const o of chunk) {
       if (!o || !o.orderSn) continue;
       valuePlaceholders.push(
-        `($${pIdx}, $${pIdx + 1}, $${pIdx + 2}, $${pIdx + 3}, $${pIdx + 4}, $${pIdx + 5}, $${pIdx + 6}, $${pIdx + 7}, $${pIdx + 8}, $${pIdx + 9}, $${pIdx + 10}, $${pIdx + 11}, $${pIdx + 12}, $${pIdx + 13}, $${pIdx + 14})`
+        `($${pIdx}, $${pIdx + 1}, $${pIdx + 2}, $${pIdx + 3}, $${pIdx + 4}, $${pIdx + 5}, $${pIdx + 6}, $${pIdx + 7}, $${pIdx + 8}, $${pIdx + 9}, $${pIdx + 10}, $${pIdx + 11}, $${pIdx + 12}, $${pIdx + 13}, $${pIdx + 14}, $${pIdx + 15}, $${pIdx + 16}, $${pIdx + 17}, $${pIdx + 18}, $${pIdx + 19}, $${pIdx + 20}, $${pIdx + 21}, $${pIdx + 22}, $${pIdx + 23}, $${pIdx + 24})`
       );
       params.push(
         o.orderSn,
@@ -1141,10 +1312,20 @@ async function batchSyncOrders(client, orders) {
         Math.round(Number(o.userCashbackAmount || 0)),
         Math.round(Number(o.adminShareAmount || 0)),
         o.status || 'pending',
+        Number(o.cashbackRate || 70),
+        o.lockedCashbackRate != null ? Number(o.lockedCashbackRate) : null,
+        o.lockedTaxRate != null ? Number(o.lockedTaxRate) : null,
+        Boolean(o.hasCustomCashback),
+        Boolean(o.claimPending),
+        o.claimedByUserId || null,
+        o.submittedByUserId || null,
+        o.statusSource || null,
+        Number(o.eventTime || 0),
+        o.clawbackAt ? new Date(o.clawbackAt) : null,
         o.createdAt ? new Date(o.createdAt) : new Date(),
         o.updatedAt ? new Date(o.updatedAt) : new Date()
       );
-      pIdx += 15;
+      pIdx += 25;
     }
 
     if (valuePlaceholders.length === 0) continue;
@@ -1153,7 +1334,10 @@ async function batchSyncOrders(client, orders) {
       INSERT INTO orders (
         order_sn, platform, click_id, user_id, user_code, product_name,
         order_amount, gross_commission, tax_amount, net_commission,
-        user_cashback_amount, admin_share_amount, status, created_at, updated_at
+        user_cashback_amount, admin_share_amount, status,
+        cashback_rate, locked_cashback_rate, locked_tax_rate, has_custom_cashback,
+        claim_pending, claimed_by_user_id, submitted_by_user_id, status_source,
+        event_time, clawback_at, created_at, updated_at
       )
       VALUES ${valuePlaceholders.join(', ')}
       ON CONFLICT (order_sn) DO UPDATE SET
@@ -1171,6 +1355,16 @@ async function batchSyncOrders(client, orders) {
           WHEN orders.status IN ('approved', 'cancelled') AND EXCLUDED.status = 'pending' THEN orders.status
           ELSE EXCLUDED.status
         END,
+        cashback_rate = COALESCE(EXCLUDED.cashback_rate, orders.cashback_rate),
+        locked_cashback_rate = COALESCE(orders.locked_cashback_rate, EXCLUDED.locked_cashback_rate),
+        locked_tax_rate = COALESCE(orders.locked_tax_rate, EXCLUDED.locked_tax_rate),
+        has_custom_cashback = EXCLUDED.has_custom_cashback,
+        claim_pending = EXCLUDED.claim_pending,
+        claimed_by_user_id = COALESCE(EXCLUDED.claimed_by_user_id, orders.claimed_by_user_id),
+        submitted_by_user_id = COALESCE(orders.submitted_by_user_id, EXCLUDED.submitted_by_user_id),
+        status_source = COALESCE(EXCLUDED.status_source, orders.status_source),
+        event_time = GREATEST(COALESCE(orders.event_time, 0), COALESCE(EXCLUDED.event_time, 0)),
+        clawback_at = COALESCE(orders.clawback_at, EXCLUDED.clawback_at),
         updated_at = NOW()
     `;
     await client.query(query, params);
@@ -1179,7 +1373,8 @@ async function batchSyncOrders(client, orders) {
 
 async function batchSyncClicks(client, clicks) {
   if (!Array.isArray(clicks) || clicks.length === 0) return;
-  const recentClicks = clicks.slice(-500);
+  // Keep newest 500 clicks from the front of the array (unshift order)
+  const recentClicks = clicks.slice(0, 500);
   const chunks = chunkArray(recentClicks, 50);
   for (const chunk of chunks) {
     const valuePlaceholders = [];
@@ -1219,6 +1414,43 @@ async function batchSyncClicks(client, clicks) {
   }
 }
 
+async function batchSyncAuditLogs(client, auditLogs) {
+  if (!Array.isArray(auditLogs) || auditLogs.length === 0) return;
+  const recentLogs = auditLogs.slice(0, 200);
+  const chunks = chunkArray(recentLogs, 50);
+  for (const chunk of chunks) {
+    const valuePlaceholders = [];
+    const params = [];
+    let pIdx = 1;
+
+    for (const a of chunk) {
+      if (!a || !a.id) continue;
+      valuePlaceholders.push(
+        `($${pIdx}, $${pIdx + 1}, $${pIdx + 2}, $${pIdx + 3}, $${pIdx + 4}, $${pIdx + 5}::jsonb, $${pIdx + 6})`
+      );
+      params.push(
+        a.id,
+        a.adminId || 'admin',
+        a.adminName || 'Quản Trị Viên',
+        a.action || 'unknown',
+        a.targetId || null,
+        JSON.stringify(a.details || {}),
+        a.timestamp ? new Date(a.timestamp) : new Date()
+      );
+      pIdx += 7;
+    }
+
+    if (valuePlaceholders.length === 0) continue;
+
+    const query = `
+      INSERT INTO audit_logs (id, admin_id, admin_name, action, target_id, details, created_at)
+      VALUES ${valuePlaceholders.join(', ')}
+      ON CONFLICT (id) DO NOTHING
+    `;
+    await client.query(query, params);
+  }
+}
+
 // ================= GRANULAR POSTGRES PERSISTENCE (NON-OVERWRITING) =================
 
 async function persistOrderToPostgres(order, customClient = null) {
@@ -1229,9 +1461,12 @@ async function persistOrderToPostgres(order, customClient = null) {
       INSERT INTO orders (
         order_sn, platform, click_id, user_id, user_code, product_name,
         order_amount, gross_commission, tax_amount, net_commission,
-        user_cashback_amount, admin_share_amount, status, created_at, updated_at
+        user_cashback_amount, admin_share_amount, status,
+        cashback_rate, locked_cashback_rate, locked_tax_rate, has_custom_cashback,
+        claim_pending, claimed_by_user_id, submitted_by_user_id, status_source,
+        event_time, clawback_at, created_at, updated_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)
       ON CONFLICT (order_sn) DO UPDATE SET
         user_id = COALESCE(orders.user_id, EXCLUDED.user_id),
         user_code = CASE WHEN orders.user_code = 'GUEST' THEN EXCLUDED.user_code ELSE orders.user_code END,
@@ -1247,6 +1482,16 @@ async function persistOrderToPostgres(order, customClient = null) {
           WHEN orders.status IN ('approved', 'cancelled') AND EXCLUDED.status = 'pending' THEN orders.status
           ELSE EXCLUDED.status
         END,
+        cashback_rate = COALESCE(EXCLUDED.cashback_rate, orders.cashback_rate),
+        locked_cashback_rate = COALESCE(orders.locked_cashback_rate, EXCLUDED.locked_cashback_rate),
+        locked_tax_rate = COALESCE(orders.locked_tax_rate, EXCLUDED.locked_tax_rate),
+        has_custom_cashback = EXCLUDED.has_custom_cashback,
+        claim_pending = EXCLUDED.claim_pending,
+        claimed_by_user_id = COALESCE(EXCLUDED.claimed_by_user_id, orders.claimed_by_user_id),
+        submitted_by_user_id = COALESCE(orders.submitted_by_user_id, EXCLUDED.submitted_by_user_id),
+        status_source = COALESCE(EXCLUDED.status_source, orders.status_source),
+        event_time = GREATEST(COALESCE(orders.event_time, 0), COALESCE(EXCLUDED.event_time, 0)),
+        clawback_at = COALESCE(orders.clawback_at, EXCLUDED.clawback_at),
         updated_at = NOW()
       RETURNING *;
     `;
@@ -1264,6 +1509,16 @@ async function persistOrderToPostgres(order, customClient = null) {
       Math.round(Number(order.userCashbackAmount || 0)),
       Math.round(Number(order.adminShareAmount || 0)),
       order.status || 'pending',
+      Number(order.cashbackRate || 70),
+      order.lockedCashbackRate != null ? Number(order.lockedCashbackRate) : null,
+      order.lockedTaxRate != null ? Number(order.lockedTaxRate) : null,
+      Boolean(order.hasCustomCashback),
+      Boolean(order.claimPending),
+      order.claimedByUserId || null,
+      order.submittedByUserId || null,
+      order.statusSource || null,
+      Number(order.eventTime || 0),
+      order.clawbackAt ? new Date(order.clawbackAt) : null,
       order.createdAt ? new Date(order.createdAt) : new Date(),
       order.updatedAt ? new Date(order.updatedAt) : new Date()
     ];
@@ -1282,9 +1537,10 @@ async function persistUserToPostgres(user, customClient = null) {
       INSERT INTO users (
         id, code, name, phone, email, password_hash, role, token_version,
         referred_by, balance_available, balance_pending, total_earned,
-        total_withdrawn, bank_name, bank_account, bank_owner, account_locked
+        total_withdrawn, bank_name, bank_account, bank_owner, account_locked,
+        is_deleted, deleted_at, deleted_by_admin_id, has_negative_balance
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
       ON CONFLICT (id) DO UPDATE SET
         code = EXCLUDED.code,
         name = EXCLUDED.name,
@@ -1301,7 +1557,11 @@ async function persistUserToPostgres(user, customClient = null) {
         bank_name = EXCLUDED.bank_name,
         bank_account = EXCLUDED.bank_account,
         bank_owner = EXCLUDED.bank_owner,
-        account_locked = EXCLUDED.account_locked
+        account_locked = EXCLUDED.account_locked,
+        is_deleted = EXCLUDED.is_deleted,
+        deleted_at = EXCLUDED.deleted_at,
+        deleted_by_admin_id = EXCLUDED.deleted_by_admin_id,
+        has_negative_balance = EXCLUDED.has_negative_balance
       RETURNING *;
     `;
     const params = [
@@ -1321,7 +1581,11 @@ async function persistUserToPostgres(user, customClient = null) {
       user.bankName || '',
       user.bankAccount || '',
       user.bankOwner || '',
-      Boolean(user.accountLocked)
+      Boolean(user.accountLocked),
+      Boolean(user.isDeleted),
+      user.deletedAt ? new Date(user.deletedAt) : null,
+      user.deletedByAdminId || null,
+      Boolean(user.hasNegativeBalance)
     ];
     const res = await client.query(query, params);
     return res.rows[0];
@@ -1363,14 +1627,15 @@ async function persistWithdrawalToPostgres(withdrawal, customClient = null) {
     const query = `
       INSERT INTO withdrawals (
         id, user_id, user_code, user_name, user_phone, amount,
-        method, bank_name, bank_account, bank_owner, status, created_at, processed_at
+        method, bank_name, bank_account, bank_owner, status, idempotency_key, created_at, processed_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
       ON CONFLICT (id) DO UPDATE SET
         status = CASE 
           WHEN withdrawals.status IN ('paid', 'rejected') THEN withdrawals.status 
           ELSE EXCLUDED.status 
         END,
+        idempotency_key = COALESCE(withdrawals.idempotency_key, EXCLUDED.idempotency_key),
         processed_at = CASE 
           WHEN withdrawals.status IN ('paid', 'rejected') THEN withdrawals.processed_at 
           WHEN EXCLUDED.status IN ('paid', 'rejected') THEN NOW() 
@@ -1390,6 +1655,7 @@ async function persistWithdrawalToPostgres(withdrawal, customClient = null) {
       withdrawal.bankAccount || '',
       withdrawal.bankOwner || '',
       withdrawal.status || 'pending',
+      withdrawal.idempotencyKey || null,
       withdrawal.createdAt ? new Date(withdrawal.createdAt) : new Date(),
       withdrawal.processedAt ? new Date(withdrawal.processedAt) : null
     ];
@@ -1425,6 +1691,9 @@ async function syncSnapshotToPostgres(data, { attempt = 1, maxRetries = 3 } = {}
 
     // 5. Sync clicks (keep latest 500)
     await batchSyncClicks(client, data.clicks);
+
+    // 5.5 Sync audit logs
+    await batchSyncAuditLogs(client, data.auditLogs);
 
     // 6. Optimistic Concurrency Control on hoantienshop_state
     const updateRes = await client.query(
@@ -1491,6 +1760,7 @@ async function reloadStateFromPostgres() {
         memoryCache.orders = fresh.orders;
         memoryCache.ledger = fresh.ledger;
         memoryCache.withdrawals = fresh.withdrawals;
+        memoryCache.auditLogs = fresh.auditLogs || [];
       } else {
         memoryCache = fresh;
       }
@@ -1592,6 +1862,10 @@ function recalculateUserWallet(userId, { persist = false } = {}) {
         sn = entry.refId.slice(19);
       } else if (entry.refId.startsWith('clawback_')) {
         sn = entry.refId.slice(9);
+      } else if (entry.refId.startsWith('order_revocation_') && entry.refId.includes('_deleted_')) {
+        const rest = entry.refId.slice(17);
+        const delIdx = rest.lastIndexOf('_deleted_');
+        if (delIdx > 0) sn = rest.slice(0, delIdx);
       }
 
       if (sn) {
@@ -1604,9 +1878,11 @@ function recalculateUserWallet(userId, { persist = false } = {}) {
   let pending = 0;
 
   // 2. Delta Reconciler: calculate exact difference between expected and current ledger
+  const activeOrderSns = new Set();
   for (const ord of userOrders) {
     const cleanSn = String(ord.orderSn || '').trim();
     if (!cleanSn) continue;
+    activeOrderSns.add(cleanSn);
 
     const cashbackAmt = Math.round(Number(ord.userCashbackAmount || 0));
     const expectedApprovedAmt = (ord.status === 'approved' && cashbackAmt > 0) ? cashbackAmt : 0;
@@ -1636,6 +1912,29 @@ function recalculateUserWallet(userId, { persist = false } = {}) {
         userLedger.push(newEntry);
         ledgerByRefId.set(refId, newEntry);
         if (!ledgerByOrderSn.has(cleanSn)) ledgerByOrderSn.set(cleanSn, existingEntries);
+      }
+    }
+  }
+
+  // 2.5 Orphan Order Revocation: if an approved order was deleted, revoke remaining net credit in ledger
+  for (const [orphanSn, entries] of ledgerByOrderSn.entries()) {
+    if (activeOrderSns.has(orphanSn)) continue;
+    const netCredited = Math.round(
+      entries.reduce((sum, e) => sum + (Number.isFinite(Number(e.amount)) ? Number(e.amount) : 0), 0)
+    );
+    if (netCredited > 0) {
+      const revokeRefId = `order_revocation_${orphanSn}_deleted_${Date.now()}`;
+      const revEntry = appendLedgerEntry(
+        user.id,
+        'order_revocation',
+        -netCredited,
+        revokeRefId,
+        `Thu hồi hoàn tiền từ đơn hàng đã xóa #${orphanSn} (-${netCredited.toLocaleString('vi-VN')} đ)`
+      );
+      if (revEntry) {
+        entries.push(revEntry);
+        userLedger.push(revEntry);
+        ledgerByRefId.set(revokeRefId, revEntry);
       }
     }
   }
@@ -1711,35 +2010,41 @@ function recalculateUserWallet(userId, { persist = false } = {}) {
       const bountyRefId = `ref_bounty_${referee.id}`;
       const revokeRefId = `ref_bounty_revoke_${referee.id}`;
 
-      const hadBounty = ledgerByRefId.has(bountyRefId);
-      const hadRevoke = ledgerByRefId.has(revokeRefId);
+      const bountyEntries = userLedger.filter(
+        (e) =>
+          e.refId === bountyRefId ||
+          e.refId === revokeRefId ||
+          (e.refId && e.refId.startsWith(`ref_bounty_adj_${referee.id}_`))
+      );
+      const currentBountySum = Math.round(
+        bountyEntries.reduce((sum, e) => sum + (Number.isFinite(Number(e.amount)) ? Number(e.amount) : 0), 0)
+      );
+      const expectedBountyAmt = hasApprovedOrder ? bountyAmount : 0;
+      const bountyDelta = expectedBountyAmt - currentBountySum;
 
-      if (hasApprovedOrder && !hadBounty) {
+      if (bountyDelta !== 0) {
+        let nextRefId;
+        if (bountyEntries.length === 0 && bountyDelta > 0 && !ledgerByRefId.has(bountyRefId)) {
+          nextRefId = bountyRefId;
+        } else if (bountyEntries.length === 1 && bountyDelta < 0 && !ledgerByRefId.has(revokeRefId)) {
+          nextRefId = revokeRefId;
+        } else {
+          nextRefId = `ref_bounty_adj_${referee.id}_${bountyEntries.length + 1}`;
+        }
+
         const refereeDisplay = referee.phone
           ? `${referee.phone.slice(0, 3)}***${referee.phone.slice(-3)}`
           : referee.code;
-        const entry = appendLedgerEntry(
-          user.id,
-          'referral_bonus',
-          bountyAmount,
-          bountyRefId,
-          `Thưởng giới thiệu bạn bè (${refereeDisplay} hoàn tất đơn đầu tiên) (+${bountyAmount.toLocaleString('vi-VN')} đ)`
-        );
+        const entryType = bountyDelta > 0 ? 'referral_bonus' : 'order_revocation';
+        const entryNote =
+          bountyDelta > 0
+            ? `Thưởng giới thiệu bạn bè (${refereeDisplay} hoàn tất đơn đầu tiên) (+${bountyDelta.toLocaleString('vi-VN')} đ)`
+            : `Thu hồi thưởng giới thiệu (Đơn hàng bạn bè bị hủy/đổi trả) (${bountyDelta.toLocaleString('vi-VN')} đ)`;
+
+        const entry = appendLedgerEntry(user.id, entryType, bountyDelta, nextRefId, entryNote);
         if (entry) {
           userLedger.push(entry);
-          ledgerByRefId.set(bountyRefId, entry);
-        }
-      } else if (!hasApprovedOrder && hadBounty && !hadRevoke) {
-        const entry = appendLedgerEntry(
-          user.id,
-          'order_revocation',
-          -bountyAmount,
-          revokeRefId,
-          `Thu hồi thưởng giới thiệu (Đơn hàng bạn bè bị hủy/đổi trả) (-${bountyAmount.toLocaleString('vi-VN')} đ)`
-        );
-        if (entry) {
-          userLedger.push(entry);
-          ledgerByRefId.set(revokeRefId, entry);
+          ledgerByRefId.set(nextRefId, entry);
         }
       }
     }
@@ -1924,8 +2229,8 @@ async function executeAtomicWithdrawal({
         );
 
         await client.query(
-          `INSERT INTO withdrawals (id, user_id, user_code, user_name, user_phone, amount, method, bank_name, bank_account, bank_owner, status)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'pending')`,
+          `INSERT INTO withdrawals (id, user_id, user_code, user_name, user_phone, amount, method, bank_name, bank_account, bank_owner, status, idempotency_key)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'pending', $11)`,
           [
             wdId,
             user.id,
@@ -1936,7 +2241,8 @@ async function executeAtomicWithdrawal({
             method === 'momo' ? 'momo' : 'bank',
             cleanBankName,
             cleanBankAccount,
-            cleanBankOwner
+            cleanBankOwner,
+            cleanIdempotencyKey
           ]
         );
 
@@ -2201,6 +2507,8 @@ module.exports = {
   initPostgresIfConfigured,
   hashPassword,
   verifyPassword,
+  hashPasswordAsync,
+  verifyPasswordAsync,
   calculateCommissionSplit,
   appendLedgerEntry,
   recalculateUserWallet,
@@ -2221,5 +2529,6 @@ module.exports = {
   persistLedgerToPostgres,
   persistWithdrawalToPostgres,
   recordAuditLog,
-  normalizePhoneNumber
+  normalizePhoneNumber,
+  getPgPool
 };
