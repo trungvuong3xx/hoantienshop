@@ -343,7 +343,7 @@ function getDefaultSettings() {
     cashbackPercent: Number.isFinite(rawCb) ? Math.min(100, Math.max(0, rawCb)) : 70,
     taxDeductPercent: Number.isFinite(rawTax) ? Math.min(50, Math.max(0, rawTax)) : 10,
     referralBonusPercent: 0,
-    referralBountyAmount: Number.isFinite(rawBounty) && rawBounty >= 0 ? rawBounty : 5000,
+    referralBountyAmount: Number.isFinite(rawBounty) && rawBounty >= 0 ? rawBounty : 10000,
     minWithdrawAmount: Number.isFinite(rawMinWd) && rawMinWd >= 0 ? rawMinWd : 50000,
     supportZalo: process.env.SUPPORT_ZALO || '',
     zaloGroupUrl: (process.env.ZALO_GROUP_URL || '').trim(),
@@ -1321,12 +1321,14 @@ async function batchSyncOrders(client, orders) {
         gross_commission = EXCLUDED.gross_commission,
         tax_amount = EXCLUDED.tax_amount,
         net_commission = EXCLUDED.net_commission,
-        user_cashback_amount = CASE 
-          WHEN orders.user_cashback_amount > 0 AND EXCLUDED.user_cashback_amount = 0 THEN orders.user_cashback_amount 
-          ELSE EXCLUDED.user_cashback_amount 
+        user_cashback_amount = CASE
+          WHEN EXCLUDED.status_source = 'admin' THEN EXCLUDED.user_cashback_amount
+          WHEN orders.user_cashback_amount > 0 AND EXCLUDED.user_cashback_amount = 0 THEN orders.user_cashback_amount
+          ELSE EXCLUDED.user_cashback_amount
         END,
         admin_share_amount = EXCLUDED.admin_share_amount,
         status = CASE
+          WHEN EXCLUDED.status_source = 'admin' THEN EXCLUDED.status
           WHEN orders.status IN ('approved', 'cancelled') AND EXCLUDED.status = 'pending' THEN orders.status
           ELSE EXCLUDED.status
         END,
@@ -1336,8 +1338,11 @@ async function batchSyncOrders(client, orders) {
         has_custom_cashback = EXCLUDED.has_custom_cashback,
         claim_pending = EXCLUDED.claim_pending,
         claimed_by_user_id = COALESCE(EXCLUDED.claimed_by_user_id, orders.claimed_by_user_id),
-        submitted_by_user_id = COALESCE(orders.submitted_by_user_id, EXCLUDED.submitted_by_user_id),
-        status_source = COALESCE(EXCLUDED.status_source, orders.status_source),
+        submitted_by_user_id = COALESCE(EXCLUDED.submitted_by_user_id, orders.submitted_by_user_id),
+        status_source = CASE
+          WHEN EXCLUDED.status_source = 'admin' THEN 'admin'
+          ELSE COALESCE(EXCLUDED.status_source, orders.status_source)
+        END,
         event_time = GREATEST(COALESCE(orders.event_time, 0), COALESCE(EXCLUDED.event_time, 0)),
         clawback_at = COALESCE(orders.clawback_at, EXCLUDED.clawback_at),
         updated_at = NOW()
@@ -2501,7 +2506,7 @@ function recordAuditLog(db, { adminId, adminName, action, targetId, details } = 
 
 function isTestUserRecord(u) {
   if (!u || typeof u !== 'object') return false;
-  if (u.role === 'admin' || u.id === 'usr_admin') return false;
+  if (u.id === 'usr_admin') return false;
   const id = String(u.id || '');
   const code = String(u.code || '');
   const name = String(u.name || '').trim();
@@ -2516,9 +2521,10 @@ function isTestUserRecord(u) {
   ) {
     return true;
   }
-  if (/^(U108899|U_TEST|ADM_TEST|ADMIN_P03)$/i.test(code) || /^USR_\d{10,}$/i.test(code)) {
+  if (/^(U108899|U_TEST|ADM_TEST|ADMIN_P03)$/i.test(code) || /^(USR|ADM)_\d{10,}$/i.test(code)) {
     return true;
   }
+  if (u.role === 'admin') return false;
   if (email && (/@example\.com$/i.test(email) || /@test\.com$/i.test(email))) {
     return true;
   }

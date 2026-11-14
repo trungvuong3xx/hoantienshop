@@ -22,6 +22,7 @@ const {
   getDatabaseStatus,
   reloadStateFromPostgres,
   withUserLock,
+  purgeTestArtifactsFromDb,
   recordAuditLog,
   normalizePhoneNumber
 } = require('./dbService');
@@ -792,7 +793,7 @@ function registerCashbackRoutes(app) {
       cashbackPercent: Number(s.cashbackPercent || 70),
       taxDeductPercent: Number(s.taxDeductPercent ?? 10),
       referralBonusPercent: Number(s.referralBonusPercent ?? 5),
-      referralBountyAmount: Number(s.referralBountyAmount ?? 5000),
+      referralBountyAmount: Number(s.referralBountyAmount ?? 10000),
       minWithdrawAmount: Number(s.minWithdrawAmount || 50000),
       supportZalo: s.supportZalo || '',
       zaloGroupUrl: s.zaloGroupUrl || DEFAULT_ZALO_GROUP_URL,
@@ -813,7 +814,7 @@ function registerCashbackRoutes(app) {
       cashbackPercent: Number(s.cashbackPercent || 70),
       taxDeductPercent: Number(s.taxDeductPercent ?? 10),
       referralBonusPercent: Number(s.referralBonusPercent ?? 5),
-      referralBountyAmount: Number(s.referralBountyAmount ?? 5000),
+      referralBountyAmount: Number(s.referralBountyAmount ?? 10000),
       minWithdrawAmount: Number(s.minWithdrawAmount || 50000),
       supportZalo: s.supportZalo || '',
       zaloGroupUrl: s.zaloGroupUrl || DEFAULT_ZALO_GROUP_URL,
@@ -1917,9 +1918,12 @@ function registerCashbackRoutes(app) {
 
     // Allowlist safe settings before returning to client (including masked secrets)
     const SAFE_SETTING_KEYS = [
+      'siteName',
       'cashbackPercent',
       'taxDeductPercent',
       'minWithdrawAmount',
+      'referralBonusPercent',
+      'referralBountyAmount',
       'shopeeMode',
       'shopeeAffiliateId',
       'shopeeAppId',
@@ -1931,6 +1935,8 @@ function registerCashbackRoutes(app) {
       'contactPhone',
       'supportZalo',
       'supportFacebook',
+      'zaloGroupUrl',
+      'zaloWidgetEnabled',
       'announcementBanner',
       'lastAutoSyncAt'
     ];
@@ -1941,6 +1947,8 @@ function registerCashbackRoutes(app) {
         safeSettings[key] = db.settings[key];
       }
     }
+    safeSettings.zaloGroupUrl = db.settings.zaloGroupUrl || DEFAULT_ZALO_GROUP_URL;
+    safeSettings.zaloWidgetEnabled = db.settings.zaloWidgetEnabled ?? true;
 
     const isSuperAdmin = req.adminUser?.role === 'admin';
     const revealRequested = Boolean(
@@ -2365,9 +2373,9 @@ function registerCashbackRoutes(app) {
 
       targetOrder.orderSn = cleanOrderSn;
       targetOrder.platform = validPlatform;
-      if (userCode) {
+      if (userCode !== undefined && String(userCode).trim() !== '') {
         targetOrder.userCode = matchedUser ? matchedUser.code : rawCode.toUpperCase();
-        targetOrder.userId = matchedUser ? matchedUser.id : targetOrder.userId;
+        targetOrder.userId = matchedUser ? matchedUser.id : null;
       }
       if (productName) targetOrder.productName = String(productName).slice(0, 150);
       if (orderAmount !== undefined && orderAmount !== null && orderAmount !== '') {
@@ -2406,9 +2414,9 @@ function registerCashbackRoutes(app) {
 
       if (status) {
         targetOrder.status = validStatus;
-        targetOrder.statusSource = 'admin';
         targetOrder.statusUpdatedAt = new Date().toISOString();
       }
+      targetOrder.statusSource = 'admin';
       targetOrder.updatedAt = new Date().toISOString();
     } else {
       let finalCashback = split.userCashbackAmount;
@@ -2686,7 +2694,71 @@ function registerCashbackRoutes(app) {
   });
 
   app.post('/api/admin/withdrawals/cancel', requireAdmin, handleCancelWithdrawal);
-  app.post('/api/admin/withdrawals/delete', requireAdmin, handleCancelWithdrawal);
+  app.post('/api/admin/withdrawals/delete', requireAdmin, asyncHandler(async (req, res) => {
+    logger.logEnter('POST /api/admin/withdrawals/delete');
+    const admin = req.adminUser;
+    const { id, hardDelete } = req.body || {};
+
+    if (!hardDelete) {
+      return handleCancelWithdrawal(req, res);
+    }
+    if (!id) {
+      return res.status(400).json({ error: 'Thiếu ID lệnh rút tiền cần xóa.' });
+    }
+
+    const db = ensureDbLoaded();
+    const wd = db.withdrawals.find((w) => w.id === id);
+    if (!wd) {
+      return res.status(404).json({ error: 'Không tìm thấy lệnh rút tiền.' });
+    }
+    if (wd.status === 'paid') {
+      return res.status(400).json({
+        error: 'Không thể xóa lệnh rút tiền đã chi trả thành công để bảo toàn lịch sử đối soát.'
+      });
+    }
+
+    if (wd.status === 'pending') {
+      await refundWithdrawal(db, wd, admin);
+    }
+
+    db.withdrawals = db.withdrawals.filter((w) => w.id !== id);
+    recordAuditLog(db, {
+      adminId: admin?.id || 'admin',
+      adminName: admin?.name || admin?.phone || admin?.code || 'Admin',
+      action: 'delete_withdrawal',
+      targetId: id,
+      details: { previousStatus: wd.status, amount: wd.amount, userCode: wd.userCode }
+    });
+    await saveDb(db);
+
+    logger.logLeave('POST /api/admin/withdrawals/delete', { id, deleted: true });
+    return res.json({ status: 'ok', deleted: true, message: `Đã xóa lệnh rút tiền #${id} thành công!` });
+  }));
+
+  // Admin One-Click Cleanup of Automated Test/Demo Garbage
+  app.post('/api/admin/cleanup-test-data', requireAdmin, asyncHandler(async (req, res) => {
+    logger.logEnter('POST /api/admin/cleanup-test-data');
+    const admin = req.adminUser;
+    await reloadStateFromPostgres();
+    const db = ensureDbLoaded();
+    const summary = await purgeTestArtifactsFromDb(db);
+
+    recordAuditLog(db, {
+      adminId: admin?.id || 'admin',
+      adminName: admin?.name || admin?.phone || admin?.code || 'Admin',
+      action: 'cleanup_test_data',
+      targetId: 'system',
+      details: summary
+    });
+    await saveDb(db);
+
+    logger.logLeave('POST /api/admin/cleanup-test-data', summary);
+    return res.json({
+      status: 'ok',
+      summary,
+      message: `Đã dọn sạch ${summary.removedUsers} tài khoản test, ${summary.removedOrders} đơn rác, ${summary.removedWithdrawals} lệnh rút rác và ${summary.removedLedger} sổ cái test.`
+    });
+  }));
 
   // Admin User Management Action (Reset password, Lock/Unlock, Adjust balance, Reset balance, Delete)
   app.post('/api/admin/users/action', asyncHandler(async (req, res) => {

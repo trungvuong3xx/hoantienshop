@@ -62,6 +62,7 @@ let publicConfig = {
   siteName: 'Hoàn Tiền Sàn',
   cashbackPercent: 70,
   taxDeductPercent: 10,
+  referralBountyAmount: 10000,
   minWithdrawAmount: 50000,
   zaloGroupUrl: 'https://zalo.me/g/cl2cmiseoqienusnrbyr',
   zaloWidgetEnabled: true
@@ -1871,6 +1872,51 @@ function updateAdminPaginationUi({ infoId, prevBtnId, nextBtnId, pagination, fal
   return { page, totalPages };
 }
 
+const ADMIN_SVG = {
+  check: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>',
+  x: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
+  undo: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>',
+  edit: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>',
+  trash: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>',
+  qr: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="3" height="3"/><line x1="21" y1="14" x2="21" y2="14.01"/><line x1="21" y1="21" x2="14" y2="21"/><line x1="21" y1="17" x2="21" y2="21"/></svg>',
+  sliders: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>',
+  refresh: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>'
+};
+
+const ADMIN_TAB_PANES = {
+  orders: 'admTabOrders',
+  withdrawals: 'admTabWithdrawals',
+  users: 'admTabUsers',
+  settings: 'admTabSettings'
+};
+
+function switchAdminTab(tabKey) {
+  if (!ADMIN_TAB_PANES[tabKey]) return;
+  const tabBtns = document.querySelectorAll('[data-admin-tab]');
+  if (tabBtns && tabBtns.forEach) {
+    tabBtns.forEach((btn) => {
+      const isMatch = btn.getAttribute('data-admin-tab') === tabKey;
+      btn.classList.toggle('active', isMatch);
+      btn.setAttribute?.('aria-selected', isMatch ? 'true' : 'false');
+    });
+  }
+  Object.entries(ADMIN_TAB_PANES).forEach(([key, paneId]) => {
+    const pane = document.getElementById(paneId);
+    if (pane) pane.classList.toggle('active', key === tabKey);
+  });
+}
+
+(function bindAdminTabs() {
+  const btns = document.querySelectorAll('[data-admin-tab]');
+  if (btns && btns.forEach) {
+    btns.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        switchAdminTab(btn.getAttribute('data-admin-tab'));
+      });
+    });
+  }
+})();
+
 function renderAdminOrdersTable(orders) {
   const ordTbody = document.getElementById('admOrdersTableBody');
   if (!ordTbody) return;
@@ -1883,27 +1929,32 @@ function renderAdminOrdersTable(orders) {
     .map((o) => {
       const ordKey = escapeHtml(o.id || o.orderSn);
       const ordSnEsc = escapeHtml(o.orderSn);
+      const plat = String(o.platform || 'shopee').toLowerCase() === 'tiktok' ? 'tiktok' : 'shopee';
+      const platLabel = plat === 'tiktok' ? 'TikTok' : 'Shopee';
       const actionButtons =
         o.status === 'pending'
-          ? `<button type="button" class="btn btn-success btn-xs" data-ord-action="approve" data-ord-id="${ordKey}" data-ord-sn="${ordSnEsc}" title="Duyệt đơn và cộng tiền hoàn vào ví khách">Duyệt</button>
-             <button type="button" class="btn btn-warning btn-xs" data-ord-action="cancel" data-ord-id="${ordKey}" data-ord-sn="${ordSnEsc}" title="Hủy đơn này">Hủy</button>
-             <button type="button" class="btn btn-outline btn-xs" data-ord-action="edit" data-ord-id="${ordKey}" data-ord-sn="${ordSnEsc}" title="Chỉnh sửa chi tiết & số tiền hoàn">Sửa</button>
-             <button type="button" class="btn btn-ghost btn-xs text-danger" data-ord-action="delete" data-ord-id="${ordKey}" data-ord-sn="${ordSnEsc}" title="Xóa vĩnh viễn đơn này">Xóa</button>`
+          ? `<button type="button" class="btn btn-success btn-xs btn-icon-svg" data-ord-action="approve" data-ord-id="${ordKey}" data-ord-sn="${ordSnEsc}" title="Duyệt đơn và cộng tiền hoàn vào ví khách">${ADMIN_SVG.check}<span>Duyệt</span></button>
+             <button type="button" class="btn btn-warning btn-xs btn-icon-svg" data-ord-action="cancel" data-ord-id="${ordKey}" data-ord-sn="${ordSnEsc}" title="Hủy đơn này">${ADMIN_SVG.x}<span>Hủy</span></button>
+             <button type="button" class="btn btn-outline btn-xs btn-icon-svg" data-ord-action="edit" data-ord-id="${ordKey}" data-ord-sn="${ordSnEsc}" title="Chỉnh sửa chi tiết & số tiền hoàn">${ADMIN_SVG.edit}<span>Sửa</span></button>
+             <button type="button" class="btn btn-ghost btn-xs text-danger btn-icon-svg" data-ord-action="delete" data-ord-id="${ordKey}" data-ord-sn="${ordSnEsc}" title="Xóa vĩnh viễn đơn này">${ADMIN_SVG.trash}<span>Xóa</span></button>`
           : o.status === 'approved'
-          ? `<button type="button" class="btn btn-secondary btn-xs" data-ord-action="unapprove" data-ord-id="${ordKey}" data-ord-sn="${ordSnEsc}" title="Hủy duyệt và thu hồi tiền hoàn về chờ duyệt">↩️ Hủy duyệt</button>
-             <button type="button" class="btn btn-warning btn-xs" data-ord-action="cancel" data-ord-id="${ordKey}" data-ord-sn="${ordSnEsc}" title="Hủy đơn này">Hủy</button>
-             <button type="button" class="btn btn-outline btn-xs" data-ord-action="edit" data-ord-id="${ordKey}" data-ord-sn="${ordSnEsc}" title="Chỉnh sửa">Sửa</button>
-             <button type="button" class="btn btn-ghost btn-xs text-danger" data-ord-action="delete" data-ord-id="${ordKey}" data-ord-sn="${ordSnEsc}" title="Xóa vĩnh viễn">Xóa</button>`
-          : `<button type="button" class="btn btn-outline btn-xs" data-ord-action="reopen" data-ord-id="${ordKey}" data-ord-sn="${ordSnEsc}" title="Khôi phục về trạng thái chờ duyệt">Khôi phục</button>
-             <button type="button" class="btn btn-outline btn-xs" data-ord-action="edit" data-ord-id="${ordKey}" data-ord-sn="${ordSnEsc}" title="Chỉnh sửa">Sửa</button>
-             <button type="button" class="btn btn-ghost btn-xs text-danger" data-ord-action="delete" data-ord-id="${ordKey}" data-ord-sn="${ordSnEsc}" title="Xóa vĩnh viễn">Xóa</button>`;
+          ? `<button type="button" class="btn btn-secondary btn-xs btn-icon-svg" data-ord-action="unapprove" data-ord-id="${ordKey}" data-ord-sn="${ordSnEsc}" title="Hủy duyệt và thu hồi tiền hoàn về chờ duyệt">${ADMIN_SVG.undo}<span>Hủy duyệt</span></button>
+             <button type="button" class="btn btn-warning btn-xs btn-icon-svg" data-ord-action="cancel" data-ord-id="${ordKey}" data-ord-sn="${ordSnEsc}" title="Hủy đơn này">${ADMIN_SVG.x}<span>Hủy</span></button>
+             <button type="button" class="btn btn-outline btn-xs btn-icon-svg" data-ord-action="edit" data-ord-id="${ordKey}" data-ord-sn="${ordSnEsc}" title="Chỉnh sửa">${ADMIN_SVG.edit}<span>Sửa</span></button>
+             <button type="button" class="btn btn-ghost btn-xs text-danger btn-icon-svg" data-ord-action="delete" data-ord-id="${ordKey}" data-ord-sn="${ordSnEsc}" title="Xóa vĩnh viễn">${ADMIN_SVG.trash}<span>Xóa</span></button>`
+          : `<button type="button" class="btn btn-outline btn-xs btn-icon-svg" data-ord-action="reopen" data-ord-id="${ordKey}" data-ord-sn="${ordSnEsc}" title="Khôi phục về trạng thái chờ duyệt">${ADMIN_SVG.refresh}<span>Khôi phục</span></button>
+             <button type="button" class="btn btn-outline btn-xs btn-icon-svg" data-ord-action="edit" data-ord-id="${ordKey}" data-ord-sn="${ordSnEsc}" title="Chỉnh sửa">${ADMIN_SVG.edit}<span>Sửa</span></button>
+             <button type="button" class="btn btn-ghost btn-xs text-danger btn-icon-svg" data-ord-action="delete" data-ord-id="${ordKey}" data-ord-sn="${ordSnEsc}" title="Xóa vĩnh viễn">${ADMIN_SVG.trash}<span>Xóa</span></button>`;
 
       const dt = o.createdAt ? new Date(o.createdAt).toLocaleDateString('vi-VN') : '—';
       const stCls = getStatusClass(o.status);
       return `
         <tr>
           <td>${dt}</td>
-          <td><strong>${ordSnEsc}</strong></td>
+          <td>
+            <div><strong>${ordSnEsc}</strong></div>
+            <span class="platform-pill ${plat}">${platLabel}</span>
+          </td>
           <td><span style="font-weight:600;color:#2563eb;">${escapeHtml(
             o.userCode || 'GUEST'
           )}</span></td>
@@ -1911,7 +1962,7 @@ function renderAdminOrdersTable(orders) {
           <td><strong>${fmtVnd(o.grossCommission || o.totalCommission)}</strong></td>
           <td><strong style="color:#059669;">${fmtVnd(o.userCashbackAmount)}</strong></td>
           <td><span class="status-badge ${stCls}">${escapeHtml(o.status)}</span></td>
-          <td><div style="display:flex;gap:6px;flex-wrap:wrap;">${actionButtons}</div></td>
+          <td><div class="admin-action-group">${actionButtons}</div></td>
         </tr>
       `;
     })
@@ -1942,9 +1993,9 @@ function renderAdminUsersTable(users) {
           <td>${fmtVnd(u.balancePending)}</td>
           <td>${lockBadge}</td>
           <td>
-            <button type="button" class="btn btn-outline btn-xs" data-manage-user="${escapeHtml(
+            <button type="button" class="btn btn-outline btn-xs btn-icon-svg" data-manage-user="${escapeHtml(
               u.id
-            )}">Quản lý</button>
+            )}">${ADMIN_SVG.sliders}<span>Quản lý</span></button>
           </td>
         </tr>
       `;
@@ -2017,27 +2068,31 @@ function renderAdminWithdrawalsTable(withdrawals) {
   wdTbody.innerHTML = withdrawals
     .map((w) => {
       const qrBtnHtml = w.vietQrUrl
-        ? `<button type="button" class="btn btn-outline btn-xs" data-vietqr="${escapeHtml(
+        ? `<button type="button" class="btn btn-outline btn-xs btn-icon-svg" data-vietqr="${escapeHtml(
             w.vietQrUrl
           )}" data-vietqr-info="Chuyển ${fmtVnd(w.amount)} tới ${escapeHtml(
             w.bankName
           )} - ${escapeHtml(w.bankAccount)} (${escapeHtml(
             w.bankOwner
-          )})" style="background:#eff6ff;color:#1e40af;border-color:#bfdbfe;">📱 Mã QR Chuyển Tiền</button>`
+          )})" style="background:#eff6ff;color:#1e40af;border-color:#bfdbfe;">${ADMIN_SVG.qr}<span>Mã QR Chuyển Tiền</span></button>`
         : '';
 
       const wdActions =
         w.status === 'pending'
-          ? `<button type="button" class="btn btn-success btn-xs" data-wd-action="paid" data-wd-id="${escapeHtml(
+          ? `<button type="button" class="btn btn-success btn-xs btn-icon-svg" data-wd-action="paid" data-wd-id="${escapeHtml(
               w.id
-            )}">Đã chuyển</button>
-             <button type="button" class="btn btn-danger btn-xs" data-wd-action="rejected" data-wd-id="${escapeHtml(
+            )}">${ADMIN_SVG.check}<span>Đã chuyển</span></button>
+             <button type="button" class="btn btn-danger btn-xs btn-icon-svg" data-wd-action="rejected" data-wd-id="${escapeHtml(
                w.id
-             )}">Từ chối</button>
-             <button type="button" class="btn btn-ghost btn-xs text-danger" data-wd-delete="${escapeHtml(
+             )}">${ADMIN_SVG.x}<span>Từ chối</span></button>
+             <button type="button" class="btn btn-ghost btn-xs text-danger btn-icon-svg" data-wd-delete="${escapeHtml(
                w.id
-             )}">Hủy</button>`
-          : '<span style="color:#94a3b8;font-size:12px;">—</span>';
+             )}">${ADMIN_SVG.trash}<span>Xóa</span></button>`
+          : w.status === 'rejected' || w.status === 'cancelled'
+          ? `<button type="button" class="btn btn-ghost btn-xs text-danger btn-icon-svg" data-wd-delete="${escapeHtml(
+              w.id
+            )}">${ADMIN_SVG.trash}<span>Xóa</span></button>`
+          : '<span style="color:#94a3b8;font-size:12px;">Hoàn tất</span>';
 
       const dt = w.createdAt ? new Date(w.createdAt).toLocaleDateString('vi-VN') : '—';
       const stCls = getStatusClass(w.status);
@@ -2054,7 +2109,7 @@ function renderAdminWithdrawalsTable(withdrawals) {
             <div style="margin-top:4px;">${qrBtnHtml}</div>
           </td>
           <td><span class="status-badge ${stCls}">${escapeHtml(w.status)}</span></td>
-          <td><div style="display:flex;gap:6px;flex-wrap:wrap;">${wdActions}</div></td>
+          <td><div class="admin-action-group">${wdActions}</div></td>
         </tr>
       `;
     })
@@ -2145,16 +2200,18 @@ async function loadAdminDashboard() {
 
     const dbTextEl = document.getElementById('admDbStatusText');
     if (dbTextEl) {
+      dbTextEl.classList?.remove('db-warn');
       if (dbStatus.mode === 'postgres') {
-        dbTextEl.textContent = '🟢 Đã kết nối Cloud PostgreSQL (Dữ liệu tài khoản & giao dịch bền vững)';
-        dbTextEl.style.color = '#059669';
+        dbTextEl.textContent = 'Cloud PostgreSQL đã kết nối — Dữ liệu bền vững';
+        dbTextEl.style.color = '#86efac';
       } else if (dbStatus.mode === 'ephemeral_tmp') {
         dbTextEl.textContent =
-          '🟠 Đang chạy bộ nhớ tạm (/tmp) trên Vercel — Hãy gắn DATABASE_URL trong Vercel Settings để lưu vĩnh viễn.';
-        dbTextEl.style.color = '#d97706';
+          'Cảnh báo: Đang chạy bộ nhớ tạm (/tmp) trên Vercel — Hãy gắn DATABASE_URL trong Vercel Settings.';
+        dbTextEl.style.color = '#fde68a';
+        dbTextEl.classList?.add('db-warn');
       } else {
-        dbTextEl.textContent = '🟢 Chế độ Local JSON (Lưu trên ổ cứng máy tính)';
-        dbTextEl.style.color = '#059669';
+        dbTextEl.textContent = 'Chế độ Local JSON (Lưu trên ổ cứng máy tính)';
+        dbTextEl.style.color = '#86efac';
       }
     }
 
@@ -2167,6 +2224,9 @@ async function loadAdminDashboard() {
     setTxt('admUserShare', fmtVnd(st.totalUserCashback || 0));
     setTxt('admProfit', fmtVnd(st.totalAdminProfit || 0));
     setTxt('admUsersOrders', `${st.totalUsers || 0} / ${st.totalOrders || 0}`);
+    setTxt('admTabOrdersBadge', String(st.totalOrders ?? latestAdminOrders.length));
+    setTxt('admTabWithdrawalsBadge', String(st.pendingWithdrawals ?? 0));
+    setTxt('admTabUsersBadge', String(st.totalUsers ?? latestAdminUsers.length));
 
     loadAdminSettings(s);
 
@@ -2230,6 +2290,7 @@ on('admWithdrawalsNextBtn', 'click', () => {
 
 on('syncShopeeNowBtn', 'click', async () => {
   const btn = document.getElementById('syncShopeeNowBtn');
+  const origHtml = btn ? btn.innerHTML : '';
   if (btn) {
     btn.disabled = true;
     btn.textContent = 'Đang đồng bộ...';
@@ -2244,15 +2305,50 @@ on('syncShopeeNowBtn', 'click', async () => {
   } finally {
     if (btn) {
       btn.disabled = false;
-      btn.textContent = '⚡ Đồng bộ đơn tự động (Shopee + AccessTrade)';
+      btn.innerHTML = origHtml || 'Đồng bộ đơn tự động';
     }
   }
 });
 
-on('copyPostbackUrlBtn', 'click', () => {
-  const val = document.getElementById('admPostbackUrl')?.value || '';
+on('cleanTestDataBtn', 'click', async () => {
+  const ok = await askUserConfirm(
+    'Hệ thống sẽ dọn sạch tài khoản test, đơn hàng thử nghiệm, lệnh rút tiền & sổ cái test rác (giữ nguyên toàn bộ tài khoản & giao dịch thật).\n\nBạn có muốn thực hiện ngay không?',
+    'Dọn Dữ Liệu Test Rác'
+  );
+  if (!ok) return;
+
+  const btn = document.getElementById('cleanTestDataBtn');
+  const origHtml = btn ? btn.innerHTML : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Đang dọn rác...';
+  }
+  try {
+    const res = await apiFetch('/api/admin/cleanup-test-data', { method: 'POST', body: '{}' });
+    showToast(res.message || 'Đã dọn sạch dữ liệu test rác!');
+    await loadAdminDashboard();
+  } catch (err) {
+    showToast(err.message);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = origHtml || 'Dọn rác Test';
+    }
+  }
+});
+
+on('copyPostbackUrlBtn', 'click', async () => {
+  const input = document.getElementById('admPostbackUrl');
+  let val = input?.value || '';
+  try {
+    const res = await apiFetch('/api/admin/reveal-postback-url');
+    if (res && res.postbackUrl) {
+      val = res.postbackUrl;
+      if (input) input.value = val;
+    }
+  } catch (_) {}
   if (!val) return;
-  copyText(val, 'Đã sao chép Link Postback AccessTrade!');
+  copyText(val, 'Đã sao chép Link Postback AccessTrade (kèm Token thật)!');
 });
 
 async function saveAdminSettings() {
@@ -2265,6 +2361,14 @@ async function saveAdminSettings() {
     const zaloWidgetCheckbox = document.getElementById('admZaloWidgetEnabled');
     const zaloWidgetEnabled = zaloWidgetCheckbox ? Boolean(zaloWidgetCheckbox.checked) : true;
     const zaloGroupUrl = document.getElementById('admZaloGroupUrl')?.value?.trim() || '';
+    const newAdminPassword = document.getElementById('admNewPass')?.value?.trim() || '';
+    const currentPassword = document.getElementById('admCurrentPass')?.value || '';
+
+    if (newAdminPassword && !currentPassword) {
+      showToast('Vui lòng nhập Mật khẩu Admin hiện tại để đổi mật khẩu mới!');
+      document.getElementById('admCurrentPass')?.focus?.();
+      return;
+    }
 
     const payload = {
       shopeeMode: document.getElementById('admShopeeMode')?.value,
@@ -2296,13 +2400,15 @@ async function saveAdminSettings() {
       supportZalo: document.getElementById('admSupportZalo')?.value?.trim() || '',
       zaloGroupUrl,
       zaloWidgetEnabled,
-      newAdminPassword: document.getElementById('admNewPass')?.value?.trim() || ''
+      currentPassword,
+      newAdminPassword
     };
 
     const res = await apiFetch('/api/admin/settings', {
       method: 'POST',
       body: JSON.stringify(payload)
     });
+    if (document.getElementById('admCurrentPass')) document.getElementById('admCurrentPass').value = '';
     if (document.getElementById('admNewPass')) document.getElementById('admNewPass').value = '';
     showToast('Đã lưu cấu hình hệ thống thành công!');
     await initPublicConfig();
@@ -2327,6 +2433,7 @@ on('admSaveOrderBtn', 'click', async () => {
   const btn = document.getElementById('admSaveOrderBtn');
   const orderSn = document.getElementById('admOrdSn')?.value?.trim() || '';
   const userCode = document.getElementById('admOrdUserCode')?.value?.trim() || '';
+  const platform = document.getElementById('admOrdPlatform')?.value || 'shopee';
   const productName = document.getElementById('admOrdProduct')?.value?.trim() || '';
   const orderAmount = Number(document.getElementById('admOrdAmount')?.value || 0);
   const totalCommission = Number(document.getElementById('admOrdCommission')?.value || 0);
@@ -2337,6 +2444,7 @@ on('admSaveOrderBtn', 'click', async () => {
     return;
   }
 
+  const origHtml = btn ? btn.innerHTML : '';
   if (btn) {
     btn.disabled = true;
     btn.textContent = 'Đang lưu...';
@@ -2348,6 +2456,7 @@ on('admSaveOrderBtn', 'click', async () => {
       body: JSON.stringify({
         orderSn,
         userCode,
+        platform,
         productName,
         orderAmount,
         totalCommission,
@@ -2365,7 +2474,7 @@ on('admSaveOrderBtn', 'click', async () => {
   } finally {
     if (btn) {
       btn.disabled = false;
-      btn.textContent = 'Lưu Đơn Hàng';
+      btn.innerHTML = origHtml || 'Lưu Đơn Hàng';
     }
   }
 });
@@ -2416,7 +2525,11 @@ if (viewAdmin) {
       }
 
       if (action === 'cancel') {
-        if (!confirm(`Xác nhận hủy đơn hàng #${orderSn}? Tiền hoàn sẽ không được cộng vào ví khách.`)) {
+        const confirmed = await askUserConfirm(
+          `Xác nhận hủy đơn hàng #${orderSn}? Tiền hoàn sẽ không được cộng vào ví khách.`,
+          'Xác Nhận Hủy Đơn Hàng'
+        );
+        if (!confirmed) {
           return;
         }
         ordActionBtn.disabled = true;
@@ -2460,11 +2573,11 @@ if (viewAdmin) {
       }
 
       if (action === 'delete') {
-        if (
-          !confirm(
-            `Bạn có chắc chắn muốn xóa vĩnh viễn đơn hàng #${orderSn} không?\nTiền hoàn của đơn sẽ bị xóa khỏi ví người dùng.`
-          )
-        ) {
+        const confirmed = await askUserConfirm(
+          `Bạn có chắc chắn muốn xóa vĩnh viễn đơn hàng #${orderSn} không?\nTiền hoàn của đơn sẽ bị xóa khỏi ví người dùng.`,
+          'Xóa Vĩnh Viễn Đơn Hàng'
+        );
+        if (!confirmed) {
           return;
         }
         ordActionBtn.disabled = true;
@@ -2489,7 +2602,11 @@ if (viewAdmin) {
       const id = wdBtn.getAttribute('data-wd-id');
       const status = wdBtn.getAttribute('data-wd-action');
       const label = status === 'paid' ? 'ĐÃ CHUYỂN TIỀN' : 'TỪ CHỐI';
-      if (!confirm(`Xác nhận đánh dấu ${label} cho yêu cầu rút tiền #${id}?`)) {
+      const confirmed = await askUserConfirm(
+        `Xác nhận đánh dấu ${label} cho yêu cầu rút tiền #${id}?`,
+        'Cập Nhật Lệnh Rút Tiền'
+      );
+      if (!confirmed) {
         return;
       }
       wdBtn.disabled = true;
@@ -2511,14 +2628,18 @@ if (viewAdmin) {
     const wdDeleteBtn = e.target.closest('[data-wd-delete]');
     if (wdDeleteBtn) {
       const id = wdDeleteBtn.getAttribute('data-wd-delete');
-      if (!confirm(`Bạn có chắc chắn muốn xóa yêu cầu rút tiền #${id} không?`)) {
+      const confirmed = await askUserConfirm(
+        `Bạn có chắc chắn muốn xóa yêu cầu rút tiền #${id} không?\nNếu lệnh đang chờ duyệt, số tiền sẽ được hoàn lại vào ví khách trước khi xóa.`,
+        'Xóa Yêu Cầu Rút Tiền'
+      );
+      if (!confirmed) {
         return;
       }
       wdDeleteBtn.disabled = true;
       try {
         await apiFetch('/api/admin/withdrawals/delete', {
           method: 'POST',
-          body: JSON.stringify({ id })
+          body: JSON.stringify({ id, hardDelete: true })
         });
         showToast('Đã xóa yêu cầu rút tiền!');
         await loadAdminDashboard();
@@ -2564,8 +2685,8 @@ function openUserManageModal(user) {
   const statusEl = document.getElementById('manageUserStatus');
   if (statusEl) {
     statusEl.innerHTML = user.accountLocked
-      ? '<span style="color:#dc2626;">🔒 Đang bị khóa (Chặn đăng nhập & rút tiền)</span>'
-      : '<span style="color:#059669;">🟢 Đang hoạt động bình thường</span>';
+      ? '<span class="status-badge st-cancelled">Đang bị khóa (Chặn đăng nhập &amp; rút tiền)</span>'
+      : '<span class="status-badge st-approved">Đang hoạt động bình thường</span>';
   }
 
   const setVal = (id, v) => {
@@ -2578,7 +2699,7 @@ function openUserManageModal(user) {
 
   const lockBtn = document.getElementById('btnToggleUserLock');
   if (lockBtn) {
-    lockBtn.textContent = user.accountLocked ? '🔓 Mở Khóa Tài Khoản' : '🔒 Khóa Tài Khoản Này';
+    lockBtn.textContent = user.accountLocked ? 'Mở Khóa Tài Khoản' : 'Khóa Tài Khoản Này';
     lockBtn.className = user.accountLocked ? 'btn btn-success btn-sm' : 'btn btn-outline btn-sm';
   }
 
@@ -2675,11 +2796,11 @@ on('btnAdjustUserBalance', 'click', async () => {
 
 on('btnResetUserBalanceZero', 'click', async () => {
   if (!currentManagingUser) return;
-  if (
-    !confirm(
-      `Bạn có chắc chắn muốn xóa toàn bộ số dư khả dụng của khách hàng ${currentManagingUser.code} về 0đ không?`
-    )
-  ) {
+  const confirmed = await askUserConfirm(
+    `Bạn có chắc chắn muốn đặt toàn bộ số dư khả dụng của khách hàng ${currentManagingUser.code} về 0đ không?`,
+    'Đặt Lại Số Dư = 0đ'
+  );
+  if (!confirmed) {
     return;
   }
   try {
@@ -2712,11 +2833,11 @@ on('btnToggleUserLock', 'click', async () => {
 
 on('btnDeleteUser', 'click', async () => {
   if (!currentManagingUser) return;
-  if (
-    !confirm(
-      `Bạn có chắc chắn muốn xóa tài khoản ${currentManagingUser.code} (${currentManagingUser.phone}) không?`
-    )
-  ) {
+  const confirmed = await askUserConfirm(
+    `Bạn có chắc chắn muốn xóa tài khoản ${currentManagingUser.code} (${currentManagingUser.phone}) không?`,
+    'Xóa Tài Khoản Thành Viên'
+  );
+  if (!confirmed) {
     return;
   }
   try {
@@ -3023,10 +3144,11 @@ on('admCsvInput', 'change', async (e) => {
       return;
     }
 
-    const confirmMsg = `XÁC NHẬN NHẬP CSV ĐỐI SOÁT:\n\n• Số đơn hợp lệ: ${rows.length}\n• Số dòng bỏ qua/lỗi: ${skippedCount}\n• Tổng hoa hồng ước tính: ${fmtVnd(
+    const confirmMsg = `• Số đơn hợp lệ: ${rows.length}\n• Số dòng bỏ qua/lỗi: ${skippedCount}\n• Tổng hoa hồng ước tính: ${fmtVnd(
       totalEstComm
     )}\n\nBạn có muốn tiếp tục nhập và cập nhật ví khách hàng không?`;
-    if (!confirm(confirmMsg)) return;
+    const confirmed = await askUserConfirm(confirmMsg, 'Xác Nhận Nhập CSV Đối Soát');
+    if (!confirmed) return;
 
     // Batch requests in chunks of 500 rows to prevent payload exhaustion
     const CHUNK_SIZE = 500;
