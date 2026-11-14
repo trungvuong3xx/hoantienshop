@@ -180,6 +180,7 @@ function sanitizeUser(user) {
     phone: user.phone || '',
     email: user.email || '',
     role: user.role || 'user',
+    referredBy: user.referredBy || null,
     balanceAvailable: Math.round(Number(user.balanceAvailable || 0)),
     balancePending: Math.round(Number(user.balancePending || 0)),
     totalEarned: Math.round(Number(user.totalEarned || 0)),

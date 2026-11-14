@@ -262,9 +262,9 @@
               <div style="display: inline-flex; align-items: center; gap: 6px; background: #ea580c; color: #fff; font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 20px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">
                 <span>🎁 THƯỞNG GIỚI THIỆU BẠN BÈ</span>
               </div>
-              <h3 style="margin: 0 0 6px 0; color: #9a3412; font-size: 18px;">Nhận ngay 5.000đ khi mời 1 người bạn!</h3>
+              <h3 style="margin: 0 0 6px 0; color: #9a3412; font-size: 18px;">Nhận ngay <span data-config="referralBountyAmount">5.000đ</span> khi mời 1 người bạn!</h3>
               <p style="margin: 0; color: #7c2d12; font-size: 13.5px; line-height: 1.5;">
-                Chia sẻ link riêng của bạn cho bạn bè. Khi bạn bè hoàn tất đơn hàng đầu tiên thành công, bạn sẽ nhận ngay <strong>5.000đ</strong> tiền mặt vào Ví hoàn tiền!
+                Chia sẻ link riêng của bạn cho bạn bè. Khi bạn bè hoàn tất đơn hàng đầu tiên thành công, bạn sẽ nhận ngay <strong data-config="referralBountyAmount">5.000đ</strong> tiền mặt vào Ví hoàn tiền!
               </p>
             </div>
             <div style="display: flex; gap: 8px; flex-wrap: wrap;">
@@ -442,10 +442,10 @@
               </div>
               <div class="form-group">
                 <div style="display:flex;justify-content:space-between;align-items:center;">
-                  <label for="wdAmount">Số tiền muốn rút (VNĐ)</label>
+                  <label for="withdrawAmountInput">Số tiền muốn rút (VNĐ)</label>
                   <button type="button" class="btn btn-ghost btn-xs" id="btnMaxWithdraw" style="color:#059669;font-weight:700;padding:0 4px;">Rút tối đa</button>
                 </div>
-                <input type="number" id="wdAmount" inputmode="numeric" min="50000" step="1000" placeholder="VD: 50000" required />
+                <input type="number" id="withdrawAmountInput" name="wdAmount" inputmode="numeric" min="50000" step="1000" placeholder="VD: 50000" required />
               </div>
               <div class="form-group hidden" id="wdPasswordConfirmGroup">
                 <label for="wdCurrentPassword" style="color:#d97706;">🔐 Xác nhận mật khẩu đăng nhập (Do bạn đổi số tài khoản mới)</label>

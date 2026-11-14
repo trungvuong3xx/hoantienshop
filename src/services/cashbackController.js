@@ -763,11 +763,16 @@ function registerCashbackRoutes(app) {
 
       // Validate 1-level referrer if provided (prevent self-referral)
       let validReferrerCode = null;
-      if (refCode && typeof refCode === 'string') {
+      if (refCode && typeof refCode === 'string' && refCode.trim()) {
+        const cleanRefCode = refCode.trim().toUpperCase();
         const refUser = db.users.find(
-          (u) => u.code && String(u.code).toUpperCase() === refCode.trim().toUpperCase()
+          (u) => u.code && String(u.code).toUpperCase() === cleanRefCode
         );
-        if (refUser && refUser.phone !== cleanPhone) {
+        if (
+          refUser &&
+          refUser.phone !== cleanPhone &&
+          (!email || !refUser.email || refUser.email.toLowerCase() !== String(email).trim().toLowerCase())
+        ) {
           validReferrerCode = refUser.code;
         }
       }
@@ -885,15 +890,20 @@ function registerCashbackRoutes(app) {
       .filter((l) => l.userId === user.id)
       .slice(0, 30);
 
-    const referralCount = db.users.filter((u) => u.referredBy === user.code).length;
+    const userCodeUpper = String(user.code || '').toUpperCase();
+    const referralCount = db.users.filter(
+      (u) => u.referredBy && String(u.referredBy).toUpperCase() === userCodeUpper && u.id !== user.id
+    ).length;
+    const referralBountyAmount = Math.max(0, Math.round(Number(db.settings?.referralBountyAmount ?? 5000)));
 
-    logger.logLeave('GET /api/user/me', { userCode: user.code });
+    logger.logLeave('GET /api/user/me', { userCode: user.code, referralCount, referralBountyAmount });
     return res.json({
       user: sanitizeUser(user),
       orders: userOrders.map(sanitizeOrderForUser),
       withdrawals: userWithdrawals,
       ledger: userLedger,
-      referralCount
+      referralCount,
+      referralBountyAmount
     });
   });
 
@@ -961,15 +971,21 @@ function registerCashbackRoutes(app) {
     });
 
     return res.json({
+      referrals: friends,
+      referralCount: refereeUsers.length,
+      referralBountyAmount: bountyAmount,
+      completedFriends,
+      pendingFriends,
+      totalBountyEarned,
       referralCode: user.code,
       bountyAmount,
+      friends,
       stats: {
         totalFriends: refereeUsers.length,
         completedFriends,
         pendingFriends,
         totalBountyEarned
-      },
-      friends
+      }
     });
   });
 
