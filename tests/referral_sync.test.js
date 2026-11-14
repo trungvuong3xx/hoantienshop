@@ -219,10 +219,14 @@ async function runReferralSyncSuite() {
 }
 
 if (require.main === module) {
-  runReferralSyncSuite().catch((err) => {
-    console.error('REFERRAL SYNC TEST FAILED:', err);
-    process.exit(1);
-  });
+  runReferralSyncSuite()
+    .then(() => {
+      process.exit(0);
+    })
+    .catch((err) => {
+      console.error('REFERRAL SYNC TEST FAILED:', err);
+      process.exit(1);
+    });
 }
 
 module.exports = { runReferralSyncSuite };
