@@ -70,7 +70,9 @@ try {
   const urlParams = new URLSearchParams(window.location.search);
   const urlRefCode = urlParams.get('ref');
   if (urlRefCode) {
-    safeStorage.set('hoantienshop_ref', urlRefCode.trim(), sessionStorage);
+    const cleanRef = urlRefCode.trim().toUpperCase();
+    safeStorage.set('hoantienshop_ref', cleanRef, sessionStorage);
+    safeStorage.set('saved_ref_code', cleanRef, localStorage);
   }
 } catch {}
 
@@ -79,7 +81,8 @@ function fmtVnd(amount) {
 }
 
 function escapeHtml(str) {
-  return String(str || '')
+  if (str === null || str === undefined) return '';
+  return String(str)
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
@@ -133,6 +136,8 @@ function showToast(msg) {
   if (!t) return;
   t.textContent = msg;
   t.setAttribute('role', 'status');
+  t.setAttribute('aria-live', 'polite');
+  t.setAttribute('aria-atomic', 'true');
   t.classList.remove('hidden');
   clearTimeout(showToast._timer);
   showToast._timer = setTimeout(() => t.classList.add('hidden'), 2800);
@@ -338,9 +343,43 @@ document.querySelectorAll('.modal-backdrop').forEach((backdrop) => {
   });
 });
 
+// Modal a11y: Escape to close & Tab / Shift+Tab focus trap cycling
 window.addEventListener('keydown', (e) => {
+  const openModal = document.querySelector('.modal-backdrop:not(.hidden)');
+  if (!openModal) return;
+
   if (e.key === 'Escape') {
-    document.querySelectorAll('.modal-backdrop').forEach((m) => m.classList.add('hidden'));
+    e.preventDefault();
+    openModal.classList.add('hidden');
+    return;
+  }
+
+  if (e.key === 'Tab') {
+    const focusableSelectors =
+      'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+    const focusables = Array.from(openModal.querySelectorAll(focusableSelectors)).filter(
+      (el) => el.offsetWidth > 0 || el.offsetHeight > 0 || el === document.activeElement
+    );
+
+    if (focusables.length === 0) {
+      e.preventDefault();
+      return;
+    }
+
+    const firstEl = focusables[0];
+    const lastEl = focusables[focusables.length - 1];
+
+    if (e.shiftKey) {
+      if (document.activeElement === firstEl || !openModal.contains(document.activeElement)) {
+        e.preventDefault();
+        lastEl.focus();
+      }
+    } else {
+      if (document.activeElement === lastEl || !openModal.contains(document.activeElement)) {
+        e.preventDefault();
+        firstEl.focus();
+      }
+    }
   }
 });
 
@@ -445,7 +484,9 @@ function openAuthModal(tab = 'login') {
     titleEl.textContent = tab === 'login' ? 'Đăng nhập tài khoản' : 'Đăng ký tài khoản';
   }
 
-  const savedRef = safeStorage.get('hoantienshop_ref', sessionStorage);
+  const savedRef =
+    safeStorage.get('saved_ref_code', localStorage) ||
+    safeStorage.get('hoantienshop_ref', sessionStorage);
   const regRefInput = document.getElementById('regRefCode');
   const regRefNotice = document.getElementById('regRefNotice');
   if (savedRef && regRefInput && !regRefInput.value) {

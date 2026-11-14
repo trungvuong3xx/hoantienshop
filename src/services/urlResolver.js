@@ -1,5 +1,8 @@
 const dns = require('dns').promises;
 const net = require('net');
+const https = require('https');
+const http = require('http');
+const { Readable } = require('stream');
 const logger = require('../utils/logger');
 
 // Top-level configurable constants
@@ -7,9 +10,9 @@ const DEFAULT_USER_AGENT =
   process.env.RESOLVER_USER_AGENT ||
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 
-const DEFAULT_TOTAL_TIMEOUT_MS = 8000;
-const DEFAULT_HOP_TIMEOUT_MS = 4000;
-const DEFAULT_DNS_TIMEOUT_MS = 2500;
+const DEFAULT_TOTAL_TIMEOUT_MS = 6000;
+const DEFAULT_HOP_TIMEOUT_MS = 3500;
+const DEFAULT_DNS_TIMEOUT_MS = 2000;
 const DEFAULT_MAX_HOPS = 4;
 const MAX_HTML_BYTES = 16384;
 const MAX_TEXT_INPUT_LENGTH = 30000;
@@ -238,6 +241,22 @@ function sanitizeTitle(text, maxLength = 120) {
     return chars.slice(0, maxLength).join('').trim();
   }
   return cleaned;
+}
+
+function sanitizeImageUrl(urlStr) {
+  if (!urlStr || typeof urlStr !== 'string') return '';
+  const trimmed = urlStr.trim();
+  if (/[\x00-\x1f\x7f-\x9f<>"'`\\]/.test(trimmed)) return '';
+  if (!isAllowedCdnImage(trimmed)) return '';
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol !== 'https:') return '';
+    const decodedHref = safeDecode(parsed.href);
+    if (/[\x00-\x1f\x7f-\x9f<>"'`\\]/.test(decodedHref)) return '';
+    return parsed.href;
+  } catch {
+    return '';
+  }
 }
 
 function sanitizeUrlForLog(urlStr) {
@@ -542,10 +561,66 @@ function extractProductTitleHint(rawUrl, htmlSnippet = '') {
 }
 
 /**
+ * Make an HTTP request with pinned IP to prevent DNS rebinding attacks.
+ */
+async function fetchPinned(urlStr, options = {}, pinnedIp = null) {
+  const url = new URL(urlStr);
+  const isHttps = url.protocol === 'https:';
+  const transport = isHttps ? https : http;
+
+  return new Promise((resolve, reject) => {
+    const reqOptions = {
+      protocol: url.protocol,
+      hostname: url.hostname,
+      port: url.port || (isHttps ? 443 : 80),
+      path: url.pathname + url.search,
+      method: options.method || 'GET',
+      headers: options.headers || {},
+      servername: url.hostname
+    };
+
+    if (options.signal) {
+      reqOptions.signal = options.signal;
+    }
+
+    if (pinnedIp) {
+      const family = pinnedIp.includes(':') ? 6 : 4;
+      reqOptions.lookup = (hostname, opts, cb) => {
+        if (typeof opts === 'function') {
+          cb = opts;
+          opts = {};
+        }
+        if (opts && opts.all) {
+          cb(null, [{ address: pinnedIp, family }]);
+        } else {
+          cb(null, pinnedIp, family);
+        }
+      };
+    }
+
+    const req = transport.request(reqOptions, (res) => {
+      const webStream = Readable.toWeb(res);
+      const webRes = new Response(webStream, {
+        status: res.statusCode,
+        statusText: res.statusMessage,
+        headers: res.headers
+      });
+      resolve(webRes);
+    });
+
+    req.on('error', (err) => {
+      reject(err);
+    });
+
+    req.end();
+  });
+}
+
+/**
  * SSRF-hardened URL resolver:
  * - Strict domain allowlist per platform at every hop
  * - Pre-fetch DNS resolution & non-blocking c-ares IP checks against net.BlockList
- * - Overall deadline timeout (8s) + per-hop timeout (4s)
+ * - Overall deadline timeout (6s) + per-hop timeout (3.5s)
  * - Safe response streaming (16KB) with UTF-8 boundary preservation
  * - Fast-path return for direct product links without network resolution
  */
@@ -558,9 +633,12 @@ async function safeResolve(inputUrl, options = {}) {
     maxHops = options;
   } else if (typeof options === 'object' && options !== null) {
     if (Number.isFinite(options.maxHops) && options.maxHops > 0) maxHops = Math.min(options.maxHops, 10);
-    if (Number.isFinite(options.totalTimeoutMs) && options.totalTimeoutMs > 0) totalTimeoutMs = options.totalTimeoutMs;
+    if (Number.isFinite(options.totalTimeoutMs) && options.totalTimeoutMs > 0) {
+      totalTimeoutMs = Math.min(options.totalTimeoutMs, 6000);
+    }
     if (Number.isFinite(options.hopTimeoutMs) && options.hopTimeoutMs > 0) hopTimeoutMs = options.hopTimeoutMs;
   }
+  totalTimeoutMs = Math.min(totalTimeoutMs, 6000);
 
   const safeLogUrl = sanitizeUrlForLog(inputUrl);
   logger.logEnter('safeResolve', { inputUrl: safeLogUrl });
@@ -661,19 +739,27 @@ async function safeResolve(inputUrl, options = {}) {
           ? AbortSignal.any([totalSignal, hopSignal])
           : hopSignal;
 
+      const pinnedIp = ips[0];
       let res;
       try {
-        res = await fetch(url.toString(), {
-          method: 'GET',
-          redirect: 'manual',
-          headers: {
-            'User-Agent': DEFAULT_USER_AGENT,
-            Accept: 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.8'
+        res = await fetchPinned(
+          url.toString(),
+          {
+            method: 'GET',
+            headers: {
+              'User-Agent': DEFAULT_USER_AGENT,
+              Accept: 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.8'
+            },
+            signal: combinedSignal
           },
-          signal: combinedSignal
-        });
+          pinnedIp
+        );
       } catch (fetchErr) {
-        if (fetchErr.name === 'TimeoutError' || totalSignal.aborted) {
+        if (
+          fetchErr.name === 'TimeoutError' ||
+          fetchErr.name === 'AbortError' ||
+          totalSignal.aborted
+        ) {
           throw new UrlResolveError('TIMEOUT', 'Quá thời gian kết nối tới máy chủ đích.', {
             url: url.toString(),
             error: fetchErr.message
@@ -814,7 +900,20 @@ function cleanShopeeUrl(rawUrl, htmlSnippet = '') {
       itemId = usernameItemMatch[2];
     }
 
-    const titleHint = extractProductTitleHint(rawUrl, htmlSnippet);
+    let titleHint = extractProductTitleHint(rawUrl, htmlSnippet);
+    if (titleHint) {
+      titleHint = sanitizeTitle(titleHint, 140);
+    }
+
+    let imageUrl = '';
+    if (htmlSnippet && typeof htmlSnippet === 'string') {
+      const imgMatch =
+        htmlSnippet.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i) ||
+        htmlSnippet.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i);
+      if (imgMatch && imgMatch[1]) {
+        imageUrl = sanitizeImageUrl(imgMatch[1]);
+      }
+    }
 
     if (shopId && itemId) {
       const cleanUrl = `https://shopee.vn/product/${shopId}/${itemId}`;
@@ -824,6 +923,7 @@ function cleanShopeeUrl(rawUrl, htmlSnippet = '') {
         shopId,
         itemId,
         titleHint: titleHint || `Sản phẩm Shopee #${itemId}`,
+        imageUrl,
         linkType: 'product'
       };
     }
@@ -836,6 +936,7 @@ function cleanShopeeUrl(rawUrl, htmlSnippet = '') {
         shopId: null,
         itemId,
         titleHint: titleHint || `Sản phẩm Shopee #${itemId}`,
+        imageUrl,
         linkType: 'product'
       };
     }
@@ -855,8 +956,12 @@ function cleanShopeeUrl(rawUrl, htmlSnippet = '') {
       shopId: null,
       itemId: null,
       titleHint: titleHint || 'Cửa hàng / Sự kiện Shopee',
+      imageUrl,
       linkType: 'page'
     };
+  } catch (err) {
+    if (err instanceof UrlResolveError) throw err;
+    throw new UrlResolveError('PARSE_ERROR', err.message || 'Lỗi khi phân tích liên kết Shopee.', { rawUrl });
   } finally {
     // ensure pairing
   }
@@ -909,8 +1014,8 @@ function cleanTikTokUrl(rawUrl, htmlSnippet = '') {
             const sanitized = sanitizeTitle(String(ogObj.title), 140);
             if (sanitized) titleHint = sanitized;
           }
-          if (ogObj.image && isAllowedCdnImage(ogObj.image)) {
-            imageUrl = ogObj.image;
+          if (ogObj.image) {
+            imageUrl = sanitizeImageUrl(ogObj.image);
           }
         }
       } catch {}
@@ -920,8 +1025,8 @@ function cleanTikTokUrl(rawUrl, htmlSnippet = '') {
       const imgMatch =
         htmlSnippet.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i) ||
         htmlSnippet.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i);
-      if (imgMatch && imgMatch[1] && isAllowedCdnImage(imgMatch[1])) {
-        imageUrl = imgMatch[1];
+      if (imgMatch && imgMatch[1]) {
+        imageUrl = sanitizeImageUrl(imgMatch[1]);
       }
     }
 
@@ -947,6 +1052,9 @@ function cleanTikTokUrl(rawUrl, htmlSnippet = '') {
       imageUrl,
       linkType: 'content'
     };
+  } catch (err) {
+    if (err instanceof UrlResolveError) throw err;
+    throw new UrlResolveError('PARSE_ERROR', err.message || 'Lỗi khi phân tích liên kết TikTok.', { rawUrl });
   } finally {
     // ensure pairing
   }
@@ -985,5 +1093,7 @@ module.exports = {
   isAllowedCdnImage,
   isPrivateIp,
   safeDecode,
-  sanitizeTitle
+  sanitizeTitle,
+  sanitizeImageUrl,
+  fetchPinned
 };

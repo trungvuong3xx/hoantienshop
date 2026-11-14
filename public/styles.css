@@ -39,6 +39,16 @@ button {
   touch-action: manipulation;
 }
 
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid #0068ff;
+  outline-offset: 2px;
+}
+
 body {
   font-family: 'Be Vietnam Pro', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
   background: var(--bg-page);
@@ -655,6 +665,7 @@ body {
   gap: 4px;
 }
 
+.ip-main-row,
 .ip-product-row {
   display: flex;
   align-items: flex-start;
@@ -855,6 +866,26 @@ body {
   border-radius: 8px;
   font-size: 13px;
   font-weight: 600;
+}
+
+.cashback-pill,
+.cashback-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #047857;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.cashback-pill strong,
+.cashback-badge strong {
+  color: #047857;
+  font-weight: 800;
 }
 
 .est-cashback-badge strong {
@@ -1315,7 +1346,8 @@ body {
   gap: 12px;
 }
 
-.two-inputs {
+.two-inputs,
+.grid-2 {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 12px;
@@ -1329,6 +1361,7 @@ body {
 
 @media (max-width: 680px) {
   .two-inputs,
+  .grid-2,
   .three-inputs {
     grid-template-columns: 1fr;
   }
@@ -1543,12 +1576,14 @@ textarea:focus {
   border-radius: 999px;
 }
 
-.st-pending {
+.st-pending,
+.status-pending {
   background: #fef3c7;
   color: #b45309;
 }
 .st-approved,
-.st-paid {
+.st-paid,
+.status-approved {
   background: var(--emerald-light);
   color: var(--emerald-dark);
 }
@@ -1597,6 +1632,14 @@ textarea:focus {
   text-align: center;
   font-size: 13px;
   color: var(--text-sub);
+}
+
+.footer-inner {
+  max-width: 1180px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .footer-sub {

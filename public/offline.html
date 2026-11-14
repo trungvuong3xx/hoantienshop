@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
+  <meta name="theme-color" content="#ee4d2d" />
+  <title>Mất kết nối mạng - Hoàn Tiền Sàn</title>
+  <style>
+    :root {
+      --bg-page: #f8fafc;
+      --bg-card: #ffffff;
+      --text-main: #0f172a;
+      --text-sub: #475569;
+      --text-muted: #64748b;
+      --primary: #0068ff;
+      --primary-hover: #0056d6;
+      --border: #e2e8f0;
+      --radius: 16px;
+      --shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+    }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg-page);
+      color: var(--text-main);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      min-height: 100dvh;
+      padding: 24px;
+      text-align: center;
+    }
+    .offline-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 40px 28px;
+      max-width: 440px;
+      width: 100%;
+    }
+    .brand-title {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text-sub);
+      margin-bottom: 24px;
+    }
+    .brand-icon {
+      font-size: 24px;
+    }
+    .offline-icon-wrap {
+      width: 80px;
+      height: 80px;
+      margin: 0 auto 20px auto;
+      background: #f1f5f9;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 40px;
+    }
+    h1 {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--text-main);
+      margin-bottom: 12px;
+    }
+    p {
+      font-size: 14.5px;
+      line-height: 1.6;
+      color: var(--text-sub);
+      margin-bottom: 28px;
+    }
+    .btn-retry {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+      background: var(--primary);
+      color: #ffffff;
+      border: none;
+      border-radius: 12px;
+      padding: 13px 20px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.1s;
+      outline-offset: 2px;
+    }
+    .btn-retry:hover {
+      background: var(--primary-hover);
+    }
+    .btn-retry:active {
+      transform: scale(0.98);
+    }
+    .btn-retry:focus-visible {
+      outline: 2px solid #0068ff;
+    }
+    .footer-hint {
+      margin-top: 20px;
+      font-size: 12.5px;
+      color: var(--text-muted);
+    }
+  </style>
+</head>
+<body>
+  <main class="offline-card" role="main">
+    <div class="brand-title">
+      <span class="brand-icon">🛍️</span>
+      <span>Hoàn Tiền Sàn</span>
+    </div>
+    <div class="offline-icon-wrap" aria-hidden="true">📡</div>
+    <h1>Bạn đang ngoại tuyến</h1>
+    <p>
+      Không thể kết nối đến máy chủ. Vui lòng kiểm tra lại kết nối Wi-Fi hoặc dữ liệu di động (4G/5G) trên thiết bị của bạn rồi thử lại.
+    </p>
+    <button type="button" class="btn-retry" onclick="window.location.reload()">
+      <span aria-hidden="true">🔄</span>
+      <span>Thử kết nối lại</span>
+    </button>
+    <div class="footer-hint">Trang sẽ tự động đồng bộ khi có mạng trở lại.</div>
+  </main>
+  <script>
+    window.addEventListener('online', () => {
+      window.location.reload();
+    });
+  </script>
+</body>
+</html>
