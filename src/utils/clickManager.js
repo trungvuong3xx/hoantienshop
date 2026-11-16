@@ -1,10 +1,10 @@
 const logger = require('./logger');
 
 const CLICK_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days retention
-const MAX_CLICKS_HARD_LIMIT = 20000; // Safety upper bound against memory exhaustion
+const MAX_CLICKS_HARD_LIMIT = 20000; // Legacy threshold retained for compatibility with callers
 
 /**
- * Filter out clicks older than CLICK_TTL_MS (30 days) and cap at MAX_CLICKS_HARD_LIMIT.
+ * Filter out clicks older than CLICK_TTL_MS (30 days) without dropping unexpired attribution records.
  * @param {Array} clicks - Array of click objects
  * @param {number} [now=Date.now()] - Current epoch timestamp in ms (for testing)
  * @returns {Array} - Cleaned array of clicks
@@ -21,7 +21,7 @@ function cleanExpiredClicks(clicks, now = Date.now()) {
     if (!c || typeof c !== 'object') return false;
     const time = c.createdAt ? new Date(c.createdAt).getTime() : 0;
     return !Number.isNaN(time) && time > cutoff;
-  }).slice(0, MAX_CLICKS_HARD_LIMIT);
+  });
 
   if (cleaned.length < initialCount) {
     logger.log('cleanExpiredClicks', 'Pruned expired or overflow clicks', {

@@ -267,8 +267,9 @@ async function runTestSuite() {
 
     // Check app.js CSV validation requirements
     assert.ok(appJsContent.includes('const MAX_CSV_SIZE = 2 * 1024 * 1024;'), 'Client-side 2MB file limit must be enforced');
-    assert.ok(appJsContent.includes('cleanOrderSn.length < 2 || !/^[A-Za-z0-9_\\-\\.]+$/'), 'orderSn must be strictly validated before submission');
-    assert.ok(appJsContent.includes('totalCommission < 0'), 'Negative commissions must be skipped');
+    const csv = require('../public/csvImport');
+    assert.throws(() => csv.parse('order_id,status,total commission,order amount\nBAD ID,approved,100,1000'), /Mã đơn/);
+    assert.throws(() => csv.parse('order_id,status,total commission,order amount\nVALID,approved,-100,1000'), /không hợp lệ/);
     assert.ok(appJsContent.includes('totalImported === 0'), '0 imported items must NOT be treated as success');
     assert.ok(appJsContent.includes('allChunkErrors.push(...res.errors)'), 'Chunk errors must be captured and reported');
 

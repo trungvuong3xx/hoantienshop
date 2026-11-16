@@ -1,0 +1,18 @@
+{
+  "keys": [
+    "7c19225b-5a9f-4d8a-bacd-ca8abb1d1aae",
+    "66bdd73c-2d72-4463-b957-a07dca6af99c"
+  ],
+  "committed": [
+    {
+      "status": 200,
+      "id": "wd_1794795971356_53eac24a"
+    },
+    {
+      "status": 200,
+      "id": "wd_1794795971360_e5d0968a"
+    }
+  ],
+  "withdrawals": 4,
+  "balance": 0
+}

@@ -61,15 +61,16 @@
       display: inline-block;
     }
     .offline-icon-wrap {
-      width: 80px;
-      height: 80px;
+      width: 76px;
+      height: 76px;
       margin: 0 auto 20px auto;
-      background: #f1f5f9;
-      border-radius: 50%;
+      background: #fff1ed;
+      border: 1px solid #fed7aa;
+      color: #ee4d2d;
+      border-radius: 22px;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 40px;
     }
     h1 {
       font-size: 22px;
@@ -116,27 +117,25 @@
     }
   </style>
 </head>
-<body>
+<body data-reason="connection">
   <main class="offline-card" role="main">
     <div class="brand-title">
       <img src="/icon.svg" alt="LiLa" class="brand-icon" width="28" height="28" />
       <span>LiLa</span>
     </div>
-    <div class="offline-icon-wrap" aria-hidden="true">📡</div>
-    <h1>Bạn đang ngoại tuyến</h1>
-    <p>
+    <div class="offline-icon-wrap" aria-hidden="true">
+      <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><line x1="2" y1="2" x2="22" y2="22"/><path d="M8.5 16.5a5 5 0 0 1 7 0"/><path d="M2 8.82a15 15 0 0 1 4.17-2.65"/><path d="M10.66 5c4.01-.36 8.14.9 11.34 3.76"/><path d="M16.85 11.25a10 10 0 0 1 2.22 1.68"/><path d="M5 13a10 10 0 0 1 5.24-2.76"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
+    </div>
+    <h1 id="connectionTitle">Không thể kết nối</h1>
+    <p id="connectionMessage" role="status">
       Không thể kết nối đến máy chủ. Vui lòng kiểm tra lại kết nối Wi-Fi hoặc dữ liệu di động (4G/5G) trên thiết bị của bạn rồi thử lại.
     </p>
-    <button type="button" class="btn-retry" onclick="window.location.reload()">
-      <span aria-hidden="true">🔄</span>
+    <button type="button" class="btn-retry" id="retryConnection" onclick="window.location.reload()">
+      <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>
       <span>Thử kết nối lại</span>
     </button>
-    <div class="footer-hint">Trang sẽ tự động đồng bộ khi có mạng trở lại.</div>
+    <div class="footer-hint">Nếu vẫn gặp lỗi, hãy thử lại sau vài phút. Không cần xóa ứng dụng hoặc đăng ký lại tài khoản.</div>
   </main>
-  <script>
-    window.addEventListener('online', () => {
-      window.location.reload();
-    });
-  </script>
+  <script src="/offline.js" defer></script>
 </body>
 </html>

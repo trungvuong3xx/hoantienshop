@@ -294,7 +294,7 @@ async function runTests() {
   await saveDb(db);
 
   console.log('\n=== ALL 6 AUDIT VERIFICATION SUITES PASSED CLEANLY! ===\n');
-  process.exit(0);
+  process.exitCode = 0;
 }
 
 runTests().catch((err) => {

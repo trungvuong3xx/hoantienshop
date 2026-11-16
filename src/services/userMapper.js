@@ -1,0 +1,25 @@
+function mapUserRow(row) { return {
+      id: row.id,
+      code: row.code,
+      name: row.name || '',
+      phone: row.phone,
+      email: row.email || '',
+      passwordHash: row.password_hash,
+      role: row.role || 'user',
+      tokenVersion: Number(row.token_version || 1),
+      referredBy: row.referred_by || null,
+      balanceAvailable: Math.round(Number(row.balance_available || 0)),
+      balancePending: Math.round(Number(row.balance_pending || 0)),
+      totalEarned: Math.round(Number(row.total_earned || 0)),
+      totalWithdrawn: Math.round(Number(row.total_withdrawn || 0)),
+      bankName: row.bank_name || '',
+      bankAccount: row.bank_account || '',
+      bankOwner: row.bank_owner || '',
+      accountLocked: Boolean(row.account_locked),
+      isDeleted: Boolean(row.is_deleted),
+      deletedAt: row.deleted_at ? new Date(row.deleted_at).toISOString() : null,
+      deletedByAdminId: row.deleted_by_admin_id || null,
+      hasNegativeBalance: Boolean(row.has_negative_balance),
+      createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString()
+    }; }
+module.exports = { mapUserRow };

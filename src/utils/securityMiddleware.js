@@ -19,11 +19,8 @@ if (process.env.VERCEL || process.env.NODE_ENV === 'production') {
 }
 
 function getClientIp(req) {
-  const xff = req.headers['x-forwarded-for'];
-  if (xff && typeof xff === 'string') {
-    return xff.split(',')[0].trim();
-  }
-  return req.socket?.remoteAddress || 'unknown';
+  // Express resolves req.ip using the configured trust-proxy boundary.
+  return req.ip || req.socket?.remoteAddress || 'unknown';
 }
 
 /**
@@ -34,11 +31,12 @@ function createRateLimiter({
   windowMs = 60000,
   max = 30,
   keyPrefix = 'rl',
-  failClosed = false
+  failClosed = false,
+  keyGenerator = getClientIp
 } = {}) {
   return async function rateLimitMiddleware(req, res, next) {
     const ip = getClientIp(req);
-    const key = `${keyPrefix}:${ip}`;
+    const key = `${keyPrefix}:${keyGenerator(req)}`;
     const now = Date.now();
 
     const hasUpstash = Boolean(
@@ -65,7 +63,10 @@ function createRateLimiter({
           throw new Error(`Upstash HTTP ${resp.status}`);
         }
         const data = await resp.json();
-        const count = Number(data?.[0]?.result || 1);
+        const count = Number(data?.[0]?.result);
+        if (!Array.isArray(data) || data.some(entry => entry.error) || !Number.isSafeInteger(count) || count < 1) {
+          throw new Error('Invalid rate-limit response');
+        }
         if (count > max) {
           logger.warning('rateLimitMiddleware', 'Rate limit exceeded (Upstash)', { ip, keyPrefix });
           return res.status(429).json({
@@ -85,7 +86,7 @@ function createRateLimiter({
           });
         }
       }
-    } else if (failClosed && process.env.STRICT_PRODUCTION_SECURITY === 'true') {
+    } else if (failClosed && (process.env.STRICT_PRODUCTION_SECURITY === 'true' || process.env.NODE_ENV === 'production' || process.env.VERCEL)) {
       logger.error('rateLimitMiddleware', 'Fail-closed route blocked: Upstash Redis not configured', {
         keyPrefix
       });

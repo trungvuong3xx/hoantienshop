@@ -1,0 +1,1686 @@
+{
+  "browser": "157.0.4341.60",
+  "externalRequests": "blocked except localhost; fonts use fallback",
+  "screens": [
+    {
+      "width": 360,
+      "view": "home",
+      "viewport": 360,
+      "scrollWidth": 360,
+      "overflow": [
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "cls": "hb-tab"
+        }
+      ],
+      "smallTargets": [
+        {
+          "id": "",
+          "text": "Xem FAQ đầy đủ",
+          "height": 23.1875
+        },
+        {
+          "id": "",
+          "text": "Điều khoản dịch vụ & Chính sách bảo mật",
+          "height": 14
+        }
+      ]
+    },
+    {
+      "width": 360,
+      "view": "login",
+      "viewport": 360,
+      "scrollWidth": 360,
+      "overflow": [
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "cls": "hb-tab"
+        }
+      ],
+      "smallTargets": [
+        {
+          "id": "",
+          "text": "Xem FAQ đầy đủ",
+          "height": 23.1875
+        },
+        {
+          "id": "",
+          "text": "Điều khoản dịch vụ & Chính sách bảo mật",
+          "height": 14
+        }
+      ]
+    },
+    {
+      "width": 360,
+      "view": "orders",
+      "viewport": 360,
+      "scrollWidth": 360,
+      "overflow": [
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "cls": "order-filter-pill"
+        },
+        {
+          "tag": "SPAN",
+          "id": "ordCountCancelled",
+          "cls": "pill-count"
+        },
+        {
+          "tag": "DIV",
+          "id": "toast",
+          "cls": "toast toast-success"
+        },
+        {
+          "tag": "SPAN",
+          "id": "",
+          "cls": "toast-icon"
+        },
+        {
+          "tag": "svg",
+          "id": "",
+          "cls": "[object SVGAnimatedString]"
+        },
+        {
+          "tag": "path",
+          "id": "",
+          "cls": "[object SVGAnimatedString]"
+        },
+        {
+          "tag": "polyline",
+          "id": "",
+          "cls": "[object SVGAnimatedString]"
+        },
+        {
+          "tag": "SPAN",
+          "id": "",
+          "cls": "toast-text"
+        }
+      ],
+      "smallTargets": [
+        {
+          "id": "userOrdersPrevBtn",
+          "text": "Trước",
+          "height": 23.1875
+        },
+        {
+          "id": "userOrdersNextBtn",
+          "text": "Sau",
+          "height": 23.1875
+        },
+        {
+          "id": "",
+          "text": "Điều khoản dịch vụ & Chính sách bảo mật",
+          "height": 14
+        }
+      ]
+    },
+    {
+      "width": 360,
+      "view": "wallet",
+      "viewport": 360,
+      "scrollWidth": 360,
+      "overflow": [
+        {
+          "tag": "DIV",
+          "id": "toast",
+          "cls": "toast toast-success"
+        },
+        {
+          "tag": "SPAN",
+          "id": "",
+          "cls": "toast-icon"
+        },
+        {
+          "tag": "svg",
+          "id": "",
+          "cls": "[object SVGAnimatedString]"
+        },
+        {
+          "tag": "path",
+          "id": "",
+          "cls": "[object SVGAnimatedString]"
+        },
+        {
+          "tag": "polyline",
+          "id": "",
+          "cls": "[object SVGAnimatedString]"
+        },
+        {
+          "tag": "SPAN",
+          "id": "",
+          "cls": "toast-text"
+        }
+      ],
+      "smallTargets": [
+        {
+          "id": "btnMaxWithdraw",
+          "text": "Rút tối đa",
+          "height": 15.1875
+        },
+        {
+          "id": "",
+          "text": "Điều khoản dịch vụ & Chính sách bảo mật",
+          "height": 14
+        }
+      ]
+    },
+    {
+      "width": 360,
+      "view": "account",
+      "viewport": 360,
+      "scrollWidth": 360,
+      "overflow": [
+        {
+          "tag": "DIV",
+          "id": "toast",
+          "cls": "toast toast-success"
+        },
+        {
+          "tag": "SPAN",
+          "id": "",
+          "cls": "toast-icon"
+        },
+        {
+          "tag": "svg",
+          "id": "",
+          "cls": "[object SVGAnimatedString]"
+        },
+        {
+          "tag": "path",
+          "id": "",
+          "cls": "[object SVGAnimatedString]"
+        },
+        {
+          "tag": "polyline",
+          "id": "",
+          "cls": "[object SVGAnimatedString]"
+        },
+        {
+          "tag": "SPAN",
+          "id": "",
+          "cls": "toast-text"
+        }
+      ],
+      "smallTargets": [
+        {
+          "id": "copyAccountCodeBtn",
+          "text": "Sao chép",
+          "height": 22
+        },
+        {
+          "id": "",
+          "text": "Điều khoản dịch vụ & Chính sách bảo mật",
+          "height": 14
+        }
+      ]
+    },
+    {
+      "width": 360,
+      "view": "home",
+      "viewport": 360,
+      "scrollWidth": 360,
+      "overflow": [
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "cls": "hb-tab"
+        }
+      ],
+      "smallTargets": [
+        {
+          "id": "",
+          "text": "Xem FAQ đầy đủ",
+          "height": 23.1875
+        },
+        {
+          "id": "",
+          "text": "Điều khoản dịch vụ & Chính sách bảo mật",
+          "height": 14
+        }
+      ]
+    },
+    {
+      "width": 360,
+      "view": "guide",
+      "viewport": 360,
+      "scrollWidth": 360,
+      "overflow": [],
+      "smallTargets": [
+        {
+          "id": "",
+          "text": "Điều khoản dịch vụ & Chính sách bảo mật",
+          "height": 14
+        }
+      ]
+    },
+    {
+      "width": 360,
+      "view": "terms",
+      "viewport": 360,
+      "scrollWidth": 360,
+      "overflow": [],
+      "smallTargets": [
+        {
+          "id": "",
+          "text": "Điều khoản dịch vụ & Chính sách bảo mật",
+          "height": 14
+        }
+      ]
+    },
+    {
+      "width": 360,
+      "view": "navigation-timing-local",
+      "domContentLoaded": 179.10000038146973,
+      "load": 182.90000009536743,
+      "transferSize": 127110
+    },
+    {
+      "width": 375,
+      "view": "home",
+      "viewport": 375,
+      "scrollWidth": 375,
+      "overflow": [
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "cls": "hb-tab"
+        }
+      ],
+      "smallTargets": [
+        {
+          "id": "",
+          "text": "Xem FAQ đầy đủ",
+          "height": 23.1875
+        },
+        {
+          "id": "",
+          "text": "Điều khoản dịch vụ & Chính sách bảo mật",
+          "height": 14
+        }
+      ]
+    },
+    {
+      "width": 375,
+      "view": "login",
+      "viewport": 375,
+      "scrollWidth": 375,
+      "overflow": [
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "cls": "hb-tab"
+        }
+      ],
+      "smallTargets": [
+        {
+          "id": "",
+          "text": "Xem FAQ đầy đủ",
+          "height": 23.1875
+        },
+        {
+          "id": "",
+          "text": "Điều khoản dịch vụ & Chính sách bảo mật",
+          "height": 14
+        }
+      ]
+    },
+    {
+      "width": 375,
+      "view": "orders",
+      "viewport": 375,
+      "scrollWidth": 375,
+      "overflow": [
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "cls": "order-filter-pill"
+        },
+        {
+          "tag": "SPAN",
+          "id": "ordCountCancelled",
+          "cls": "pill-count"
+        },
+        {
+          "tag": "DIV",
+          "id": "toast",
+          "cls": "toast toast-success"
+        },
+        {
+          "tag": "SPAN",
+          "id": "",
+          "cls": "toast-icon"
+        },
+        {
+          "tag": "svg",
+          "id": "",
+          "cls": "[object SVGAnimatedString]"
+        },
+        {
+          "tag": "path",
+          "id": "",
+          "cls": "[object SVGAnimatedString]"
+        },
+        {
+          "tag": "polyline",
+          "id": "",
+          "cls": "[object SVGAnimatedString]"
+        },
+        {
+          "tag": "SPAN",
+          "id": "",
+          "cls": "toast-text"
+        }
+      ],
+      "smallTargets": [
+        {
+          "id": "userOrdersPrevBtn",
+          "text": "Trước",
+          "height": 23.1875
+        },
+        {
+          "id": "userOrdersNextBtn",
+          "text": "Sau",
+          "height": 23.1875
+        },
+        {
+          "id": "",
+          "text": "Điều khoản dịch vụ & Chính sách bảo mật",
+          "height": 14
+        }
+      ]
+    },
+    {
+      "width": 375,
+      "view": "wallet",
+      "viewport": 375,
+      "scrollWidth": 375,
+      "overflow": [
+        {
+          "tag": "DIV",
+          "id": "toast",
+          "cls": "toast toast-success"
+        },
+        {
+          "tag": "SPAN",
+          "id": "",
+          "cls": "toast-icon"
+        },
+        {
+          "tag": "svg",
+          "id": "",
+          "cls": "[object SVGAnimatedString]"
+        },
+        {
+          "tag": "path",
+          "id": "",
+          "cls": "[object SVGAnimatedString]"
+        },
+        {
+          "tag": "polyline",
+          "id": "",
+          "cls": "[object SVGAnimatedString]"
+        },
+        {
+          "tag": "SPAN",
+          "id": "",
+          "cls": "toast-text"
+        }
+      ],
+      "smallTargets": [
+        {
+          "id": "btnMaxWithdraw",
+          "text": "Rút tối đa",
+          "height": 15.1875
+        },
+        {
+          "id": "",
+          "text": "Điều khoản dịch vụ & Chính sách bảo mật",
+          "height": 14
+        }
+      ]
+    },
+    {
+      "width": 375,
+      "view": "account",
+      "viewport": 375,
+      "scrollWidth": 375,
+      "overflow": [
+        {
+          "tag": "DIV",
+          "id": "toast",
+          "cls": "toast toast-success"
+        },
+        {
+          "tag": "SPAN",
+          "id": "",
+          "cls": "toast-icon"
+        },
+        {
+          "tag": "svg",
+          "id": "",
+          "cls": "[object SVGAnimatedString]"
+        },
+        {
+          "tag": "path",
+          "id": "",
+          "cls": "[object SVGAnimatedString]"
+        },
+        {
+          "tag": "polyline",
+          "id": "",
+          "cls": "[object SVGAnimatedString]"
+        },
+        {
+          "tag": "SPAN",
+          "id": "",
+          "cls": "toast-text"
+        }
+      ],
+      "smallTargets": [
+        {
+          "id": "copyAccountCodeBtn",
+          "text": "Sao chép",
+          "height": 22
+        },
+        {
+          "id": "",
+          "text": "Điều khoản dịch vụ & Chính sách bảo mật",
+          "height": 14
+        }
+      ]
+    },
+    {
+      "width": 375,
+      "view": "home",
+      "viewport": 375,
+      "scrollWidth": 375,
+      "overflow": [
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "cls": "hb-tab"
+        }
+      ],
+      "smallTargets": [
+        {
+          "id": "",
+          "text": "Xem FAQ đầy đủ",
+          "height": 23.1875
+        },
+        {
+          "id": "",
+          "text": "Điều khoản dịch vụ & Chính sách bảo mật",
+          "height": 14
+        }
+      ]
+    },
+    {
+      "width": 375,
+      "view": "guide",
+      "viewport": 375,
+      "scrollWidth": 375,
+      "overflow": [],
+      "smallTargets": [
+        {
+          "id": "",
+          "text": "Điều khoản dịch vụ & Chính sách bảo mật",
+          "height": 14
+        }
+      ]
+    },
+    {
+      "width": 375,
+      "view": "terms",
+      "viewport": 375,
+      "scrollWidth": 375,
+      "overflow": [],
+      "smallTargets": [
+        {
+          "id": "",
+          "text": "Điều khoản dịch vụ & Chính sách bảo mật",
+          "height": 14
+        }
+      ]
+    },
+    {
+      "width": 375,
+      "view": "navigation-timing-local",
+      "domContentLoaded": 148.7000002861023,
+      "load": 155.40000009536743,
+      "transferSize": 127110
+    },
+    {
+      "width": 390,
+      "view": "home",
+      "viewport": 390,
+      "scrollWidth": 390,
+      "overflow": [
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "cls": "hb-tab"
+        }
+      ],
+      "smallTargets": [
+        {
+          "id": "",
+          "text": "Xem FAQ đầy đủ",
+          "height": 23.1875
+        },
+        {
+          "id": "",
+          "text": "Điều khoản dịch vụ & Chính sách bảo mật",
+          "height": 14
+        }
+      ]
+    },
+    {
+      "width": 390,
+      "view": "login",
+      "viewport": 390,
+      "scrollWidth": 390,
+      "overflow": [
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "cls": "hb-tab"
+        }
+      ],
+      "smallTargets": [
+        {
+          "id": "",
+          "text": "Xem FAQ đầy đủ",
+          "height": 23.1875
+        },
+        {
+          "id": "",
+          "text": "Điều khoản dịch vụ & Chính sách bảo mật",
+          "height": 14
+        }
+      ]
+    },
+    {
+      "width": 390,
+      "view": "orders",
+      "viewport": 390,
+      "scrollWidth": 390,
+      "overflow": [
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "cls": "order-filter-pill"
+        },
+        {
+          "tag": "SPAN",
+          "id": "ordCountCancelled",
+          "cls": "pill-count"
+        },
+        {
+          "tag": "DIV",
+          "id": "toast",
+          "cls": "toast toast-success"
+        },
+        {
+          "tag": "SPAN",
+          "id": "",
+          "cls": "toast-icon"
+        },
+        {
+          "tag": "svg",
+          "id": "",
+          "cls": "[object SVGAnimatedString]"
+        },
+        {
+          "tag": "path",
+          "id": "",
+          "cls": "[object SVGAnimatedString]"
+        },
+        {
+          "tag": "polyline",
+          "id": "",
+          "cls": "[object SVGAnimatedString]"
+        },
+        {
+          "tag": "SPAN",
+          "id": "",
+          "cls": "toast-text"
+        }
+      ],
+      "smallTargets": [
+        {
+          "id": "userOrdersPrevBtn",
+          "text": "Trước",
+          "height": 23.1875
+        },
+        {
+          "id": "userOrdersNextBtn",
+          "text": "Sau",
+          "height": 23.1875
+        },
+        {
+          "id": "",
+          "text": "Điều khoản dịch vụ & Chính sách bảo mật",
+          "height": 14
+        }
+      ]
+    },
+    {
+      "width": 390,
+      "view": "wallet",
+      "viewport": 390,
+      "scrollWidth": 390,
+      "overflow": [
+        {
+          "tag": "DIV",
+          "id": "toast",
+          "cls": "toast toast-success"
+        },
+        {
+          "tag": "SPAN",
+          "id": "",
+          "cls": "toast-icon"
+        },
+        {
+          "tag": "svg",
+          "id": "",
+          "cls": "[object SVGAnimatedString]"
+        },
+        {
+          "tag": "path",
+          "id": "",
+          "cls": "[object SVGAnimatedString]"
+        },
+        {
+          "tag": "polyline",
+          "id": "",
+          "cls": "[object SVGAnimatedString]"
+        },
+        {
+          "tag": "SPAN",
+          "id": "",
+          "cls": "toast-text"
+        }
+      ],
+      "smallTargets": [
+        {
+          "id": "btnMaxWithdraw",
+          "text": "Rút tối đa",
+          "height": 15.1875
+        },
+        {
+          "id": "",
+          "text": "Điều khoản dịch vụ & Chính sách bảo mật",
+          "height": 14
+        }
+      ]
+    },
+    {
+      "width": 390,
+      "view": "account",
+      "viewport": 390,
+      "scrollWidth": 390,
+      "overflow": [
+        {
+          "tag": "DIV",
+          "id": "toast",
+          "cls": "toast toast-success"
+        },
+        {
+          "tag": "SPAN",
+          "id": "",
+          "cls": "toast-icon"
+        },
+        {
+          "tag": "svg",
+          "id": "",
+          "cls": "[object SVGAnimatedString]"
+        },
+        {
+          "tag": "path",
+          "id": "",
+          "cls": "[object SVGAnimatedString]"
+        },
+        {
+          "tag": "polyline",
+          "id": "",
+          "cls": "[object SVGAnimatedString]"
+        },
+        {
+          "tag": "SPAN",
+          "id": "",
+          "cls": "toast-text"
+        }
+      ],
+      "smallTargets": [
+        {
+          "id": "copyAccountCodeBtn",
+          "text": "Sao chép",
+          "height": 22
+        },
+        {
+          "id": "",
+          "text": "Điều khoản dịch vụ & Chính sách bảo mật",
+          "height": 14
+        }
+      ]
+    },
+    {
+      "width": 390,
+      "view": "home",
+      "viewport": 390,
+      "scrollWidth": 390,
+      "overflow": [
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "cls": "hb-tab"
+        }
+      ],
+      "smallTargets": [
+        {
+          "id": "",
+          "text": "Xem FAQ đầy đủ",
+          "height": 23.1875
+        },
+        {
+          "id": "",
+          "text": "Điều khoản dịch vụ & Chính sách bảo mật",
+          "height": 14
+        }
+      ]
+    },
+    {
+      "width": 390,
+      "view": "guide",
+      "viewport": 390,
+      "scrollWidth": 390,
+      "overflow": [],
+      "smallTargets": [
+        {
+          "id": "",
+          "text": "Điều khoản dịch vụ & Chính sách bảo mật",
+          "height": 14
+        }
+      ]
+    },
+    {
+      "width": 390,
+      "view": "terms",
+      "viewport": 390,
+      "scrollWidth": 390,
+      "overflow": [],
+      "smallTargets": [
+        {
+          "id": "",
+          "text": "Điều khoản dịch vụ & Chính sách bảo mật",
+          "height": 14
+        }
+      ]
+    },
+    {
+      "width": 390,
+      "view": "navigation-timing-local",
+      "domContentLoaded": 168.40000009536743,
+      "load": 172.09999990463257,
+      "transferSize": 127110
+    },
+    {
+      "width": 412,
+      "view": "home",
+      "viewport": 412,
+      "scrollWidth": 412,
+      "overflow": [
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "cls": "hb-tab"
+        }
+      ],
+      "smallTargets": [
+        {
+          "id": "",
+          "text": "Xem FAQ đầy đủ",
+          "height": 23.1875
+        },
+        {
+          "id": "",
+          "text": "Điều khoản dịch vụ & Chính sách bảo mật",
+          "height": 14
+        },
+        {
+          "id": "",
+          "text": "Câu hỏi thường gặp (FAQ)",
+          "height": 14
+        }
+      ]
+    },
+    {
+      "width": 412,
+      "view": "login",
+      "viewport": 412,
+      "scrollWidth": 412,
+      "overflow": [
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "cls": "hb-tab"
+        }
+      ],
+      "smallTargets": [
+        {
+          "id": "",
+          "text": "Xem FAQ đầy đủ",
+          "height": 23.1875
+        },
+        {
+          "id": "",
+          "text": "Điều khoản dịch vụ & Chính sách bảo mật",
+          "height": 14
+        },
+        {
+          "id": "",
+          "text": "Câu hỏi thường gặp (FAQ)",
+          "height": 14
+        }
+      ]
+    },
+    {
+      "width": 412,
+      "view": "orders",
+      "viewport": 412,
+      "scrollWidth": 412,
+      "overflow": [
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "cls": "order-filter-pill"
+        },
+        {
+          "tag": "SPAN",
+          "id": "ordCountCancelled",
+          "cls": "pill-count"
+        },
+        {
+          "tag": "DIV",
+          "id": "toast",
+          "cls": "toast toast-success"
+        },
+        {
+          "tag": "SPAN",
+          "id": "",
+          "cls": "toast-icon"
+        },
+        {
+          "tag": "svg",
+          "id": "",
+          "cls": "[object SVGAnimatedString]"
+        },
+        {
+          "tag": "path",
+          "id": "",
+          "cls": "[object SVGAnimatedString]"
+        },
+        {
+          "tag": "polyline",
+          "id": "",
+          "cls": "[object SVGAnimatedString]"
+        },
+        {
+          "tag": "SPAN",
+          "id": "",
+          "cls": "toast-text"
+        }
+      ],
+      "smallTargets": [
+        {
+          "id": "userOrdersPrevBtn",
+          "text": "Trước",
+          "height": 23.1875
+        },
+        {
+          "id": "userOrdersNextBtn",
+          "text": "Sau",
+          "height": 23.1875
+        },
+        {
+          "id": "",
+          "text": "Điều khoản dịch vụ & Chính sách bảo mật",
+          "height": 14
+        },
+        {
+          "id": "",
+          "text": "Câu hỏi thường gặp (FAQ)",
+          "height": 14
+        }
+      ]
+    },
+    {
+      "width": 412,
+      "view": "wallet",
+      "viewport": 412,
+      "scrollWidth": 412,
+      "overflow": [
+        {
+          "tag": "DIV",
+          "id": "toast",
+          "cls": "toast toast-success"
+        },
+        {
+          "tag": "SPAN",
+          "id": "",
+          "cls": "toast-icon"
+        },
+        {
+          "tag": "svg",
+          "id": "",
+          "cls": "[object SVGAnimatedString]"
+        },
+        {
+          "tag": "path",
+          "id": "",
+          "cls": "[object SVGAnimatedString]"
+        },
+        {
+          "tag": "polyline",
+          "id": "",
+          "cls": "[object SVGAnimatedString]"
+        },
+        {
+          "tag": "SPAN",
+          "id": "",
+          "cls": "toast-text"
+        }
+      ],
+      "smallTargets": [
+        {
+          "id": "btnMaxWithdraw",
+          "text": "Rút tối đa",
+          "height": 15.1875
+        },
+        {
+          "id": "",
+          "text": "Điều khoản dịch vụ & Chính sách bảo mật",
+          "height": 14
+        },
+        {
+          "id": "",
+          "text": "Câu hỏi thường gặp (FAQ)",
+          "height": 14
+        }
+      ]
+    },
+    {
+      "width": 412,
+      "view": "account",
+      "viewport": 412,
+      "scrollWidth": 412,
+      "overflow": [
+        {
+          "tag": "DIV",
+          "id": "toast",
+          "cls": "toast toast-success"
+        },
+        {
+          "tag": "SPAN",
+          "id": "",
+          "cls": "toast-icon"
+        },
+        {
+          "tag": "svg",
+          "id": "",
+          "cls": "[object SVGAnimatedString]"
+        },
+        {
+          "tag": "path",
+          "id": "",
+          "cls": "[object SVGAnimatedString]"
+        },
+        {
+          "tag": "polyline",
+          "id": "",
+          "cls": "[object SVGAnimatedString]"
+        },
+        {
+          "tag": "SPAN",
+          "id": "",
+          "cls": "toast-text"
+        }
+      ],
+      "smallTargets": [
+        {
+          "id": "copyAccountCodeBtn",
+          "text": "Sao chép",
+          "height": 22
+        },
+        {
+          "id": "",
+          "text": "Điều khoản dịch vụ & Chính sách bảo mật",
+          "height": 14
+        },
+        {
+          "id": "",
+          "text": "Câu hỏi thường gặp (FAQ)",
+          "height": 14
+        }
+      ]
+    },
+    {
+      "width": 412,
+      "view": "home",
+      "viewport": 412,
+      "scrollWidth": 412,
+      "overflow": [
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "cls": "hb-tab"
+        }
+      ],
+      "smallTargets": [
+        {
+          "id": "",
+          "text": "Xem FAQ đầy đủ",
+          "height": 23.1875
+        },
+        {
+          "id": "",
+          "text": "Điều khoản dịch vụ & Chính sách bảo mật",
+          "height": 14
+        },
+        {
+          "id": "",
+          "text": "Câu hỏi thường gặp (FAQ)",
+          "height": 14
+        }
+      ]
+    },
+    {
+      "width": 412,
+      "view": "guide",
+      "viewport": 412,
+      "scrollWidth": 412,
+      "overflow": [],
+      "smallTargets": [
+        {
+          "id": "",
+          "text": "Điều khoản dịch vụ & Chính sách bảo mật",
+          "height": 14
+        },
+        {
+          "id": "",
+          "text": "Câu hỏi thường gặp (FAQ)",
+          "height": 14
+        }
+      ]
+    },
+    {
+      "width": 412,
+      "view": "terms",
+      "viewport": 412,
+      "scrollWidth": 412,
+      "overflow": [],
+      "smallTargets": [
+        {
+          "id": "",
+          "text": "Điều khoản dịch vụ & Chính sách bảo mật",
+          "height": 14
+        },
+        {
+          "id": "",
+          "text": "Câu hỏi thường gặp (FAQ)",
+          "height": 14
+        }
+      ]
+    },
+    {
+      "width": 412,
+      "view": "navigation-timing-local",
+      "domContentLoaded": 46,
+      "load": 78.2000002861023,
+      "transferSize": 127110
+    },
+    {
+      "width": 430,
+      "view": "home",
+      "viewport": 430,
+      "scrollWidth": 430,
+      "overflow": [
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "cls": "hb-tab"
+        }
+      ],
+      "smallTargets": [
+        {
+          "id": "",
+          "text": "Xem FAQ đầy đủ",
+          "height": 23.1875
+        },
+        {
+          "id": "",
+          "text": "Điều khoản dịch vụ & Chính sách bảo mật",
+          "height": 14
+        },
+        {
+          "id": "",
+          "text": "Câu hỏi thường gặp (FAQ)",
+          "height": 14
+        }
+      ]
+    },
+    {
+      "width": 430,
+      "view": "login",
+      "viewport": 430,
+      "scrollWidth": 430,
+      "overflow": [
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "cls": "hb-tab"
+        }
+      ],
+      "smallTargets": [
+        {
+          "id": "",
+          "text": "Xem FAQ đầy đủ",
+          "height": 23.1875
+        },
+        {
+          "id": "",
+          "text": "Điều khoản dịch vụ & Chính sách bảo mật",
+          "height": 14
+        },
+        {
+          "id": "",
+          "text": "Câu hỏi thường gặp (FAQ)",
+          "height": 14
+        }
+      ]
+    },
+    {
+      "width": 430,
+      "view": "orders",
+      "viewport": 430,
+      "scrollWidth": 430,
+      "overflow": [
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "cls": "order-filter-pill"
+        },
+        {
+          "tag": "SPAN",
+          "id": "ordCountCancelled",
+          "cls": "pill-count"
+        },
+        {
+          "tag": "DIV",
+          "id": "toast",
+          "cls": "toast toast-success"
+        },
+        {
+          "tag": "SPAN",
+          "id": "",
+          "cls": "toast-icon"
+        },
+        {
+          "tag": "svg",
+          "id": "",
+          "cls": "[object SVGAnimatedString]"
+        },
+        {
+          "tag": "path",
+          "id": "",
+          "cls": "[object SVGAnimatedString]"
+        },
+        {
+          "tag": "polyline",
+          "id": "",
+          "cls": "[object SVGAnimatedString]"
+        },
+        {
+          "tag": "SPAN",
+          "id": "",
+          "cls": "toast-text"
+        }
+      ],
+      "smallTargets": [
+        {
+          "id": "userOrdersPrevBtn",
+          "text": "Trước",
+          "height": 23.1875
+        },
+        {
+          "id": "userOrdersNextBtn",
+          "text": "Sau",
+          "height": 23.1875
+        },
+        {
+          "id": "",
+          "text": "Điều khoản dịch vụ & Chính sách bảo mật",
+          "height": 14
+        },
+        {
+          "id": "",
+          "text": "Câu hỏi thường gặp (FAQ)",
+          "height": 14
+        }
+      ]
+    },
+    {
+      "width": 430,
+      "view": "wallet",
+      "viewport": 430,
+      "scrollWidth": 430,
+      "overflow": [
+        {
+          "tag": "DIV",
+          "id": "toast",
+          "cls": "toast toast-success"
+        },
+        {
+          "tag": "SPAN",
+          "id": "",
+          "cls": "toast-icon"
+        },
+        {
+          "tag": "svg",
+          "id": "",
+          "cls": "[object SVGAnimatedString]"
+        },
+        {
+          "tag": "path",
+          "id": "",
+          "cls": "[object SVGAnimatedString]"
+        },
+        {
+          "tag": "polyline",
+          "id": "",
+          "cls": "[object SVGAnimatedString]"
+        },
+        {
+          "tag": "SPAN",
+          "id": "",
+          "cls": "toast-text"
+        }
+      ],
+      "smallTargets": [
+        {
+          "id": "btnMaxWithdraw",
+          "text": "Rút tối đa",
+          "height": 15.1875
+        },
+        {
+          "id": "",
+          "text": "Điều khoản dịch vụ & Chính sách bảo mật",
+          "height": 14
+        },
+        {
+          "id": "",
+          "text": "Câu hỏi thường gặp (FAQ)",
+          "height": 14
+        }
+      ]
+    },
+    {
+      "width": 430,
+      "view": "account",
+      "viewport": 430,
+      "scrollWidth": 430,
+      "overflow": [
+        {
+          "tag": "DIV",
+          "id": "toast",
+          "cls": "toast toast-success"
+        },
+        {
+          "tag": "SPAN",
+          "id": "",
+          "cls": "toast-icon"
+        },
+        {
+          "tag": "svg",
+          "id": "",
+          "cls": "[object SVGAnimatedString]"
+        },
+        {
+          "tag": "path",
+          "id": "",
+          "cls": "[object SVGAnimatedString]"
+        },
+        {
+          "tag": "polyline",
+          "id": "",
+          "cls": "[object SVGAnimatedString]"
+        },
+        {
+          "tag": "SPAN",
+          "id": "",
+          "cls": "toast-text"
+        }
+      ],
+      "smallTargets": [
+        {
+          "id": "copyAccountCodeBtn",
+          "text": "Sao chép",
+          "height": 22
+        },
+        {
+          "id": "",
+          "text": "Điều khoản dịch vụ & Chính sách bảo mật",
+          "height": 14
+        },
+        {
+          "id": "",
+          "text": "Câu hỏi thường gặp (FAQ)",
+          "height": 14
+        }
+      ]
+    },
+    {
+      "width": 430,
+      "view": "home",
+      "viewport": 430,
+      "scrollWidth": 430,
+      "overflow": [
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "cls": "hb-tab"
+        }
+      ],
+      "smallTargets": [
+        {
+          "id": "",
+          "text": "Xem FAQ đầy đủ",
+          "height": 23.1875
+        },
+        {
+          "id": "",
+          "text": "Điều khoản dịch vụ & Chính sách bảo mật",
+          "height": 14
+        },
+        {
+          "id": "",
+          "text": "Câu hỏi thường gặp (FAQ)",
+          "height": 14
+        }
+      ]
+    },
+    {
+      "width": 430,
+      "view": "guide",
+      "viewport": 430,
+      "scrollWidth": 430,
+      "overflow": [],
+      "smallTargets": [
+        {
+          "id": "",
+          "text": "Điều khoản dịch vụ & Chính sách bảo mật",
+          "height": 14
+        },
+        {
+          "id": "",
+          "text": "Câu hỏi thường gặp (FAQ)",
+          "height": 14
+        }
+      ]
+    },
+    {
+      "width": 430,
+      "view": "terms",
+      "viewport": 430,
+      "scrollWidth": 430,
+      "overflow": [],
+      "smallTargets": [
+        {
+          "id": "",
+          "text": "Điều khoản dịch vụ & Chính sách bảo mật",
+          "height": 14
+        },
+        {
+          "id": "",
+          "text": "Câu hỏi thường gặp (FAQ)",
+          "height": 14
+        }
+      ]
+    },
+    {
+      "width": 430,
+      "view": "navigation-timing-local",
+      "domContentLoaded": 134.89999961853027,
+      "load": 138.69999980926514,
+      "transferSize": 127110
+    },
+    {
+      "width": 1440,
+      "view": "home",
+      "viewport": 1440,
+      "scrollWidth": 1440,
+      "overflow": [],
+      "smallTargets": [
+        {
+          "id": "",
+          "text": "Xem FAQ đầy đủ",
+          "height": 23.1875
+        },
+        {
+          "id": "",
+          "text": "Điều khoản dịch vụ & Chính sách bảo mật",
+          "height": 14
+        },
+        {
+          "id": "",
+          "text": "Câu hỏi thường gặp (FAQ)",
+          "height": 14
+        }
+      ]
+    },
+    {
+      "width": 1440,
+      "view": "login",
+      "viewport": 1440,
+      "scrollWidth": 1440,
+      "overflow": [],
+      "smallTargets": [
+        {
+          "id": "",
+          "text": "Xem FAQ đầy đủ",
+          "height": 23.1875
+        },
+        {
+          "id": "",
+          "text": "Điều khoản dịch vụ & Chính sách bảo mật",
+          "height": 14
+        },
+        {
+          "id": "",
+          "text": "Câu hỏi thường gặp (FAQ)",
+          "height": 14
+        }
+      ]
+    },
+    {
+      "width": 1440,
+      "view": "orders",
+      "viewport": 1440,
+      "scrollWidth": 1440,
+      "overflow": [],
+      "smallTargets": [
+        {
+          "id": "userOrdersPrevBtn",
+          "text": "Trước",
+          "height": 23.1875
+        },
+        {
+          "id": "userOrdersNextBtn",
+          "text": "Sau",
+          "height": 23.1875
+        },
+        {
+          "id": "",
+          "text": "Điều khoản dịch vụ & Chính sách bảo mật",
+          "height": 14
+        },
+        {
+          "id": "",
+          "text": "Câu hỏi thường gặp (FAQ)",
+          "height": 14
+        }
+      ]
+    },
+    {
+      "width": 1440,
+      "view": "wallet",
+      "viewport": 1440,
+      "scrollWidth": 1440,
+      "overflow": [],
+      "smallTargets": [
+        {
+          "id": "btnMaxWithdraw",
+          "text": "Rút tối đa",
+          "height": 15.1875
+        },
+        {
+          "id": "",
+          "text": "Điều khoản dịch vụ & Chính sách bảo mật",
+          "height": 14
+        },
+        {
+          "id": "",
+          "text": "Câu hỏi thường gặp (FAQ)",
+          "height": 14
+        }
+      ]
+    },
+    {
+      "width": 1440,
+      "view": "account",
+      "viewport": 1440,
+      "scrollWidth": 1440,
+      "overflow": [],
+      "smallTargets": [
+        {
+          "id": "copyAccountCodeBtn",
+          "text": "Sao chép",
+          "height": 22
+        },
+        {
+          "id": "",
+          "text": "Điều khoản dịch vụ & Chính sách bảo mật",
+          "height": 14
+        },
+        {
+          "id": "",
+          "text": "Câu hỏi thường gặp (FAQ)",
+          "height": 14
+        }
+      ]
+    },
+    {
+      "width": 1440,
+      "view": "home",
+      "viewport": 1440,
+      "scrollWidth": 1440,
+      "overflow": [],
+      "smallTargets": [
+        {
+          "id": "",
+          "text": "Xem FAQ đầy đủ",
+          "height": 23.1875
+        },
+        {
+          "id": "",
+          "text": "Điều khoản dịch vụ & Chính sách bảo mật",
+          "height": 14
+        },
+        {
+          "id": "",
+          "text": "Câu hỏi thường gặp (FAQ)",
+          "height": 14
+        }
+      ]
+    },
+    {
+      "width": 1440,
+      "view": "guide",
+      "viewport": 1440,
+      "scrollWidth": 1440,
+      "overflow": [],
+      "smallTargets": [
+        {
+          "id": "",
+          "text": "Điều khoản dịch vụ & Chính sách bảo mật",
+          "height": 14
+        },
+        {
+          "id": "",
+          "text": "Câu hỏi thường gặp (FAQ)",
+          "height": 14
+        }
+      ]
+    },
+    {
+      "width": 1440,
+      "view": "terms",
+      "viewport": 1440,
+      "scrollWidth": 1440,
+      "overflow": [],
+      "smallTargets": [
+        {
+          "id": "",
+          "text": "Điều khoản dịch vụ & Chính sách bảo mật",
+          "height": 14
+        },
+        {
+          "id": "",
+          "text": "Câu hỏi thường gặp (FAQ)",
+          "height": 14
+        }
+      ]
+    },
+    {
+      "width": 1440,
+      "view": "navigation-timing-local",
+      "domContentLoaded": 82.5,
+      "load": 86.80000019073486,
+      "transferSize": 127110
+    }
+  ],
+  "errors": [],
+  "flows": [
+    {
+      "width": 360,
+      "loginModalClosed": true
+    },
+    {
+      "width": 375,
+      "loginModalClosed": true
+    },
+    {
+      "width": 390,
+      "loginModalClosed": true
+    },
+    {
+      "width": 412,
+      "loginModalClosed": true
+    },
+    {
+      "width": 430,
+      "loginModalClosed": true
+    },
+    {
+      "width": 1440,
+      "loginModalClosed": true
+    }
+  ],
+  "admin": {
+    "viewport": 360,
+    "scrollWidth": 360
+  }
+}

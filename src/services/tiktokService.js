@@ -208,28 +208,36 @@ async function fetchAccessTradeOrders(apiKey, days = 30) {
 
   const now = new Date();
   const since = new Date(now.getTime() - Number(days || 30) * 24 * 60 * 60 * 1000);
-  const url = new URL('https://api.accesstrade.vn/v1/orders');
+  // Official order-list API: page starts at 1, limit <= 300, total is explicit.
+  const url = new URL('https://api.accesstrade.vn/v1/order-list');
   url.searchParams.set('since', since.toISOString());
   url.searchParams.set('until', now.toISOString());
-  url.searchParams.set('limit', '100');
-
-  const response = await fetch(url.toString(), {
-    method: 'GET',
-    headers: {
-      Authorization: `Token ${cleanKey}`,
-      Accept: 'application/json'
-    },
-    signal: AbortSignal.timeout(8000)
-  });
-
-  if (!response.ok) {
-    throw new Error(`AccessTrade API trả về mã lỗi HTTP ${response.status}.`);
+  url.searchParams.set('limit', '300');
+  const rows = [], seen = new Set();
+  let expectedTotal = null;
+  const deadline = Date.now() + 22000;
+  for (let page = 1; page <= 10 && Date.now() < deadline; page++) {
+    url.searchParams.set('page', String(page));
+    const response = await fetch(url.toString(), {
+      headers: { Authorization: `Token ${cleanKey}`, Accept: 'application/json' },
+      signal: AbortSignal.timeout(Math.max(1, Math.min(8000, deadline - Date.now())))
+    });
+    if (!response.ok) throw new Error(`AccessTrade API trả về HTTP ${response.status}.`);
+    const data = await response.json();
+    if (!Array.isArray(data?.data) || !Number.isSafeInteger(data.total) || data.total < 0) {
+      throw new Error('AccessTrade report thiếu data/total hợp lệ.');
+    }
+    if (expectedTotal !== null && expectedTotal !== data.total) throw new Error('AccessTrade report thay đổi trong lúc phân trang; cần chạy lại.');
+    expectedTotal = data.total;
+    for (const row of data.data) {
+      const key = JSON.stringify([row.merchant, row.order_id]);
+      if (!row.order_id || seen.has(key)) throw new Error('AccessTrade report thiếu mã đơn hoặc lặp trang.');
+      seen.add(key); rows.push(row);
+    }
+    if (rows.length === expectedTotal) return rows;
+    if (!data.data.length || rows.length > expectedTotal) throw new Error('AccessTrade report không khớp tổng số đơn.');
   }
-
-  const data = await response.json();
-  const rows = Array.isArray(data?.data) ? data.data : [];
-  logger.logLeave('fetchAccessTradeOrders', { count: rows.length });
-  return rows;
+  throw new Error('AccessTrade report chưa lấy đủ trang trong giới hạn tác vụ; chưa đánh dấu thành công.');
 }
 
 module.exports = {

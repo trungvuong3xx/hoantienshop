@@ -1,0 +1,24 @@
+{
+  "keys": [
+    "8b112bf4-023b-4e73-a1cc-378cba1f96fa",
+    "e1d57735-46ef-4b1e-8809-75775aa28004",
+    "86fe6a4d-6552-4992-9301-fb53c22d98a6",
+    "cc2d4618-1261-4cc1-a731-046ef077149a"
+  ],
+  "committed": [
+    {
+      "status": 403
+    },
+    {
+      "status": 403
+    },
+    {
+      "status": 403
+    },
+    {
+      "status": 403
+    }
+  ],
+  "withdrawals": 0,
+  "balance": 200000
+}

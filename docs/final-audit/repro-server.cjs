@@ -1,0 +1,13 @@
+for (const k of Object.keys(process.env)) if (!['PATH','SYSTEMROOT','COMSPEC','TEMP','TMP','USERPROFILE','APPDATA','LOCALAPPDATA'].includes(k.toUpperCase())) delete process.env[k];
+process.env.NODE_ENV='test'; process.env.TEST_DATABASE_URL='';
+const root='C:/NTV/Aff';
+const d=require(root+'/src/services/dbService');
+const db=d.ensureDbLoaded();
+const make=(id,code,phone,role='user')=>({id,code,phone,role,name:'Audit '+code,passwordHash:d.hashPassword('AuditOnly!123'),tokenVersion:1,balanceAvailable:0,createdAt:new Date().toISOString()});
+db.users=[make('audit_admin','AUDITADMIN','0999999991','admin'),make('audit_user','AUDITUSER','0999999992')];
+db.users[1].bankName='MBBank';db.users[1].bankAccount='12345678';db.users[1].bankOwner='AUDIT USER';
+db.orders=[];db.withdrawals=[];db.ledger=[];db.clicks=[];
+db.settings.shopeeAppId='';db.settings.shopeeSecret='';db.settings.accessTradeToken='';
+d.appendLedgerEntry('audit_user','admin_adjustment',200000,'audit-seed');d.recalculateUserWallet('audit_user');
+const app=require(root+'/server');
+app.listen(3456,'127.0.0.1',()=>console.log('AUDIT_READY'));

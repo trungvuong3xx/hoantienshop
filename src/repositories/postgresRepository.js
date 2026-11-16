@@ -1,3 +1,4 @@
+const { mapOrderRow } = require('../services/orderMapper');
 const logger = require('../utils/logger');
 const { sanitizeUser, getPgPool } = require('../services/dbService');
 const { buildVietQrImageUrl } = require('../utils/securityMiddleware');
@@ -79,25 +80,7 @@ async function queryOrdersPaginated(db, opts = {}) {
         `SELECT * FROM orders ${whereClause} ORDER BY created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
         [...params, meta.limit, offset]
       );
-      const items = listRes.rows.map((row) => ({
-        orderSn: row.order_sn,
-        platform: row.platform || 'shopee',
-        clickId: row.click_id || null,
-        userId: row.user_id || null,
-        userCode: row.user_code || 'GUEST',
-        productName: row.product_name || '',
-        orderAmount: Math.round(Number(row.order_amount || 0)),
-        grossCommission: Math.round(Number(row.gross_commission || 0)),
-        taxAmount: Math.round(Number(row.tax_amount || 0)),
-        netCommission: Math.round(Number(row.net_commission || 0)),
-        totalCommission: Math.round(Number(row.net_commission || 0)),
-        cashbackRate: Number(row.cashback_rate || 70),
-        userCashbackAmount: Math.round(Number(row.user_cashback_amount || 0)),
-        adminShareAmount: Math.round(Number(row.admin_share_amount || 0)),
-        status: row.status || 'pending',
-        createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
-        updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : new Date().toISOString()
-      }));
+      const items = listRes.rows.map(mapOrderRow);
       logger.logLeave('queryOrdersPaginated', { source: 'postgres', total, returned: items.length });
       return { items, pagination: meta };
     } catch (err) {
@@ -111,7 +94,7 @@ async function queryOrdersPaginated(db, opts = {}) {
     filtered = filtered.filter(
       (o) =>
         (userId && o.userId === userId) ||
-        (userCode && o.userCode && String(o.userCode).toUpperCase() === userCode)
+        (!o.userId && userCode && o.userCode && String(o.userCode).toUpperCase() === userCode)
     );
   }
   if (status && ['pending', 'approved', 'cancelled'].includes(status)) {
@@ -187,7 +170,7 @@ function queryWithdrawalsPaginated(db, opts = {}) {
 
   logger.logEnter('queryWithdrawalsPaginated', { page, limit, hasQuery: Boolean(q), status });
 
-  let filtered = Array.isArray(db?.withdrawals) ? [...db.withdrawals] : [];
+  let filtered = Array.isArray(db?.withdrawals) ? db.withdrawals.filter(w => !w.archivedAt) : [];
   if (userId) {
     filtered = filtered.filter((w) => w.userId === userId);
   }

@@ -3,6 +3,7 @@ const path = require('path');
 
 // ================= ENVIRONMENT LOADER (.env with quotes, export, and comments support) =================
 function loadEnvConfig() {
+  if (process.env.NODE_ENV === 'test') return;
   const envPath = path.join(__dirname, '.env');
   if (!fs.existsSync(envPath)) return;
   try {
@@ -59,7 +60,7 @@ app.use((req, res, next) => {
 // Configurable trust proxy based on deployment environment (1 on Vercel, loopback locally)
 const trustProxyConfig = process.env.TRUST_PROXY
   ? (process.env.TRUST_PROXY === 'true' ? true : (isNaN(process.env.TRUST_PROXY) ? process.env.TRUST_PROXY : parseInt(process.env.TRUST_PROXY, 10)))
-  : (process.env.VERCEL ? 1 : 'loopback');
+  : (process.env.VERCEL ? 1 : false);
 app.set('trust proxy', trustProxyConfig);
 
 // Security headers via Helmet + strict no-referrer to hide cashback site origin from Shopee/TikTok

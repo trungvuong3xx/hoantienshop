@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="referrer" content="strict-origin-when-cross-origin" />
   <title>LiLa — Hoàn Tiền Mua Sắm Shopee & TikTok Shop</title>
-  <meta name="description" content="LiLa — Nền tảng nhận hoàn tiền tự động lên đến 70% hoa hồng khi mua sắm trên Shopee và TikTok Shop. Minh bạch, nhanh chóng, rút tiền miễn phí." />
+  <meta name="description" content="LiLa — Nền tảng nhận hoàn tiền tự động khi mua sắm trên Shopee và TikTok Shop. Minh bạch, nhanh chóng, rút tiền miễn phí." />
   <meta property="og:title" content="LiLa — Mua Sắm Hoàn Tiền Shopee & TikTok Shop" />
   <meta property="og:description" content="Dán link sản phẩm Shopee hoặc TikTok Shop để nhận tiền hoàn trực tiếp vào ví sau khi nhận hàng." />
   <meta property="og:type" content="website" />
@@ -26,7 +26,7 @@
         "url": "https://hoantiensan.online/",
         "applicationCategory": "ShoppingApplication",
         "operatingSystem": "All",
-        "description": "Nền tảng nhận hoàn tiền tự động lên đến 70% hoa hồng khi mua sắm trên Shopee và TikTok Shop. Minh bạch, nhanh chóng, rút tiền miễn phí."
+        "description": "Nền tảng nhận hoàn tiền tự động khi mua sắm trên Shopee và TikTok Shop. Minh bạch, nhanh chóng, rút tiền miễn phí."
       },
       {
         "@type": "FAQPage",
@@ -64,7 +64,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/styles.css?v=2.3.0" />
+  <link rel="stylesheet" href="/styles.css?v=2.3.1" />
+  <link rel="stylesheet" href="/selectPopup.css?v=1" />
 </head>
 <body>
   <!-- Top Navigation Header -->
@@ -107,9 +108,6 @@
     <!-- ==================== VIEW 1: HOME (CUSTOMER VIEW) ==================== -->
     <section id="view-home" class="view-section active">
       <div class="hero-card">
-        <div class="hero-pill">
-          Hoàn đến <strong id="heroCashbackRate">70%</strong> hoa hồng sàn (~63% sau thuế TNCN)
-        </div>
         <h1 class="hero-title">
           Mua Sắm <span class="text-shopee">Shopee</span>, <span class="text-tiktok">TikTok</span><br />
           Nhận Tiền Hoàn Tự Động
@@ -383,7 +381,10 @@
             <h3>Danh sách đơn hàng</h3>
             <div class="orders-search-box">
               <input type="text" id="userOrderSearchInput" placeholder="Tìm mã đơn, tên sản phẩm..." aria-label="Tìm kiếm đơn hàng" />
-              <button type="button" class="btn btn-outline btn-sm" id="userOrderSearchBtn">Tìm</button>
+              <button type="button" class="btn btn-outline btn-sm btn-icon-svg" id="userOrderSearchBtn">
+                <svg class="svg-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <span>Tìm</span>
+              </button>
             </div>
           </div>
 
@@ -499,24 +500,24 @@
                 <label for="wdBankName">Ngân hàng (hoặc MoMo)</label>
                 <select id="wdBankName">
                   <option value="">-- Chọn ngân hàng nhận tiền --</option>
-                  <option value="Vietcombank">Vietcombank (VCB - 970436)</option>
-                  <option value="MBBank">MBBank (MB - 970422)</option>
-                  <option value="Techcombank">Techcombank (TCB - 970407)</option>
-                  <option value="VietinBank">VietinBank (CTG - 970415)</option>
-                  <option value="BIDV">BIDV (BIDV - 970418)</option>
-                  <option value="ACB">ACB (ACB - 970416)</option>
-                  <option value="VPBank">VPBank (VPB - 970432)</option>
-                  <option value="TPBank">TPBank (TPB - 970423)</option>
-                  <option value="VIB">VIB (VIB - 970441)</option>
-                  <option value="Sacombank">Sacombank (STB - 970403)</option>
-                  <option value="HDBank">HDBank (HDB - 970437)</option>
-                  <option value="Agribank">Agribank (VBA - 970405)</option>
-                  <option value="MSB">MSB (MSB - 970426)</option>
-                  <option value="SHB">SHB (SHB - 970443)</option>
-                  <option value="SeABank">SeABank (SEAB - 970440)</option>
-                  <option value="OCB">OCB (OCB - 970448)</option>
-                  <option value="Cake">Cake by VPBank (CAKE - 546034)</option>
-                  <option value="Timo">Timo by BVBank (TIMO - 963388)</option>
+                  <option value="Vietcombank">Vietcombank</option>
+                  <option value="MBBank">MBBank</option>
+                  <option value="Techcombank">Techcombank</option>
+                  <option value="VietinBank">VietinBank</option>
+                  <option value="BIDV">BIDV</option>
+                  <option value="ACB">ACB</option>
+                  <option value="VPBank">VPBank</option>
+                  <option value="TPBank">TPBank</option>
+                  <option value="VIB">VIB</option>
+                  <option value="Sacombank">Sacombank</option>
+                  <option value="HDBank">HDBank</option>
+                  <option value="Agribank">Agribank</option>
+                  <option value="MSB">MSB</option>
+                  <option value="SHB">SHB</option>
+                  <option value="SeABank">SeABank</option>
+                  <option value="OCB">OCB</option>
+                  <option value="Cake">Cake by VPBank</option>
+                  <option value="Timo">Timo by BVBank</option>
                   <option value="MoMo">Ví điện tử MoMo</option>
                 </select>
               </div>
@@ -538,9 +539,9 @@
               <div class="form-group hidden" id="wdPasswordConfirmGroup">
                 <label for="wdCurrentPassword" class="inline-icon-label" style="color:#d97706;">
                   <svg class="svg-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-                  <span>Xác nhận mật khẩu đăng nhập (Do bạn đổi số tài khoản mới)</span>
+                  <span>Xác nhận mật khẩu khi thêm hoặc đổi tài khoản nhận tiền</span>
                 </label>
-                <input type="password" id="wdCurrentPassword" autocomplete="current-password" placeholder="Nhập mật khẩu hiện tại để xác nhận đổi STK..." />
+                <input type="password" id="wdCurrentPassword" autocomplete="current-password" placeholder="Nhập mật khẩu đăng nhập để xác nhận..." />
               </div>
               <button type="submit" class="btn btn-success btn-full" id="submitWithdrawBtn">Gửi Yêu Cầu Rút Tiền</button>
             </form>
@@ -589,6 +590,11 @@
                   </tbody>
                 </table>
               </div>
+              <div class="pagination-row">
+                <button type="button" class="btn btn-ghost btn-xs" id="userLedgerPrevBtn">Trước</button>
+                <span id="userLedgerPageInfo" aria-live="polite"></span>
+                <button type="button" class="btn btn-ghost btn-xs" id="userLedgerNextBtn">Sau</button>
+              </div>
             </div>
           </div>
         </div>
@@ -633,7 +639,10 @@
                 <span class="profile-code-badge">
                   Mã TK: <strong id="accountUserCode">...</strong>
                 </span>
-                <button type="button" class="btn-copy-code-mini" id="copyAccountCodeBtn" title="Sao chép mã tài khoản">Sao chép</button>
+                <button type="button" class="btn-copy-code-mini btn-icon-svg" id="copyAccountCodeBtn" title="Sao chép mã tài khoản">
+                  <svg class="svg-icon" viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                  <span>Sao chép</span>
+                </button>
               </div>
             </div>
           </div>
@@ -822,7 +831,7 @@
           </div>
           <div class="faq-item">
             <h4>3. Tiền hoàn được tính như thế nào?</h4>
-            <p>Hệ thống áp dụng chính sách: <strong>Chia sẻ lên đến 70% hoa hồng sàn thực nhận (tương đương ~63% sau khi trừ 10% thuế TNCN theo quy định)</strong>. Cụ thể: sau khi sàn khấu trừ 10% thuế TNCN tại nguồn theo quy định pháp luật Việt Nam, hệ thống sẽ chia sẻ lên đến 70% số hoa hồng thực nhận còn lại chuyển trực tiếp vào ví của bạn.</p>
+            <p>Hệ thống áp dụng chính sách: <strong>Chia sẻ lên đến 70% hoa hồng sàn thực nhận (tương đương ~63% sau khi trừ 10% thuế TNCN theo quy định)</strong>. Bạn có thể xem số tiền hoàn dự kiến khi tạo link và theo dõi số tiền được duyệt trong mục Đơn hàng.</p>
           </div>
           <div class="faq-item">
             <h4>4. Bao lâu thì tiền hoàn từ trạng thái "Chờ đối soát" chuyển sang "Khả dụng" để rút?</h4>
@@ -896,9 +905,9 @@
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>
             <span>Đồng bộ đơn tự động</span>
           </button>
-          <button type="button" class="btn btn-danger-soft btn-sm" id="cleanTestDataBtn" title="Xóa tài khoản, đơn hàng và sổ cái test rác">
+          <button type="button" class="btn btn-danger-soft btn-sm" id="cleanTestDataBtn" title="Kiểm tra chỉ đọc; không xóa giao dịch hoặc sổ cái">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
-            <span>Dọn rác Test</span>
+            <span>Kiểm tra dữ liệu thử</span>
           </button>
           <button type="button" class="btn btn-outline-light btn-sm" id="refreshAdminBtn">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
@@ -923,7 +932,7 @@
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"/><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"/></svg>
           </div>
           <div class="kpi-meta">
-            <span class="stat-label">Hoàn Cho Khách (70%)</span>
+            <span class="stat-label">Hoàn Cho Khách</span>
             <strong class="stat-value" id="admUserShare">0đ</strong>
           </div>
         </div>
@@ -1014,7 +1023,7 @@
                   <input type="number" id="admOrdCommission" placeholder="0" />
                 </div>
                 <div class="form-group">
-                  <label for="admOrdPreview70">Sau thuế &amp; Chia 70/30</label>
+                  <label for="admOrdPreview70">Tiền hoàn sau thuế</label>
                   <input type="text" id="admOrdPreview70" readonly placeholder="0đ" />
                 </div>
                 <div class="form-group">
@@ -1358,7 +1367,10 @@
 
         <div class="admin-settings-save-bar">
           <div class="save-bar-hint">Mọi thay đổi được đồng bộ trực tiếp lên Cloud PostgreSQL.</div>
-          <button type="button" class="btn btn-primary" id="saveAdminSettingsBtn">Lưu Cấu Hình</button>
+          <button type="button" class="btn btn-primary btn-icon-svg" id="saveAdminSettingsBtn">
+            <svg class="svg-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+            <span>Lưu Cấu Hình</span>
+          </button>
         </div>
       </div>
     </section>
@@ -1397,7 +1409,10 @@
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1"/><circle cx="15.5" cy="15.5" r="1"/><circle cx="15.5" cy="8.5" r="1"/><circle cx="8.5" cy="15.5" r="1"/></svg>
               <span>Tạo ngẫu nhiên</span>
             </button>
-            <button type="button" class="btn btn-primary btn-sm" id="btnResetUserPassword">Lưu Mật Khẩu</button>
+            <button type="button" class="btn btn-primary btn-sm btn-icon-svg" id="btnResetUserPassword">
+              <svg class="svg-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/></svg>
+              <span>Lưu Mật Khẩu</span>
+            </button>
           </div>
         </div>
 
@@ -1412,18 +1427,24 @@
           </div>
           <div style="display: flex; gap: 8px; margin-bottom: 8px;">
             <input type="text" id="manageAdjustNote" placeholder="Lý do (thưởng sự kiện, đền bù, phạt)..." style="flex: 1;" />
-            <button type="button" class="btn btn-success btn-sm" id="btnAdjustUserBalance">Xác Nhận Điều Chỉnh</button>
+            <button type="button" class="btn btn-success btn-sm btn-icon-svg" id="btnAdjustUserBalance">
+              <svg class="svg-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+              <span>Xác Nhận Điều Chỉnh</span>
+            </button>
           </div>
           <div style="text-align: right;">
-            <button type="button" class="btn btn-warning btn-sm" id="btnResetUserBalanceZero">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+            <button type="button" class="btn btn-warning btn-sm btn-icon-svg" id="btnResetUserBalanceZero">
+              <svg class="svg-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
               <span>Đặt Lại Số Dư = 0đ</span>
             </button>
           </div>
         </div>
 
         <div class="modal-section-divider" style="display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap;">
-          <button type="button" class="btn btn-outline btn-sm" id="btnToggleUserLock">Khóa / Mở Khóa Tài Khoản</button>
+          <button type="button" class="btn btn-outline btn-sm btn-icon-svg" id="btnToggleUserLock">
+            <svg class="svg-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            <span>Khóa / Mở Khóa Tài Khoản</span>
+          </button>
           <button type="button" class="btn btn-ghost btn-sm" id="btnDeleteUser" style="color: #dc2626;">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
             <span>Xóa Tài Khoản</span>
@@ -1490,7 +1511,7 @@
             </button>
           </div>
           <input type="number" id="editOrdCashbackAmount" placeholder="Nhập số tiền hoàn tùy ý..." style="font-size:15px;font-weight:700;color:#059669;" />
-          <small style="color:#64748b;font-size:12px;display:block;margin-top:4px;">Bạn có thể tinh chỉnh trực tiếp số tiền hoàn hoặc bấm nút tự tính (70% sau thuế).</small>
+          <small style="color:#64748b;font-size:12px;display:block;margin-top:4px;">Bạn có thể tinh chỉnh trực tiếp số tiền hoàn hoặc bấm nút tự tính theo cấu hình hiện tại.</small>
         </div>
         <div class="form-group">
           <label for="editOrdStatus">Trạng Thái Đơn Hàng</label>
@@ -1780,6 +1801,8 @@
   <!-- Toast -->
   <div id="toast" class="toast hidden" role="status" aria-live="polite" aria-atomic="true"></div>
 
-  <script src="/app.js?v=2.3.0" defer></script>
+  <script src="/csvImport.js?v=2.3.2" defer></script>
+  <script src="/app.js?v=2.3.4" defer></script>
+  <script src="/selectPopup.js?v=1" defer></script>
 </body>
 </html>

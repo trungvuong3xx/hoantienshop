@@ -142,7 +142,9 @@ const UI_ICONS = {
   plusSquare: '<svg class="svg-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>',
   smartphone: '<svg class="svg-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>',
   confirmAlert: '<svg class="svg-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
-  confirmCheck: '<svg class="svg-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>'
+  confirmCheck: '<svg class="svg-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',
+  lock: '<svg class="svg-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>',
+  unlock: '<svg class="svg-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>'
 };
 
 const STATUS_CLASS_MAP = {
@@ -219,6 +221,28 @@ async function copyText(text, msg = 'Đã sao chép thành công!') {
   }
 }
 
+function showConnectionNotice(message) {
+  let notice = document.getElementById('connectionNotice');
+  if (!notice) {
+    notice = document.createElement('aside');
+    notice.id = 'connectionNotice';
+    notice.className = 'connection-notice';
+    notice.setAttribute('role', 'alert');
+    const text = document.createElement('span');
+    const retry = document.createElement('button');
+    retry.type = 'button';
+    retry.textContent = 'Tải lại trang';
+    retry.addEventListener('click', () => window.location.reload());
+    const dismiss = document.createElement('button');
+    dismiss.type = 'button';
+    dismiss.textContent = 'Đóng';
+    dismiss.addEventListener('click', () => notice.remove());
+    notice.append(text, retry, dismiss);
+    document.body.prepend(notice);
+  }
+  notice.firstChild.textContent = message;
+}
+
 async function apiFetch(url, options = {}) {
   const headers = {
     'Content-Type': 'application/json',
@@ -256,28 +280,41 @@ async function apiFetch(url, options = {}) {
       headers,
       credentials: 'same-origin'
     });
-    clearTimeout(timeoutId);
-    const data = await res.json().catch(() => ({}));
+    const data = await res.json().catch((err) => {
+      if (err.name === 'AbortError' || timedOut) throw err;
+      return {};
+    });
     if (res.status === 401 && authToken && !url.includes('/api/auth/')) {
       clearSession();
     }
     if (!res.ok) {
+      if (res.status >= 500) {
+        showConnectionNotice('Máy chủ đang gặp lỗi. Vui lòng thử lại sau vài phút.');
+      }
       throw new Error(data.error || `Lỗi kết nối (${res.status})`);
     }
     return data;
   } catch (err) {
     clearTimeout(timeoutId);
-    if (err.name === 'AbortError') {
+    if (err.name === 'AbortError' || timedOut) {
       // If caller intentionally aborted via signal, preserve AbortError without masking as timeout
       if (options.signal?.aborted && !timedOut) {
         throw err;
       }
-      throw new Error('Yêu cầu quá thời gian chờ (Timeout). Vui lòng thử lại.');
+      const message = 'Kết nối quá lâu. Hãy kiểm tra Wi-Fi/4G/5G rồi tải lại trang. Nếu vừa gửi yêu cầu, hãy kiểm tra kết quả trước khi gửi lại.';
+      showConnectionNotice(message);
+      throw new Error(message);
     }
     if (err instanceof TypeError || String(err.message).includes('Failed to fetch')) {
-      throw new Error('Mất kết nối mạng hoặc máy chủ không phản hồi. Vui lòng kiểm tra lại kết nối.');
+      const message = navigator.onLine === false
+        ? 'Thiết bị đang mất mạng. Hãy bật Wi-Fi hoặc 4G/5G, tắt chế độ máy bay rồi tải lại trang.'
+        : 'Không thể kết nối đến máy chủ. Hãy thử đổi Wi-Fi/4G/5G hoặc thử lại sau vài phút.';
+      showConnectionNotice(message);
+      throw new Error(message);
     }
     throw err;
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 
@@ -435,14 +472,20 @@ document.querySelectorAll('.modal-backdrop').forEach((backdrop) => {
   });
 });
 
-// Modal a11y: Escape to close & Tab / Shift+Tab focus trap cycling
+// Modal a11y: Escape to close topmost dialog & Tab / Shift+Tab focus trap cycling
 window.addEventListener('keydown', (e) => {
-  const openModal = document.querySelector('.modal-backdrop:not(.hidden)');
+  const openModal =
+    document.querySelector('#confirmActionModal:not(.hidden)') ||
+    document.querySelector('.modal-backdrop:not(.hidden)');
   if (!openModal) return;
 
   if (e.key === 'Escape') {
     e.preventDefault();
-    openModal.classList.add('hidden');
+    if (openModal.id === 'confirmActionModal') {
+      document.getElementById('confirmModalCancelBtn')?.click();
+    } else {
+      openModal.classList.add('hidden');
+    }
     return;
   }
 
@@ -655,8 +698,6 @@ function applyPublicSettings(data) {
   publicConfig = { ...publicConfig, ...data };
   const navSiteNameEl = document.getElementById('navSiteName');
   if (navSiteNameEl && publicConfig.siteName) navSiteNameEl.textContent = publicConfig.siteName;
-  const rateEl = document.getElementById('heroCashbackRate');
-  if (rateEl) rateEl.textContent = `${publicConfig.cashbackPercent}%`;
   const minLabel = document.getElementById('minWithdrawLabel');
   if (minLabel) minLabel.textContent = fmtVnd(publicConfig.minWithdrawAmount);
   document.querySelectorAll('[data-config="cashbackPercent"]').forEach((el) => {
@@ -851,10 +892,7 @@ on('registerFormBox', 'submit', (e) => {
   e.preventDefault();
   handleDoRegister();
 });
-on('withdrawFormBox', 'submit', (e) => {
-  e.preventDefault();
-  document.getElementById('submitWithdrawBtn')?.click();
-});
+on('withdrawFormBox', 'submit', handleSubmitWithdrawal);
 
 const regRefCodeInput = document.getElementById('regRefCode');
 if (regRefCodeInput) {
@@ -1027,7 +1065,9 @@ async function fetchInstantPreview(rawText) {
       // Previous preview request was aborted by subsequent input; silently ignore without altering subsequent state
       return;
     }
-    instantPreviewArea.classList.add('hidden');
+    instantPreviewArea.classList.remove('hidden');
+    instantPreviewCard.textContent = 'Chưa tải được thông tin sản phẩm. Bạn có thể thử lại hoặc tiếp tục tạo link.';
+    instantPreviewCard.setAttribute('role', 'status');
   } finally {
     if (!signal.aborted) {
       instantPreviewCard.classList.remove('loading');
@@ -1264,20 +1304,20 @@ on('getCashbackLinkBtn', 'click', handleGetCashbackLink);
 const wdBankAccountInput = document.getElementById('wdBankAccount');
 const wdPasswordConfirmGroup = document.getElementById('wdPasswordConfirmGroup');
 
-if (wdBankAccountInput) {
-  wdBankAccountInput.addEventListener('input', () => {
-    const savedAcc = currentUser?.bankAccount || '';
-    const newAcc = wdBankAccountInput.value.trim();
-    if (savedAcc && newAcc && newAcc !== savedAcc) {
-      wdPasswordConfirmGroup?.classList.remove('hidden');
-    } else {
-      wdPasswordConfirmGroup?.classList.add('hidden');
-    }
-  });
+function syncWithdrawalPasswordRequirement() {
+  const savedAcc = String(currentUser?.bankAccount || '').replace(/\s+/g, '');
+  const newAcc = String(wdBankAccountInput?.value || '').replace(/\s+/g, '');
+  const required = !savedAcc || newAcc !== savedAcc;
+  wdPasswordConfirmGroup?.classList.toggle('hidden', !required);
+  const input = document.getElementById('wdCurrentPassword');
+  if (input) input.required = required;
+  return required;
 }
+wdBankAccountInput?.addEventListener('input', syncWithdrawalPasswordRequirement);
 
 const USER_ORDERS_LIMIT = 10;
 let userOrdersPage = 1;
+let userLedgerPage = 1;
 let userOrdersTotalPages = 1;
 let userOrdersCache = [];
 let activeOrderStatusFilter = 'all';
@@ -1400,6 +1440,7 @@ async function loadUserDashboard(prefetchedData = null) {
     const q = document.getElementById('userOrderSearchInput')?.value?.trim() || '';
     const params = new URLSearchParams({
       orderPage: String(userOrdersPage),
+      ledgerPage: String(userLedgerPage),
       orderLimit: String(USER_ORDERS_LIMIT)
     });
     if (q) params.set('q', q);
@@ -1445,7 +1486,7 @@ async function loadUserDashboard(prefetchedData = null) {
     if (currentUser.bankOwner && document.getElementById('wdBankOwner')) {
       document.getElementById('wdBankOwner').value = currentUser.bankOwner;
     }
-    wdPasswordConfirmGroup?.classList.add('hidden');
+    syncWithdrawalPasswordRequirement();
 
     // Orders Table
     const orders = data.orders || [];
@@ -1464,6 +1505,8 @@ async function loadUserDashboard(prefetchedData = null) {
     // Balance History Table
     const ledBody = document.getElementById('userLedgerTableBody');
     const ledger = data.ledger || [];
+    const ledgerState = updateAdminPaginationUi({ infoId: 'userLedgerPageInfo', prevBtnId: 'userLedgerPrevBtn', nextBtnId: 'userLedgerNextBtn', pagination: data.ledgerPagination, fallbackTotal: ledger.length, itemLabel: 'giao dịch' });
+    userLedgerPage = ledgerState.page;
     if (ledBody) {
       if (ledger.length === 0) {
         ledBody.innerHTML =
@@ -1612,8 +1655,8 @@ on('copyRefLinkBtn', 'click', () => {
 on('shareZaloBtn', 'click', () => {
   const refLink = document.getElementById('userReferralLinkInput')?.value;
   if (!refLink) return;
-  const title = 'Mua Shopee & TikTok hoàn tiền đến 70%';
-  const text = `Tớ đang dùng LiLa mua sắm Shopee & TikTok được hoàn đến 70% hoa hồng! Bấm vào đây đăng ký cùng tớ nhé: ${refLink}`;
+  const title = 'Mua Shopee & TikTok nhận tiền hoàn';
+  const text = `Tớ đang dùng LiLa để nhận tiền hoàn khi mua sắm trên Shopee & TikTok! Bấm vào đây đăng ký cùng tớ nhé: ${refLink}`;
 
   if (navigator.share) {
     navigator.share({ title, text, url: refLink }).catch(() => {});
@@ -1652,7 +1695,9 @@ on('toggleRefFriendsBtn', 'click', () => {
   panel.classList.toggle('hidden');
 });
 
-on('refreshWalletBtn', 'click', () => loadUserDashboard());
+on('refreshWalletBtn', 'click', () => { userLedgerPage = 1; loadUserDashboard(); });
+on('userLedgerPrevBtn', 'click', () => { userLedgerPage = Math.max(1, userLedgerPage - 1); loadUserDashboard(); });
+on('userLedgerNextBtn', 'click', () => { userLedgerPage++; loadUserDashboard(); });
 on('userOrderSearchBtn', 'click', () => loadUserOrdersPage(1));
 on('userOrderSearchInput', 'keydown', (e) => {
   if (e.key === 'Enter') {
@@ -1792,7 +1837,13 @@ function askUserConfirm(message, title = 'Xác Nhận Yêu Cầu', options = {})
   });
 }
 
-on('submitWithdrawBtn', 'click', async () => {
+let isWithdrawalSubmitting = false;
+
+async function handleSubmitWithdrawal(event) {
+  event?.preventDefault();
+  if (isWithdrawalSubmitting) return;
+  if (!currentUser?.id) { showToast('Vui lòng đăng nhập trước khi rút tiền.'); return; }
+  const submittingUserId = currentUser.id;
   const method = document.getElementById('wdMethod')?.value || 'bank';
   const bankName = document.getElementById('wdBankName')?.value?.trim() || '';
   const bankAccount = document.getElementById('wdBankAccount')?.value?.trim() || '';
@@ -1804,6 +1855,13 @@ on('submitWithdrawBtn', 'click', async () => {
   const minAmount = numOr(publicConfig.minWithdrawAmount, 50000);
   const available = currentUser?.balanceAvailable || 0;
 
+  const intentStorageKey = `hts_withdraw_intents_${submittingUserId}`;
+  const fingerprint = JSON.stringify([method, bankName.trim(), bankAccount.replace(/\s+/g, ''), bankOwner.trim().toUpperCase(), amount]);
+  let pendingIntentKey;
+  try {
+    pendingIntentKey = JSON.parse(safeStorage.get(intentStorageKey, sessionStorage) || '{}')?.[fingerprint];
+  } catch { /* Storage is checked again before any request is sent. */ }
+
   if (!amountStr || isNaN(amount) || !Number.isInteger(amount) || amount <= 0) {
     showToast('Vui lòng nhập số tiền rút hợp lệ (số nguyên dương)!');
     return;
@@ -1812,7 +1870,7 @@ on('submitWithdrawBtn', 'click', async () => {
     showToast(`Số tiền rút tối thiểu là ${fmtVnd(minAmount)}.`);
     return;
   }
-  if (amount > available) {
+  if (amount > available && !pendingIntentKey) {
     showToast(`Số dư khả dụng (${fmtVnd(available)}) không đủ để rút ${fmtVnd(amount)}.`);
     return;
   }
@@ -1821,27 +1879,37 @@ on('submitWithdrawBtn', 'click', async () => {
     return;
   }
 
-  const ok = await askUserConfirm(
-    `• Số tiền: ${fmtVnd(
-      amount
-    )}\n• Ngân hàng: ${bankName}\n• Số tài khoản: ${bankAccount}\n• Chủ tài khoản: ${bankOwner}\n\nBạn có chắc chắn muốn gửi yêu cầu rút tiền này không?`,
-    'Xác Nhận Yêu Cầu Rút Tiền'
-  );
-  if (!ok) return;
-
-  const btn = document.getElementById('submitWithdrawBtn');
-  if (btn) {
-    btn.disabled = true;
-    btn.textContent = 'Đang gửi yêu cầu...';
+  if (syncWithdrawalPasswordRequirement() && !currentPassword) {
+    showToast('Vui lòng nhập mật khẩu đăng nhập để xác nhận tài khoản nhận tiền.');
+    document.getElementById('wdCurrentPassword')?.focus();
+    return;
   }
 
-  const idempotencyKey =
-    typeof crypto !== 'undefined' && crypto.randomUUID
-      ? crypto.randomUUID()
-      : 'wd_' + Date.now() + '_' + Math.random().toString(36).slice(2);
-
+  const btn = document.getElementById('submitWithdrawBtn');
+  isWithdrawalSubmitting = true;
+  if (btn) btn.disabled = true;
+  // Each unresolved payload keeps its key across retries and reloads in this tab.
+  // Passwords are never stored. Account identity isolates different logins.
+  let intents;
   try {
-    await apiFetch('/api/user/withdraw', {
+    const ok = await askUserConfirm(
+      `• Số tiền: ${fmtVnd(amount)}\n• Ngân hàng: ${bankName}\n• Số tài khoản: ${bankAccount}\n• Chủ tài khoản: ${bankOwner}\n\nBạn có chắc chắn muốn gửi yêu cầu rút tiền này không?`,
+      'Xác Nhận Yêu Cầu Rút Tiền'
+    );
+    if (!ok || currentUser?.id !== submittingUserId || !authToken) return;
+    intents = JSON.parse(safeStorage.get(intentStorageKey, sessionStorage) || '{}');
+    if (!intents || typeof intents !== 'object' || Array.isArray(intents)) throw new Error('Không thể đọc trạng thái yêu cầu rút tiền.');
+    const idempotencyKey = intents[fingerprint] || (
+      typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID()
+        : 'wd_' + Date.now() + '_' + Math.random().toString(36).slice(2)
+    );
+    intents[fingerprint] = idempotencyKey;
+    if (!safeStorage.set(intentStorageKey, JSON.stringify(intents), sessionStorage)) {
+      throw new Error('Không thể lưu trạng thái chống gửi trùng. Vui lòng cho phép lưu trữ trong trình duyệt rồi thử lại.');
+    }
+    if (btn) btn.textContent = 'Đang gửi yêu cầu...';
+    const result = await apiFetch('/api/user/withdraw', {
       method: 'POST',
       headers: {
         'Idempotency-Key': idempotencyKey
@@ -1855,6 +1923,11 @@ on('submitWithdrawBtn', 'click', async () => {
         currentPassword
       })
     });
+    if (!result?.withdrawal?.id) throw new Error('Chưa xác nhận được kết quả rút tiền. Vui lòng kiểm tra lịch sử hoặc gửi lại cùng thông tin.');
+    // Only release the key after an acknowledged result. Network/HTTP errors keep it.
+    delete intents[fingerprint];
+    safeStorage.set(intentStorageKey, JSON.stringify(intents), sessionStorage);
+    if (currentUser?.id !== submittingUserId || !authToken) return;
     const amtInput = document.getElementById('withdrawAmountInput') || document.getElementById('wdAmount');
     if (amtInput) amtInput.value = '';
     if (document.getElementById('wdCurrentPassword')) {
@@ -1865,12 +1938,13 @@ on('submitWithdrawBtn', 'click', async () => {
   } catch (err) {
     showToast(err.message);
   } finally {
+    isWithdrawalSubmitting = false;
     if (btn) {
       btn.disabled = false;
       btn.textContent = 'Gửi Yêu Cầu Rút Tiền';
     }
   }
-});
+}
 
 on('btnMaxWithdraw', 'click', () => {
   const available = currentUser?.balanceAvailable || 0;
@@ -2177,11 +2251,11 @@ function renderAdminWithdrawalsTable(withdrawals) {
              )}">${ADMIN_SVG.x}<span>Từ chối</span></button>
              <button type="button" class="btn btn-ghost btn-xs text-danger btn-icon-svg" data-wd-delete="${escapeHtml(
                w.id
-             )}">${ADMIN_SVG.trash}<span>Xóa</span></button>`
+             )}">${ADMIN_SVG.trash}<span>Lưu trữ</span></button>`
           : w.status === 'rejected' || w.status === 'cancelled'
           ? `<button type="button" class="btn btn-ghost btn-xs text-danger btn-icon-svg" data-wd-delete="${escapeHtml(
               w.id
-            )}">${ADMIN_SVG.trash}<span>Xóa</span></button>`
+            )}">${ADMIN_SVG.trash}<span>Lưu trữ</span></button>`
           : '<span style="color:#94a3b8;font-size:12px;">Hoàn tất</span>';
 
       const dt = w.createdAt ? new Date(w.createdAt).toLocaleDateString('vi-VN') : '—';
@@ -2401,29 +2475,15 @@ on('syncShopeeNowBtn', 'click', async () => {
 });
 
 on('cleanTestDataBtn', 'click', async () => {
-  const ok = await askUserConfirm(
-    'Hệ thống sẽ dọn sạch tài khoản test, đơn hàng thử nghiệm, lệnh rút tiền & sổ cái test rác (giữ nguyên toàn bộ tài khoản & giao dịch thật).\n\nBạn có muốn thực hiện ngay không?',
-    'Dọn Dữ Liệu Test Rác'
-  );
-  if (!ok) return;
-
   const btn = document.getElementById('cleanTestDataBtn');
-  const origHtml = btn ? btn.innerHTML : '';
-  if (btn) {
-    btn.disabled = true;
-    btn.textContent = 'Đang dọn rác...';
-  }
+  if (btn) { btn.disabled = true; btn.textContent = 'Đang kiểm tra...'; }
   try {
     const res = await apiFetch('/api/admin/cleanup-test-data', { method: 'POST', body: '{}' });
-    showToast(res.message || 'Đã dọn sạch dữ liệu test rác!');
-    await loadAdminDashboard();
+    showToast(res.message);
   } catch (err) {
     showToast(err.message);
   } finally {
-    if (btn) {
-      btn.disabled = false;
-      btn.innerHTML = origHtml || 'Dọn rác Test';
-    }
+    if (btn) { btn.disabled = false; btn.textContent = 'Kiểm tra dữ liệu thử'; }
   }
 });
 
@@ -2578,7 +2638,7 @@ if (viewAdmin) {
       const action = ordActionBtn.getAttribute('data-ord-action');
       const orderId = ordActionBtn.getAttribute('data-ord-id');
       const orderSn = ordActionBtn.getAttribute('data-ord-sn');
-      const order = latestAdminOrders.find((o) => (o.id || o.orderSn) === orderId || o.orderSn === orderSn);
+      const order = latestAdminOrders.find((o) => orderId ? (o.id || o.orderSn) === orderId : o.orderSn === orderSn);
 
       if (action === 'approve') {
         ordActionBtn.disabled = true;
@@ -2674,7 +2734,7 @@ if (viewAdmin) {
         try {
           await apiFetch('/api/admin/orders/delete', {
             method: 'POST',
-            body: JSON.stringify({ id: order?.id, orderSn })
+            body: JSON.stringify({ id: order?.id, orderSn, platform: order?.platform })
           });
           showToast(`Đã xóa vĩnh viễn đơn hàng #${orderSn}!`);
           await loadAdminDashboard();
@@ -2719,8 +2779,8 @@ if (viewAdmin) {
     if (wdDeleteBtn) {
       const id = wdDeleteBtn.getAttribute('data-wd-delete');
       const confirmed = await askUserConfirm(
-        `Bạn có chắc chắn muốn xóa yêu cầu rút tiền #${id} không?\nNếu lệnh đang chờ duyệt, số tiền sẽ được hoàn lại vào ví khách trước khi xóa.`,
-        'Xóa Yêu Cầu Rút Tiền'
+        `Lưu trữ yêu cầu rút tiền #${id}?\nNếu lệnh đang chờ duyệt, tiền sẽ được hoàn lại vào ví khách. Lệnh được ẩn khỏi danh sách nhưng lịch sử đối soát vẫn được giữ.`,
+        'Lưu Trữ Yêu Cầu Rút Tiền'
       );
       if (!confirmed) {
         return;
@@ -2731,7 +2791,7 @@ if (viewAdmin) {
           method: 'POST',
           body: JSON.stringify({ id, hardDelete: true })
         });
-        showToast('Đã xóa yêu cầu rút tiền!');
+        showToast('Đã lưu trữ yêu cầu rút tiền!');
         await loadAdminDashboard();
       } catch (err) {
         showToast(err.message);
@@ -2789,8 +2849,12 @@ function openUserManageModal(user) {
 
   const lockBtn = document.getElementById('btnToggleUserLock');
   if (lockBtn) {
-    lockBtn.textContent = user.accountLocked ? 'Mở Khóa Tài Khoản' : 'Khóa Tài Khoản Này';
-    lockBtn.className = user.accountLocked ? 'btn btn-success btn-sm' : 'btn btn-outline btn-sm';
+    lockBtn.innerHTML = user.accountLocked
+      ? `${UI_ICONS.unlock}<span>Mở Khóa Tài Khoản</span>`
+      : `${UI_ICONS.lock}<span>Khóa Tài Khoản Này</span>`;
+    lockBtn.className = user.accountLocked
+      ? 'btn btn-success btn-sm btn-icon-svg'
+      : 'btn btn-outline btn-sm btn-icon-svg';
   }
 
   userManageModal.classList.remove('hidden');
@@ -3026,72 +3090,12 @@ on('saveOrderEditBtn', 'click', async () => {
 });
 
 // ================= CSV IMPORT & RECONCILIATION =================
-function detectCsvDelimiter(headerLine) {
-  let commaCount = 0;
-  let semiCount = 0;
-  let inQuotes = false;
-  for (let i = 0; i < headerLine.length; i++) {
-    const ch = headerLine[i];
-    if (ch === '"') inQuotes = !inQuotes;
-    else if (!inQuotes) {
-      if (ch === ',') commaCount++;
-      else if (ch === ';') semiCount++;
-    }
-  }
-  return semiCount > commaCount ? ';' : ',';
-}
-
-function splitCsvLine(line, delimiter) {
-  const delim = delimiter || detectCsvDelimiter(line);
-  const result = [];
-  let current = '';
-  let inQuotes = false;
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i];
-    if (ch === '"') {
-      inQuotes = !inQuotes;
-    } else if (ch === delim && !inQuotes) {
-      result.push(current.trim());
-      current = '';
-    } else {
-      current += ch;
-    }
-  }
-  result.push(current.trim());
-  return result;
-}
-
-// Robust Vietnamese & International money parser
-function parseVnMoney(raw) {
-  if (raw === undefined || raw === null) return 0;
-  let s = String(raw).trim().replace(/[₫đVNDvnd\s]/g, '');
-  if (!s) return 0;
-  if (s.includes('.') && s.includes(',')) {
-    if (s.lastIndexOf(',') > s.lastIndexOf('.')) {
-      s = s.replace(/\./g, '').replace(',', '.');
-    } else {
-      s = s.replace(/,/g, '');
-    }
-  } else if (s.includes('.')) {
-    const parts = s.split('.');
-    if (parts.length > 2 || (parts.length === 2 && parts[1].length === 3)) {
-      s = s.replace(/\./g, '');
-    }
-  } else if (s.includes(',')) {
-    const parts = s.split(',');
-    if (parts.length > 2 || (parts.length === 2 && parts[1].length === 3)) {
-      s = s.replace(/,/g, '');
-    } else {
-      s = s.replace(',', '.');
-    }
-  }
-  const n = parseFloat(s);
-  return isNaN(n) ? 0 : n;
-}
+let isCsvImporting = false;
 
 on('admCsvInput', 'change', async (e) => {
   const file = e.target.files[0];
   if (!file) return;
+  if (isCsvImporting) { showToast('Đang nhập CSV. Vui lòng chờ hoàn tất.'); return; }
 
   const MAX_CSV_SIZE = 2 * 1024 * 1024; // Enforce 2MB client-side limit
   if (file.size > MAX_CSV_SIZE) {
@@ -3101,140 +3105,17 @@ on('admCsvInput', 'change', async (e) => {
   }
 
   try {
+    isCsvImporting = true;
+    e.target.disabled = true;
     const text = await file.text();
-    const lines = text.split(/\r?\n/).filter((l) => l.trim());
-    if (lines.length < 2) {
-      showToast('File CSV trống hoặc không đúng định dạng.');
-      return;
-    }
-
-    const delimiter = detectCsvDelimiter(lines[0]);
-    const headers = splitCsvLine(lines[0], delimiter).map((h) => h.replace(/^\uFEFF/, '').toLowerCase().trim());
-    const rows = [];
-    let totalEstComm = 0;
-    let skippedCount = 0;
-
-    for (let i = 1; i < lines.length; i++) {
-      const cols = splitCsvLine(lines[i], delimiter);
-      if (cols.length < 2) {
-        skippedCount++;
-        continue;
-      }
-
-      const rowObj = {};
-      headers.forEach((h, idx) => {
-        rowObj[h] = cols[idx] || '';
-      });
-
-      const orderSn =
-        rowObj['mã đơn hàng'] ||
-        rowObj['order id'] ||
-        rowObj['order_id'] ||
-        rowObj['conversion_id'] ||
-        rowObj['transaction_id'] ||
-        rowObj['ordersn'] ||
-        cols[0] ||
-        '';
-
-      const cleanOrderSn = String(orderSn).trim();
-      // Validate orderSn format before submission
-      if (!cleanOrderSn || cleanOrderSn.length < 2 || !/^[A-Za-z0-9_\-\.]+$/.test(cleanOrderSn)) {
-        skippedCount++;
-        continue;
-      }
-
-      const subId1 =
-        rowObj['sub_id1'] ||
-        rowObj['sub id 1'] ||
-        rowObj['sub_id'] ||
-        rowObj['sub1'] ||
-        rowObj['utm_source'] ||
-        'GUEST';
-
-      const commRaw =
-        rowObj['tổng hoa hồng đơn hàng(₫)'] ||
-        rowObj['hoa hồng ròng'] ||
-        rowObj['total commission'] ||
-        rowObj['net commission'] ||
-        rowObj['pub_commission'] ||
-        rowObj['hoa hồng'] ||
-        rowObj['reward'] ||
-        '0';
-
-      const amountRaw =
-        rowObj['giá trị đơn hàng(₫)'] ||
-        rowObj['billing'] ||
-        rowObj['total_amount'] ||
-        rowObj['order amount'] ||
-        '0';
-
-      const totalCommission = parseVnMoney(commRaw);
-      const orderAmount = parseVnMoney(amountRaw);
-
-      // Validate finite non-negative numbers before submission
-      if (
-        isNaN(totalCommission) ||
-        !Number.isFinite(totalCommission) ||
-        totalCommission < 0 ||
-        isNaN(orderAmount) ||
-        !Number.isFinite(orderAmount) ||
-        orderAmount < 0
-      ) {
-        skippedCount++;
-        continue;
-      }
-
-      const statusRaw = (
-        rowObj['trạng thái đơn hàng'] ||
-        rowObj['order status'] ||
-        rowObj['status'] ||
-        rowObj['trạng thái'] ||
-        ''
-      ).toLowerCase();
-
-      const merchantRaw = (
-        rowObj['merchant'] ||
-        rowObj['chiến dịch'] ||
-        rowObj['platform'] ||
-        ''
-      ).toLowerCase();
-
-      totalEstComm += totalCommission;
-
-      const status =
-        statusRaw === '1' ||
-        statusRaw.includes('hoàn thành') ||
-        statusRaw.includes('completed') ||
-        statusRaw.includes('approved') ||
-        statusRaw.includes('đã duyệt')
-          ? 'approved'
-          : statusRaw === '2' ||
-            statusRaw === '-1' ||
-            statusRaw.includes('huỷ') ||
-            statusRaw.includes('hủy') ||
-            statusRaw.includes('cancel') ||
-            statusRaw.includes('reject')
-          ? 'cancelled'
-          : 'pending';
-
-      const platform = merchantRaw.includes('tiktok') ? 'tiktok' : 'shopee';
-
-      rows.push({
-        orderSn: cleanOrderSn,
-        userCode: String(subId1 || 'GUEST').trim(),
-        totalCommission,
-        orderAmount,
-        platform,
-        status
-      });
-    }
+    const { rows, totalEstComm, duplicateRows, sourceRows } = window.CashbackCsv.parse(text, file.name);
 
     if (rows.length === 0) {
       showToast('Không tìm thấy dòng dữ liệu đơn hàng hợp lệ nào trong file CSV.');
       return;
     }
 
-    const confirmMsg = `• Số đơn hợp lệ: ${rows.length}\n• Số dòng bỏ qua/lỗi: ${skippedCount}\n• Tổng hoa hồng ước tính: ${fmtVnd(
+    const confirmMsg = `• Số đơn hợp lệ: ${rows.length}\n• Số dòng nguồn: ${sourceRows}\n• Số dòng cùng đơn đã gộp: ${duplicateRows}\n• Tổng hoa hồng ước tính: ${fmtVnd(
       totalEstComm
     )}\n\nBạn có muốn tiếp tục nhập và cập nhật ví khách hàng không?`;
     const confirmed = await askUserConfirm(confirmMsg, 'Xác Nhận Nhập CSV Đối Soát');
@@ -3273,6 +3154,8 @@ on('admCsvInput', 'change', async (e) => {
   } catch (err) {
     showToast(`Lỗi đọc file CSV: ${err.message}`);
   } finally {
+    isCsvImporting = false;
+    e.target.disabled = false;
     e.target.value = '';
   }
 });
@@ -3457,18 +3340,21 @@ async function initBoot() {
   }
 }
 
-// Global Escape key listener to close active modals
+// Global Escape key listener fallback (closes topmost modal without closing stacked base modals)
 if (typeof document !== 'undefined') {
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
+      const confirmEl = document.getElementById('confirmActionModal');
+      if (confirmEl && !confirmEl.classList.contains('hidden')) {
+        return;
+      }
       const modalIds = [
         'authModal',
         'userManageModal',
         'orderEditModal',
         'vietQrModal',
         'refQrModal',
-        'pwaGuideModal',
-        'confirmActionModal'
+        'pwaGuideModal'
       ];
       for (const mId of modalIds) {
         const el = document.getElementById(mId);

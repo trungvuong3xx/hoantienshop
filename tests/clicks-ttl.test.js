@@ -63,7 +63,7 @@ describe('Click TTL and Retention', () => {
     expect(cleanExpiredClicks([])).toEqual([]);
   });
 
-  test('enforces MAX_CLICKS_HARD_LIMIT (20,000) cap to prevent memory exhaustion', () => {
+  test('preserves all unexpired attribution records beyond the legacy count cap', () => {
     const now = Date.now();
     const overflowCount = MAX_CLICKS_HARD_LIMIT + 500;
     const largeList = [];
@@ -74,7 +74,7 @@ describe('Click TTL and Retention', () => {
       });
     }
     const cleaned = cleanExpiredClicks(largeList, now);
-    expect(cleaned.length).toBe(MAX_CLICKS_HARD_LIMIT);
+    expect(cleaned.length).toBe(overflowCount);
     expect(cleaned[0].clickId).toBe('click_0');
   });
 

@@ -1,9 +1,15 @@
+const { parseTimestamp } = require('./orderReconciliationService');
+const { mapUserRow } = require('./userMapper');
+const { mapOrderRow } = require('./orderMapper');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const os = require('os');
+const { AsyncLocalStorage } = require('async_hooks');
 const { Pool } = require('pg');
 const logger = require('../utils/logger');
+const { orderKey, orderId, migrateLegacyOrderIdentity, ledgerOrderKey, orderLedgerRef } = require('./orderIdentity');
+const { cleanExpiredClicks } = require('../utils/clickManager');
 
 const IS_VERCEL = Boolean(process.env.VERCEL);
 const IS_TEST_ENV = process.env.NODE_ENV === 'test';
@@ -55,7 +61,7 @@ function parseEnvFile(filePath) {
 
 // Load .env fallback if not present in process.env
 const localEnvPath = path.join(__dirname, '..', '..', '.env');
-const parsedFileEnv = parseEnvFile(localEnvPath);
+const parsedFileEnv = IS_TEST_ENV ? {} : parseEnvFile(localEnvPath);
 for (const [k, v] of Object.entries(parsedFileEnv)) {
   if (!process.env[k]) {
     process.env[k] = v;
@@ -91,10 +97,8 @@ if (DATABASE_URL) {
           rejectUnauthorized: true,
           ca: process.env.PG_SSL_CA.replace(/\\n/g, '\n')
         };
-      } else if (process.env.PG_SSL_REJECT_UNAUTHORIZED === 'true') {
-        sslConfig = { rejectUnauthorized: true };
       } else {
-        sslConfig = { rejectUnauthorized: false };
+        sslConfig = { rejectUnauthorized: true };
       }
     }
 
@@ -212,14 +216,28 @@ function getJwtSecret() {
   const secret = (
     process.env.JWT_SECRET ||
     process.env.AUTH_SECRET ||
-    'hts_prod_jwt_secret_secure_token_key_hoantiensan_2026'
+    ''
   ).trim();
+  if (!secret) {
+    if (IS_PROD) throw new Error('JWT_SECRET or AUTH_SECRET is required in production');
+    cachedJwtSecret = crypto.randomBytes(48).toString('hex');
+    return cachedJwtSecret;
+  }
+  if (IS_PROD && secret.length < 32) {
+    throw new Error('Authentication secret must contain at least 32 characters');
+  }
   if (secret.length < 32) {
     cachedJwtSecret = crypto.createHash('sha256').update(secret).digest('hex');
     return cachedJwtSecret;
   }
   cachedJwtSecret = secret;
   return cachedJwtSecret;
+}
+
+if (IS_PROD) {
+  getJwtSecret();
+  if (!DATABASE_URL) throw new Error('DATABASE_URL is required in production');
+  if (!process.env.ADMIN_PASSWORD) throw new Error('ADMIN_PASSWORD is required for secure bootstrap');
 }
 
 function createToken(user, ttlSeconds = 3600 * 6) {
@@ -316,13 +334,7 @@ function calculateCommissionSplit(
 // ================= INITIAL DATA & SETTINGS =================
 
 function getDefaultPostbackToken() {
-  if (process.env.POSTBACK_SECRET) return process.env.POSTBACK_SECRET.trim();
-  const authSecret = (process.env.AUTH_SECRET || 'hts_auth_secret_hoantiensan_2026_key_9988').trim();
-  return crypto
-    .createHmac('sha256', authSecret)
-    .update('accesstrade-postback-token-v1')
-    .digest('hex')
-    .slice(0, 32);
+  return (process.env.POSTBACK_TOKEN || process.env.POSTBACK_SECRET || '').trim();
 }
 
 let cachedDefaultSettings = null;
@@ -360,7 +372,7 @@ function getInitialData() {
     if (process.env.ADMIN_PASSWORD) {
       cachedAdminPassword = process.env.ADMIN_PASSWORD.trim();
     } else {
-      cachedAdminPassword = 'trungvuong1881996A@';
+      cachedAdminPassword = crypto.randomBytes(48).toString('hex');
     }
   }
 
@@ -396,6 +408,18 @@ function getInitialData() {
 }
 
 let memoryCache = null;
+const stateContext = new AsyncLocalStorage();
+let committedLocalState = null;
+const discardedLocalStates = new WeakSet();
+let cacheInvalid = false;
+let saveGeneration = 0;
+
+function cacheUnavailableError() {
+  const error = new Error('Dữ liệu cần được tải lại sau lỗi lưu. Vui lòng thử lại.');
+  error.status = 503;
+  error.code = 'CACHE_UNAVAILABLE';
+  return error;
+}
 
 function syncAdminCredentials(data) {
   if (!data || !Array.isArray(data.users)) return false;
@@ -421,7 +445,7 @@ function syncAdminCredentials(data) {
     changed = true;
   }
   if (!admin.passwordHash) {
-    admin.passwordHash = hashPassword(envAdminPassword || 'trungvuong1881996A@');
+    admin.passwordHash = hashPassword(envAdminPassword || crypto.randomBytes(48).toString('hex'));
     changed = true;
   } else if (
     process.env.FORCE_SYNC_ADMIN_PASSWORD === 'true' &&
@@ -457,6 +481,7 @@ function normalizeState(raw, initial = null) {
   }
   const defaultInit = initial || getInitialData();
   const state = {
+    webhookReceipts: Array.isArray(raw.webhookReceipts) ? raw.webhookReceipts : [],
     settings: { ...defaultInit.settings, ...(raw.settings || {}) },
     users: Array.isArray(raw.users) && raw.users.length > 0 ? raw.users : defaultInit.users,
     clicks: Array.isArray(raw.clicks) ? raw.clicks : [],
@@ -485,6 +510,12 @@ function normalizeState(raw, initial = null) {
 }
 
 function ensureDbLoaded() {
+  const context = stateContext.getStore();
+  if (context) {
+    if (context.invalid) throw cacheUnavailableError();
+    return context.data;
+  }
+  if (cacheInvalid) throw cacheUnavailableError();
   if (memoryCache) {
     // Sync active public environment variable overrides
     if (process.env.SHOPEE_AFFILIATE_ID) memoryCache.settings.shopeeAffiliateId = process.env.SHOPEE_AFFILIATE_ID.trim();
@@ -514,7 +545,7 @@ function ensureDbLoaded() {
   let sourcePath = null;
   if (fs.existsSync(LOCAL_DB_PATH)) {
     sourcePath = LOCAL_DB_PATH;
-  } else if (fs.existsSync(SEED_DB_PATH)) {
+  } else if (!IS_TEST_ENV && fs.existsSync(SEED_DB_PATH)) {
     sourcePath = SEED_DB_PATH;
   }
 
@@ -547,6 +578,7 @@ function ensureDbLoaded() {
 
     const initial = getInitialData();
     memoryCache = normalizeState(parsed, initial);
+    committedLocalState = structuredClone(memoryCache);
 
     if (sourcePath === SEED_DB_PATH && !pgPool) {
       saveDb(memoryCache).catch((err) => {
@@ -572,12 +604,32 @@ let pendingSavePromise = null;
 let pendingSaveData = null;
 let currentDbVersion = 1;
 
-async function performSaveDb(data) {
+// Each request owns its mutable state. Financial snapshots use the version
+// captured with that state, never a version changed by a concurrent request.
+async function runWithStateContext(fn, { incrementalOnly = false } = {}) {
+  const base = ensureDbLoaded();
+  const data = incrementalOnly
+    ? { ...base, users: structuredClone(base.users), settings: structuredClone(base.settings) }
+    : structuredClone(base);
+  const context = { data, version: stateContext.getStore()?.version ?? currentDbVersion, invalid: false, incrementalOnly };
+  return stateContext.run(context, async () => {
+    if (pgPool && !incrementalOnly) {
+      const result = await pgPool.query("SELECT version FROM hoantienshop_state WHERE id='main'");
+      if (Number(result.rows[0]?.version || 1) !== context.version) await reloadStateFromPostgres({ strict: true });
+    }
+    return fn();
+  });
+}
+
+async function performSaveDb(data, expectedVersion) {
   if (!data) return;
 
-  // Prune clicks buffer to prevent memory exhaustion (newest clicks live at index 0 via unshift)
-  if (Array.isArray(data.clicks) && data.clicks.length > 5000) {
-    data.clicks = data.clicks.slice(0, 5000);
+  // Retain attribution for the entire configured time window.
+  data.clicks = cleanExpiredClicks(data.clicks);
+  if (pgPool) {
+    if (!pgSchemaReady) throw new Error('Postgres schema is not ready');
+    await syncSnapshotToPostgres(data, expectedVersion);
+    return;
   }
 
   // 1. Atomic local file write (synchronous inside serialized save queue to avoid dangling Windows libuv handles)
@@ -588,6 +640,7 @@ async function performSaveDb(data) {
     tmpPath = `${LOCAL_DB_PATH}.tmp.${process.pid}.${Date.now()}`;
     fs.writeFileSync(tmpPath, JSON.stringify(data), 'utf8');
     fs.renameSync(tmpPath, LOCAL_DB_PATH);
+    committedLocalState = structuredClone(data);
     tmpPath = null;
   } catch (err) {
     logger.error('saveDb', 'Lỗi ghi đĩa local', { error: err.message });
@@ -599,15 +652,6 @@ async function performSaveDb(data) {
       } catch (_) {}
     }
   }
-
-  // 2. Postgres sync (Only if pool exists AND schema was verified ready!)
-  if (pgPool) {
-    if (!pgSchemaReady) {
-      logger.warning('saveDb', 'Postgres pool tồn tại nhưng schema chưa sẵn sàng. Tạm hoãn đồng bộ tránh ghi đè.');
-    } else {
-      await syncSnapshotToPostgres(data);
-    }
-  }
 }
 
 /**
@@ -615,7 +659,36 @@ async function performSaveDb(data) {
  * If a save fails, the caller receives the error, but the internal queue recovers immediately.
  */
 function saveDb(data = memoryCache) {
+  const context = stateContext.getStore();
+  if (context) {
+    if (context.invalid) return Promise.reject(cacheUnavailableError());
+    if (context.incrementalOnly && pgPool) return Promise.reject(new Error('Snapshot writes are forbidden in incremental-only requests'));
+    const snapshot = structuredClone(arguments.length ? data : context.data);
+    const expectedVersion = context.version;
+    const operation = internalSaveQueue.then(async () => {
+      try {
+        if (!pgPool && expectedVersion !== currentDbVersion) {
+          const error = new Error('Dữ liệu đã thay đổi. Vui lòng tải lại và thử lại.');
+          error.status = 409; error.code = 'STATE_CONFLICT'; throw error;
+        }
+        await performSaveDb(snapshot, expectedVersion);
+        if (!pgPool) currentDbVersion++;
+        context.version = currentDbVersion;
+        const published = structuredClone(snapshot);
+        if (memoryCache) Object.assign(memoryCache, published);
+        else memoryCache = published;
+      } catch (error) {
+        context.invalid = true;
+        throw error;
+      }
+    });
+    internalSaveQueue = operation.catch(() => {});
+    return operation;
+  }
+  if (cacheInvalid) return Promise.reject(cacheUnavailableError());
+  const generation = saveGeneration;
   const targetData = data || memoryCache;
+  if (targetData && discardedLocalStates.has(targetData)) return Promise.reject(cacheUnavailableError());
   if (!targetData) {
     return Promise.resolve();
   }
@@ -643,10 +716,26 @@ function saveDb(data = memoryCache) {
       pendingSavePromise = null;
       pendingSaveData = null;
       try {
+        if (generation !== saveGeneration) throw cacheUnavailableError();
         await performSaveDb(snapshot);
+        if (!pgPool) currentDbVersion++;
         resolveCaller();
       } catch (err) {
         logger.error('saveDb', 'Lỗi trong tác vụ lưu dữ liệu', { error: err.message });
+        if (pgPool) {
+          cacheInvalid = true;
+          saveGeneration++;
+          // Discard failed mutations; never turn a rejected operation into a
+          // later successful snapshot. Queued saves from this generation fail.
+          await reloadStateFromPostgres({ strict: true }).catch(reloadError => {
+            logger.error('saveDb', 'Không thể khôi phục cache sau lỗi lưu', { error: reloadError.message });
+          });
+        } else {
+          saveGeneration++;
+          if (snapshot) discardedLocalStates.add(snapshot);
+          if (committedLocalState) memoryCache = structuredClone(committedLocalState);
+          else cacheInvalid = true;
+        }
         rejectCaller(err);
       }
     })
@@ -700,6 +789,8 @@ async function initPostgresIfConfigured() {
     logger.logEnter('initPostgresIfConfigured');
     const client = await pgPool.connect();
     try {
+      await client.query('BEGIN');
+      await client.query('SELECT pg_advisory_xact_lock(18471203)');
       await client.query(`
         CREATE TABLE IF NOT EXISTS hoantienshop_state (
           id TEXT PRIMARY KEY,
@@ -754,6 +845,11 @@ async function initPostgresIfConfigured() {
           status TEXT DEFAULT 'pending',
           created_at TIMESTAMPTZ DEFAULT NOW(),
           updated_at TIMESTAMPTZ DEFAULT NOW()
+        );
+        CREATE TABLE IF NOT EXISTS webhook_receipts (
+          receipt_key TEXT PRIMARY KEY,
+          payload_hash TEXT NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         );
         CREATE TABLE IF NOT EXISTS ledger (
           id TEXT PRIMARY KEY,
@@ -814,15 +910,29 @@ async function initPostgresIfConfigured() {
         UPDATE hoantienshop_state SET version = 1 WHERE version IS NULL;
         ALTER TABLE withdrawals ADD COLUMN IF NOT EXISTS processed_at TIMESTAMPTZ;
         ALTER TABLE withdrawals ADD COLUMN IF NOT EXISTS idempotency_key TEXT;
+        ALTER TABLE withdrawals ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ;
+        CREATE UNIQUE INDEX IF NOT EXISTS withdrawals_user_idempotency ON withdrawals(user_id, idempotency_key) WHERE idempotency_key IS NOT NULL;
         ALTER TABLE users ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN DEFAULT FALSE;
         ALTER TABLE users ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
         ALTER TABLE users ADD COLUMN IF NOT EXISTS deleted_by_admin_id TEXT;
         ALTER TABLE users ADD COLUMN IF NOT EXISTS has_negative_balance BOOLEAN DEFAULT FALSE;
+        UPDATE orders SET platform = 'shopee' WHERE platform IS NULL OR platform = '';
+        ALTER TABLE orders ALTER COLUMN platform SET DEFAULT 'shopee';
+        ALTER TABLE orders ALTER COLUMN platform SET NOT NULL;
+        DO $$ BEGIN
+          IF EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='orders'::regclass AND contype='p' AND array_length(conkey,1)=1) THEN
+            ALTER TABLE orders DROP CONSTRAINT orders_pkey;
+            ALTER TABLE orders ADD PRIMARY KEY (platform, order_sn);
+          END IF;
+        END $$;
         ALTER TABLE orders ADD COLUMN IF NOT EXISTS cashback_rate NUMERIC DEFAULT 70;
         ALTER TABLE orders ADD COLUMN IF NOT EXISTS locked_cashback_rate NUMERIC;
         ALTER TABLE orders ADD COLUMN IF NOT EXISTS locked_tax_rate NUMERIC;
         ALTER TABLE orders ADD COLUMN IF NOT EXISTS has_custom_cashback BOOLEAN DEFAULT FALSE;
         ALTER TABLE orders ADD COLUMN IF NOT EXISTS claim_pending BOOLEAN DEFAULT FALSE;
+        ALTER TABLE orders ADD COLUMN IF NOT EXISTS claim_verified BOOLEAN DEFAULT FALSE;
+        ALTER TABLE orders ADD COLUMN IF NOT EXISTS claim_rejected BOOLEAN DEFAULT FALSE;
+        ALTER TABLE orders ADD COLUMN IF NOT EXISTS claim_reject_reason TEXT;
         ALTER TABLE orders ADD COLUMN IF NOT EXISTS claimed_by_user_id TEXT;
         ALTER TABLE orders ADD COLUMN IF NOT EXISTS submitted_by_user_id TEXT;
         ALTER TABLE orders ADD COLUMN IF NOT EXISTS status_source TEXT;
@@ -845,11 +955,9 @@ async function initPostgresIfConfigured() {
         currentDbVersion = 1;
       } else {
         currentDbVersion = Number(stateCheck.rows[0].version || 1);
-        await client.query(
-          `UPDATE hoantienshop_state SET payload = $1, updated_at = NOW() WHERE id = 'main'`,
-          [JSON.stringify(loadedState)]
-        );
       }
+
+      await client.query('COMMIT');
 
       // Persist authoritative state to disk cache
       try {
@@ -866,6 +974,7 @@ async function initPostgresIfConfigured() {
         ordersCount: memoryCache.orders.length
       });
     } catch (err) {
+      await client.query('ROLLBACK').catch(() => {});
       pgSchemaReady = false;
       dbInitPromise = null; // CRITICAL: Reset promise so subsequent requests can retry
       logger.error('initPostgresIfConfigured', 'Khởi tạo Postgres thất bại', { error: err.message });
@@ -888,13 +997,9 @@ async function loadAuthoritativeStateFromPostgres(client) {
   const ordersRes = await client.query('SELECT * FROM orders ORDER BY created_at DESC');
   const ledgerRes = await client.query('SELECT * FROM ledger ORDER BY created_at ASC');
   const withdrawalsRes = await client.query('SELECT * FROM withdrawals ORDER BY created_at DESC');
-  const clicksRes = await client.query('SELECT * FROM clicks ORDER BY created_at DESC LIMIT 5000');
+  const clicksRes = await client.query("SELECT * FROM clicks WHERE created_at > NOW() - INTERVAL '30 days' ORDER BY created_at DESC");
   const auditLogsRes = await client.query('SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT 1000');
   const stateRes = await client.query("SELECT payload, version FROM hoantienshop_state WHERE id = 'main'");
-
-  if (stateRes.rows.length > 0 && stateRes.rows[0].version) {
-    currentDbVersion = Number(stateRes.rows[0].version);
-  }
 
   const initial = getInitialData();
   let settings = initial.settings;
@@ -919,30 +1024,7 @@ async function loadAuthoritativeStateFromPostgres(client) {
 
   let finalUsers = [];
   if (usersRes.rows.length > 0) {
-    finalUsers = usersRes.rows.map((row) => ({
-      id: row.id,
-      code: row.code,
-      name: row.name || '',
-      phone: row.phone,
-      email: row.email || '',
-      passwordHash: row.password_hash,
-      role: row.role || 'user',
-      tokenVersion: Number(row.token_version || 1),
-      referredBy: row.referred_by || null,
-      balanceAvailable: Math.round(Number(row.balance_available || 0)),
-      balancePending: Math.round(Number(row.balance_pending || 0)),
-      totalEarned: Math.round(Number(row.total_earned || 0)),
-      totalWithdrawn: Math.round(Number(row.total_withdrawn || 0)),
-      bankName: row.bank_name || '',
-      bankAccount: row.bank_account || '',
-      bankOwner: row.bank_owner || '',
-      accountLocked: Boolean(row.account_locked),
-      isDeleted: Boolean(row.is_deleted),
-      deletedAt: row.deleted_at ? new Date(row.deleted_at).toISOString() : null,
-      deletedByAdminId: row.deleted_by_admin_id || null,
-      hasNegativeBalance: Boolean(row.has_negative_balance),
-      createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString()
-    }));
+    finalUsers = usersRes.rows.map(mapUserRow);
   } else if (payloadUsers.length > 0) {
     finalUsers = payloadUsers;
   } else {
@@ -951,33 +1033,7 @@ async function loadAuthoritativeStateFromPostgres(client) {
 
   const hasRelationalState = usersRes.rows.length > 0;
 
-  const tableOrders = ordersRes.rows.map((row) => ({
-    orderSn: row.order_sn,
-    platform: row.platform || 'shopee',
-    clickId: row.click_id || null,
-    userId: row.user_id || null,
-    userCode: row.user_code || 'GUEST',
-    productName: row.product_name || '',
-    orderAmount: Math.round(Number(row.order_amount || 0)),
-    grossCommission: Math.round(Number(row.gross_commission || 0)),
-    taxAmount: Math.round(Number(row.tax_amount || 0)),
-    netCommission: Math.round(Number(row.net_commission || 0)),
-    cashbackRate: Number(row.cashback_rate || 70),
-    lockedCashbackRate: row.locked_cashback_rate != null ? Number(row.locked_cashback_rate) : undefined,
-    lockedTaxRate: row.locked_tax_rate != null ? Number(row.locked_tax_rate) : undefined,
-    hasCustomCashback: Boolean(row.has_custom_cashback),
-    claimPending: Boolean(row.claim_pending),
-    claimedByUserId: row.claimed_by_user_id || null,
-    submittedByUserId: row.submitted_by_user_id || null,
-    statusSource: row.status_source || null,
-    eventTime: Number(row.event_time || 0),
-    clawbackAt: row.clawback_at ? new Date(row.clawback_at).toISOString() : null,
-    userCashbackAmount: Math.round(Number(row.user_cashback_amount || 0)),
-    adminShareAmount: Math.round(Number(row.admin_share_amount || 0)),
-    status: row.status || 'pending',
-    createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
-    updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : new Date().toISOString()
-  }));
+  const tableOrders = ordersRes.rows.map(mapOrderRow);
 
   let finalOrders = tableOrders;
   if (!hasRelationalState && finalOrders.length === 0 && payloadOrders.length > 0) {
@@ -1012,6 +1068,7 @@ async function loadAuthoritativeStateFromPostgres(client) {
     bankOwner: row.bank_owner || '',
     status: row.status || 'pending',
     idempotencyKey: row.idempotency_key || null,
+    archivedAt: row.archived_at ? new Date(row.archived_at).toISOString() : null,
     createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
     processedAt: row.processed_at ? new Date(row.processed_at).toISOString() : (row.updated_at ? new Date(row.updated_at).toISOString() : null)
   }));
@@ -1032,8 +1089,7 @@ async function loadAuthoritativeStateFromPostgres(client) {
       productId: row.product_id || '',
       affiliateUrl: row.affiliate_url || '',
       createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString()
-    }))
-    .slice(0, 5000);
+    }));
 
   const tableAuditLogs = (auditLogsRes?.rows || []).map((row) => ({
     id: row.id,
@@ -1050,6 +1106,7 @@ async function loadAuthoritativeStateFromPostgres(client) {
 
   return {
     settings,
+    webhookReceipts: [],
     users: finalUsers,
     clicks: finalClicks,
     orders: finalOrders,
@@ -1195,10 +1252,10 @@ async function batchSyncWithdrawals(client, withdrawals) {
   if (!Array.isArray(withdrawals)) return;
   const activeIds = withdrawals.map((w) => w && w.id).filter(Boolean);
   if (activeIds.length === 0) {
-    await client.query('DELETE FROM withdrawals');
+    await client.query('DELETE FROM withdrawals WHERE archived_at IS NULL');
     return;
   }
-  await client.query('DELETE FROM withdrawals WHERE NOT (id = ANY($1::text[]))', [activeIds]);
+  await client.query('DELETE FROM withdrawals WHERE archived_at IS NULL AND NOT (id = ANY($1::text[]))', [activeIds]);
 
   const chunks = chunkArray(withdrawals, 30);
   for (const chunk of chunks) {
@@ -1260,7 +1317,7 @@ async function batchSyncOrders(client, orders) {
     await client.query('DELETE FROM orders');
     return;
   }
-  await client.query('DELETE FROM orders WHERE NOT (order_sn = ANY($1::text[]))', [activeOrderSns]);
+  await client.query(`DELETE FROM orders o WHERE NOT EXISTS (SELECT 1 FROM jsonb_to_recordset($1::jsonb) AS k(platform text, sn text) WHERE k.platform=o.platform AND k.sn=o.order_sn)`, [JSON.stringify(orders.filter(o => o?.orderSn).map(o => ({ platform: o.platform || 'shopee', sn: o.orderSn })))]);
 
   const chunks = chunkArray(orders, 25);
   for (const chunk of chunks) {
@@ -1271,7 +1328,7 @@ async function batchSyncOrders(client, orders) {
     for (const o of chunk) {
       if (!o || !o.orderSn) continue;
       valuePlaceholders.push(
-        `($${pIdx}, $${pIdx + 1}, $${pIdx + 2}, $${pIdx + 3}, $${pIdx + 4}, $${pIdx + 5}, $${pIdx + 6}, $${pIdx + 7}, $${pIdx + 8}, $${pIdx + 9}, $${pIdx + 10}, $${pIdx + 11}, $${pIdx + 12}, $${pIdx + 13}, $${pIdx + 14}, $${pIdx + 15}, $${pIdx + 16}, $${pIdx + 17}, $${pIdx + 18}, $${pIdx + 19}, $${pIdx + 20}, $${pIdx + 21}, $${pIdx + 22}, $${pIdx + 23}, $${pIdx + 24})`
+        `($${pIdx}, $${pIdx + 1}, $${pIdx + 2}, $${pIdx + 3}, $${pIdx + 4}, $${pIdx + 5}, $${pIdx + 6}, $${pIdx + 7}, $${pIdx + 8}, $${pIdx + 9}, $${pIdx + 10}, $${pIdx + 11}, $${pIdx + 12}, $${pIdx + 13}, $${pIdx + 14}, $${pIdx + 15}, $${pIdx + 16}, $${pIdx + 17}, $${pIdx + 18}, $${pIdx + 19}, $${pIdx + 20}, $${pIdx + 21}, $${pIdx + 22}, $${pIdx + 23}, $${pIdx + 24}, $${pIdx + 25}, $${pIdx + 26}, $${pIdx + 27})`
       );
       params.push(
         o.orderSn,
@@ -1295,12 +1352,15 @@ async function batchSyncOrders(client, orders) {
         o.claimedByUserId || null,
         o.submittedByUserId || null,
         o.statusSource || null,
-        Number(o.eventTime || 0),
+        parseTimestamp(o.eventTime),
         o.clawbackAt ? new Date(o.clawbackAt) : null,
         o.createdAt ? new Date(o.createdAt) : new Date(),
-        o.updatedAt ? new Date(o.updatedAt) : new Date()
+        o.updatedAt ? new Date(o.updatedAt) : new Date(),
+        Boolean(o.claimVerified),
+        Boolean(o.claimRejected),
+        o.claimRejectReason || null
       );
-      pIdx += 25;
+      pIdx += 28;
     }
 
     if (valuePlaceholders.length === 0) continue;
@@ -1312,10 +1372,10 @@ async function batchSyncOrders(client, orders) {
         user_cashback_amount, admin_share_amount, status,
         cashback_rate, locked_cashback_rate, locked_tax_rate, has_custom_cashback,
         claim_pending, claimed_by_user_id, submitted_by_user_id, status_source,
-        event_time, clawback_at, created_at, updated_at
+        event_time, clawback_at, created_at, updated_at, claim_verified, claim_rejected, claim_reject_reason
       )
       VALUES ${valuePlaceholders.join(', ')}
-      ON CONFLICT (order_sn) DO UPDATE SET
+      ON CONFLICT (platform, order_sn) DO UPDATE SET
         platform = COALESCE(NULLIF(EXCLUDED.platform, ''), orders.platform),
         product_name = CASE
           WHEN EXCLUDED.status_source = 'admin' AND EXCLUDED.product_name IS NOT NULL THEN EXCLUDED.product_name
@@ -1341,7 +1401,6 @@ async function batchSyncOrders(client, orders) {
         net_commission = EXCLUDED.net_commission,
         user_cashback_amount = CASE
           WHEN EXCLUDED.status_source = 'admin' THEN EXCLUDED.user_cashback_amount
-          WHEN orders.user_cashback_amount > 0 AND EXCLUDED.user_cashback_amount = 0 THEN orders.user_cashback_amount
           ELSE EXCLUDED.user_cashback_amount
         END,
         admin_share_amount = EXCLUDED.admin_share_amount,
@@ -1355,6 +1414,9 @@ async function batchSyncOrders(client, orders) {
         locked_tax_rate = COALESCE(orders.locked_tax_rate, EXCLUDED.locked_tax_rate),
         has_custom_cashback = EXCLUDED.has_custom_cashback,
         claim_pending = EXCLUDED.claim_pending,
+        claim_verified = EXCLUDED.claim_verified,
+        claim_rejected = EXCLUDED.claim_rejected,
+        claim_reject_reason = EXCLUDED.claim_reject_reason,
         claimed_by_user_id = COALESCE(EXCLUDED.claimed_by_user_id, orders.claimed_by_user_id),
         submitted_by_user_id = COALESCE(EXCLUDED.submitted_by_user_id, orders.submitted_by_user_id),
         status_source = CASE
@@ -1369,10 +1431,77 @@ async function batchSyncOrders(client, orders) {
   }
 }
 
+// Clicks are immutable append-only records. Snapshot writes only INSERT ... DO NOTHING
+// for this table, so independent inserts neither overwrite financial state nor need
+// the financial snapshot version lock. Publish to memory only after database success.
+let lastClickCachePruneAt = 0;
+async function appendClickRecords(records) {
+  if (!Array.isArray(records) || records.length === 0) return;
+  const valid = cleanExpiredClicks(records);
+  if (valid.length !== records.length || valid.some(c => !c.clickId || !c.affiliateUrl)) {
+    throw new Error('Invalid click records');
+  }
+  let inserted = valid;
+  if (pgPool) {
+    if (!pgSchemaReady) throw new Error('Postgres schema is not ready');
+    const rows = valid.map(c => ({ click_id: c.clickId, user_id: c.userId || null,
+      user_code: c.userCode || 'GUEST', platform: c.platform || 'shopee',
+      original_url: c.originalUrl || '', clean_url: c.cleanUrl || '',
+      product_id: c.productId || '', affiliate_url: c.affiliateUrl, created_at: c.createdAt }));
+    const result = await pgPool.query(`
+      INSERT INTO clicks (click_id, user_id, user_code, platform, original_url, clean_url, product_id, affiliate_url, created_at)
+      SELECT click_id, user_id, user_code, platform, original_url, clean_url, product_id, affiliate_url, created_at
+      FROM jsonb_to_recordset($1::jsonb) AS c(click_id text, user_id text, user_code text, platform text,
+        original_url text, clean_url text, product_id text, affiliate_url text, created_at timestamptz)
+      ON CONFLICT (click_id) DO NOTHING RETURNING click_id
+    `, [JSON.stringify(rows)]);
+    const ids = new Set(result.rows.map(c => c.click_id));
+    inserted = valid.filter(c => ids.delete(c.clickId));
+  }
+  const db = ensureDbLoaded();
+  // Local mode also supports replay without duplicating cache records.
+  if (!pgPool) {
+    const existing = new Set(db.clicks.map(c => c.clickId));
+    inserted = valid.filter(c => {
+      if (existing.has(c.clickId)) return false;
+      existing.add(c.clickId);
+      return true;
+    });
+  }
+  db.clicks.unshift(...inserted);
+  if (Date.now() - lastClickCachePruneAt >= 60000) {
+    db.clicks = cleanExpiredClicks(db.clicks);
+    lastClickCachePruneAt = Date.now();
+  }
+  if (!pgPool) {
+    try { await saveDb(db); }
+    catch (err) {
+      const ids = new Set(inserted.map(c => c.clickId));
+      db.clicks = db.clicks.filter(c => !ids.has(c.clickId));
+      throw err;
+    }
+  }
+}
+
+async function findClickById(clickId) {
+  const cutoff = Date.now() - 30 * 86400000;
+  const cached = ensureDbLoaded().clicks.find(c => c.clickId === clickId && new Date(c.createdAt).getTime() > cutoff);
+  if (cached || !pgPool) return cached || null;
+  const result = await pgPool.query("SELECT * FROM clicks WHERE click_id = $1 AND created_at > NOW() - INTERVAL '30 days'", [clickId]);
+  const row = result.rows[0];
+  if (!row) return null;
+  const click = { clickId: row.click_id, userId: row.user_id, userCode: row.user_code,
+    platform: row.platform, originalUrl: row.original_url, cleanUrl: row.clean_url,
+    productId: row.product_id, affiliateUrl: row.affiliate_url, createdAt: row.created_at };
+  const db = ensureDbLoaded();
+  if (!db.clicks.some(c => c.clickId === clickId)) db.clicks.unshift(click);
+  return click;
+}
+
 async function batchSyncClicks(client, clicks) {
   if (!Array.isArray(clicks) || clicks.length === 0) return;
-  // Keep newest 500 clicks from the front of the array (unshift order)
-  const recentClicks = clicks.slice(0, 500);
+  // Persist every unexpired click; count caps silently lose attribution.
+  const recentClicks = cleanExpiredClicks(clicks);
   const chunks = chunkArray(recentClicks, 50);
   for (const chunk of chunks) {
     const valuePlaceholders = [];
@@ -1462,10 +1591,10 @@ async function persistOrderToPostgres(order, customClient = null) {
         user_cashback_amount, admin_share_amount, status,
         cashback_rate, locked_cashback_rate, locked_tax_rate, has_custom_cashback,
         claim_pending, claimed_by_user_id, submitted_by_user_id, status_source,
-        event_time, clawback_at, created_at, updated_at
+        event_time, clawback_at, created_at, updated_at, claim_verified, claim_rejected, claim_reject_reason
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)
-      ON CONFLICT (order_sn) DO UPDATE SET
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28)
+      ON CONFLICT (platform, order_sn) DO UPDATE SET
         platform = COALESCE(NULLIF(EXCLUDED.platform, ''), orders.platform),
         product_name = CASE
           WHEN EXCLUDED.status_source = 'admin' AND EXCLUDED.product_name IS NOT NULL THEN EXCLUDED.product_name
@@ -1491,7 +1620,6 @@ async function persistOrderToPostgres(order, customClient = null) {
         net_commission = EXCLUDED.net_commission,
         user_cashback_amount = CASE 
           WHEN EXCLUDED.status_source = 'admin' THEN EXCLUDED.user_cashback_amount
-          WHEN orders.user_cashback_amount > 0 AND EXCLUDED.user_cashback_amount = 0 THEN orders.user_cashback_amount 
           ELSE EXCLUDED.user_cashback_amount 
         END,
         admin_share_amount = EXCLUDED.admin_share_amount,
@@ -1505,6 +1633,9 @@ async function persistOrderToPostgres(order, customClient = null) {
         locked_tax_rate = COALESCE(orders.locked_tax_rate, EXCLUDED.locked_tax_rate),
         has_custom_cashback = EXCLUDED.has_custom_cashback,
         claim_pending = EXCLUDED.claim_pending,
+        claim_verified = EXCLUDED.claim_verified,
+        claim_rejected = EXCLUDED.claim_rejected,
+        claim_reject_reason = EXCLUDED.claim_reject_reason,
         claimed_by_user_id = COALESCE(EXCLUDED.claimed_by_user_id, orders.claimed_by_user_id),
         submitted_by_user_id = COALESCE(orders.submitted_by_user_id, EXCLUDED.submitted_by_user_id),
         status_source = CASE
@@ -1538,10 +1669,13 @@ async function persistOrderToPostgres(order, customClient = null) {
       order.claimedByUserId || null,
       order.submittedByUserId || null,
       order.statusSource || null,
-      Number(order.eventTime || 0),
+      parseTimestamp(order.eventTime),
       order.clawbackAt ? new Date(order.clawbackAt) : null,
       order.createdAt ? new Date(order.createdAt) : new Date(),
-      order.updatedAt ? new Date(order.updatedAt) : new Date()
+      order.updatedAt ? new Date(order.updatedAt) : new Date(),
+      Boolean(order.claimVerified),
+      Boolean(order.claimRejected),
+      order.claimRejectReason || null
     ];
     const res = await client.query(query, params);
     return res.rows[0];
@@ -1689,16 +1823,30 @@ async function persistWithdrawalToPostgres(withdrawal, customClient = null) {
 
 /**
  * High-performance batched state synchronization with Optimistic Concurrency Control (OCC).
- * Serializes batches in chunks, checks version on hoantienshop_state, and automatically
- * reloads and retries on concurrent modification conflicts.
+ * Serializes batches and rejects stale versions. The caller must reload and retry
+ * the complete business operation; replaying a fresh snapshot would lose its intent.
  */
-async function syncSnapshotToPostgres(data, { attempt = 1, maxRetries = 3 } = {}) {
+async function syncSnapshotToPostgres(data, expectedVersion = currentDbVersion) {
   if (!pgPool || !pgSchemaReady) return;
   const client = await pgPool.connect();
   try {
     await client.query('BEGIN');
 
+    // Lock the shared version before touching any financial rows (consistent lock order).
+    const stateLock = await client.query("SELECT version FROM hoantienshop_state WHERE id = 'main' FOR UPDATE");
+    if (stateLock.rows.length && Number(stateLock.rows[0].version) !== expectedVersion) {
+      const err = new Error('Dữ liệu đã thay đổi. Vui lòng tải lại và thử lại thao tác.');
+      err.status = 409;
+      err.code = 'STATE_CONFLICT';
+      throw err;
+    }
     // 1. Sync ledger first so users balance recalculation subquery sees latest entries
+    for (const receipt of data.webhookReceipts || []) {
+      const inserted = await client.query(`INSERT INTO webhook_receipts (receipt_key, payload_hash) VALUES ($1,$2)
+        ON CONFLICT (receipt_key) DO UPDATE SET payload_hash=webhook_receipts.payload_hash
+        RETURNING payload_hash`, [receipt.key, receipt.hash]);
+      if (inserted.rows[0].payload_hash !== receipt.hash) throw new Error('Webhook receipt payload conflict');
+    }
     await batchSyncLedger(client, data.ledger);
 
     // 2. Sync users with calculated balance from authoritative ledger
@@ -1722,7 +1870,7 @@ async function syncSnapshotToPostgres(data, { attempt = 1, maxRetries = 3 } = {}
        SET payload = $1, version = version + 1, updated_at = NOW()
        WHERE id = 'main' AND version = $2
        RETURNING version`,
-      [JSON.stringify(data), currentDbVersion]
+      [JSON.stringify(data), expectedVersion]
     );
 
     if (updateRes.rowCount === 0) {
@@ -1743,23 +1891,19 @@ async function syncSnapshotToPostgres(data, { attempt = 1, maxRetries = 3 } = {}
       logger.warning('syncSnapshotToPostgres', 'Xung đột phiên bản DB (Optimistic Concurrency Conflict)', {
         localVersion: currentDbVersion,
         dbVersion,
-        attempt
+        expectedVersion
       });
 
       await client.query('ROLLBACK');
 
-      if (attempt <= maxRetries) {
-        await reloadStateFromPostgres();
-        const backoffMs = attempt * 50 + Math.floor(Math.random() * 50);
-        await new Promise((resolve) => setTimeout(resolve, backoffMs));
-        return syncSnapshotToPostgres(memoryCache, { attempt: attempt + 1, maxRetries });
-      } else {
-        throw new Error(`Đồng bộ Postgres thất bại do xung đột phiên bản sau ${maxRetries} lần thử.`);
-      }
+      const conflict = new Error('Dữ liệu đã thay đổi. Vui lòng tải lại và thử lại thao tác.');
+      conflict.status = 409;
+      conflict.code = 'STATE_CONFLICT';
+      throw conflict;
     }
 
-    currentDbVersion = Number(updateRes.rows[0].version);
     await client.query('COMMIT');
+    currentDbVersion = Number(updateRes.rows[0].version);
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
     throw err;
@@ -1768,14 +1912,29 @@ async function syncSnapshotToPostgres(data, { attempt = 1, maxRetries = 3 } = {}
   }
 }
 
-async function reloadStateFromPostgres() {
-  if (!pgPool) return ensureDbLoaded();
+async function reloadStateFromPostgres({ strict = false } = {}) {
+  if (!pgPool) {
+    const context = stateContext.getStore();
+    if (context) { Object.assign(context.data, structuredClone(memoryCache)); context.version = currentDbVersion; context.invalid = false; }
+    return ensureDbLoaded();
+  }
   try {
     const client = await pgPool.connect();
     try {
+      await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
       const fresh = await loadAuthoritativeStateFromPostgres(client);
+      const version = await client.query("SELECT version FROM hoantienshop_state WHERE id = 'main'");
+      await client.query('COMMIT');
+      const context = stateContext.getStore();
+      if (context) {
+        Object.assign(context.data, fresh);
+        context.version = Number(version.rows[0]?.version || 1);
+        context.invalid = false;
+        return context.data;
+      }
+      currentDbVersion = Number(version.rows[0]?.version || 1);
       if (memoryCache) {
-        Object.assign(memoryCache.settings, fresh.settings);
+        memoryCache.settings = fresh.settings;
         memoryCache.users = fresh.users;
         memoryCache.clicks = fresh.clicks;
         memoryCache.orders = fresh.orders;
@@ -1785,13 +1944,39 @@ async function reloadStateFromPostgres() {
       } else {
         memoryCache = fresh;
       }
+      cacheInvalid = false;
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw err;
     } finally {
       client.release();
     }
   } catch (err) {
     logger.warning('reloadStateFromPostgres', 'Postgres reload error', { error: err.message });
+    if (strict) throw err;
   }
   return ensureDbLoaded();
+}
+
+async function revokeUserSessions(userId) {
+  if (!pgPool) {
+    const db = ensureDbLoaded();
+    const user = db.users.find(u => u.id === userId);
+    if (user) { user.tokenVersion = Number(user.tokenVersion || 1) + 1; await saveDb(db); }
+    return;
+  }
+  const client = await pgPool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query("SELECT version FROM hoantienshop_state WHERE id='main' FOR UPDATE");
+    await client.query('UPDATE users SET token_version=COALESCE(token_version,1)+1 WHERE id=$1', [userId]);
+    await client.query("UPDATE hoantienshop_state SET version=version+1, updated_at=NOW() WHERE id='main'");
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw error;
+  } finally { client.release(); }
+  await reloadStateFromPostgres({ strict: true });
 }
 
 // ================= TRUE APPEND-ONLY LEDGER & WALLET ACCOUNTING =================
@@ -1822,7 +2007,13 @@ function appendLedgerEntry(userId, type, amount, refId, note = '', { forcedId = 
 
   // Idempotency check: never insert duplicate refId
   const exists = db.ledger.find((e) => e.refId === cleanRefId);
-  if (exists) return exists;
+  if (exists) {
+    if (exists.userId !== userId || Number(exists.amount) !== Math.round(rawAmt) || exists.type !== type) {
+      const error = new Error('Ledger reference reused with a different financial operation');
+      error.code = 'LEDGER_REFERENCE_CONFLICT'; error.status = 409; throw error;
+    }
+    return exists;
+  }
 
   const roundedAmt = Math.round(rawAmt);
   if (!Number.isFinite(roundedAmt) || roundedAmt === 0) return null;
@@ -1852,11 +2043,12 @@ function recalculateUserWallet(userId, { persist = false } = {}) {
   const user = db.users.find((u) => u.id === userId);
   if (!user) return null;
 
+  migrateLegacyOrderIdentity(db);
   const userCodeUpper = String(user.code || '').toUpperCase();
   const userOrders = db.orders.filter(
     (o) =>
       o.userId === user.id ||
-      (o.userCode && String(o.userCode).toUpperCase() === userCodeUpper)
+      (!o.userId && o.userCode && String(o.userCode).toUpperCase() === userCodeUpper)
   );
 
   // 1. Build Map Index for O(1) lookups
@@ -1868,26 +2060,7 @@ function recalculateUserWallet(userId, { persist = false } = {}) {
     if (entry.refId) {
       ledgerByRefId.set(entry.refId, entry);
 
-      let sn = null;
-      if (entry.refId.startsWith('ord_adj_')) {
-        const parts = entry.refId.slice(8).split('_');
-        parts.pop();
-        sn = parts.join('_');
-      } else if (entry.refId.startsWith('order_credit_')) {
-        sn = entry.refId.slice(13);
-      } else if (entry.refId.startsWith('order_revoke_')) {
-        sn = entry.refId.slice(13);
-      } else if (entry.refId.startsWith('order_recredit_')) {
-        sn = entry.refId.slice(15);
-      } else if (entry.refId.startsWith('order_cancellation_')) {
-        sn = entry.refId.slice(19);
-      } else if (entry.refId.startsWith('clawback_')) {
-        sn = entry.refId.slice(9);
-      } else if (entry.refId.startsWith('order_revocation_') && entry.refId.includes('_deleted_')) {
-        const rest = entry.refId.slice(17);
-        const delIdx = rest.lastIndexOf('_deleted_');
-        if (delIdx > 0) sn = rest.slice(0, delIdx);
-      }
+      const sn = ledgerOrderKey(entry, db);
 
       if (sn) {
         if (!ledgerByOrderSn.has(sn)) ledgerByOrderSn.set(sn, []);
@@ -1903,7 +2076,8 @@ function recalculateUserWallet(userId, { persist = false } = {}) {
   for (const ord of userOrders) {
     const cleanSn = String(ord.orderSn || '').trim();
     if (!cleanSn) continue;
-    activeOrderSns.add(cleanSn);
+    const key = orderKey(ord);
+    activeOrderSns.add(key);
 
     const cashbackAmt = Math.round(Number(ord.userCashbackAmount || 0));
     const expectedApprovedAmt = (ord.status === 'approved' && cashbackAmt > 0) ? cashbackAmt : 0;
@@ -1912,15 +2086,13 @@ function recalculateUserWallet(userId, { persist = false } = {}) {
       pending += cashbackAmt;
     }
 
-    const existingEntries = ledgerByOrderSn.get(cleanSn) || [];
+    const existingEntries = ledgerByOrderSn.get(key) || [];
     const currentSum = existingEntries.reduce((sum, e) => sum + Number(e.amount || 0), 0);
     const delta = expectedApprovedAmt - currentSum;
 
     if (delta !== 0) {
       const seq = existingEntries.length + 1;
-      const refId = (seq === 1 && delta > 0)
-        ? `order_credit_${cleanSn}`
-        : `ord_adj_${cleanSn}_${seq}`;
+      const refId = orderLedgerRef(key, user.id, seq);
 
       const type = delta > 0 ? 'order_cashback' : 'order_revocation';
       const note = delta > 0
@@ -1932,7 +2104,7 @@ function recalculateUserWallet(userId, { persist = false } = {}) {
         existingEntries.push(newEntry);
         userLedger.push(newEntry);
         ledgerByRefId.set(refId, newEntry);
-        if (!ledgerByOrderSn.has(cleanSn)) ledgerByOrderSn.set(cleanSn, existingEntries);
+        if (!ledgerByOrderSn.has(key)) ledgerByOrderSn.set(key, existingEntries);
       }
     }
   }
@@ -1944,7 +2116,7 @@ function recalculateUserWallet(userId, { persist = false } = {}) {
       entries.reduce((sum, e) => sum + (Number.isFinite(Number(e.amount)) ? Number(e.amount) : 0), 0)
     );
     if (netCredited > 0) {
-      const revokeRefId = `order_revocation_${orphanSn}_deleted_${Date.now()}`;
+      const revokeRefId = orderLedgerRef(orphanSn, user.id, entries.length + 1);
       const revEntry = appendLedgerEntry(
         user.id,
         'order_revocation',
@@ -2024,7 +2196,7 @@ function recalculateUserWallet(userId, { persist = false } = {}) {
       const refereeOrders = db.orders.filter(
         (o) =>
           (o.userId === referee.id ||
-            (o.userCode && String(o.userCode).toUpperCase() === String(referee.code).toUpperCase())) &&
+            (!o.userId && o.userCode && String(o.userCode).toUpperCase() === String(referee.code).toUpperCase())) &&
           o.status === 'approved'
       );
       const hasApprovedOrder = refereeOrders.length > 0;
@@ -2144,15 +2316,17 @@ async function executeAtomicWithdrawal({
     }
 
     const cleanIdempotencyKey = idempotencyKey ? String(idempotencyKey).trim() : null;
-    if (cleanIdempotencyKey) {
-      const tenMinutesAgo = Date.now() - 10 * 60 * 1000;
+    if (cleanIdempotencyKey && cleanIdempotencyKey.length > 200) throw new Error('Idempotency key quá dài.');
+    if (cleanIdempotencyKey && !pgPool) {
       const existing = db.withdrawals.find(
         (w) =>
           w.userId === user.id &&
-          w.idempotencyKey === cleanIdempotencyKey &&
-          new Date(w.createdAt).getTime() >= tenMinutesAgo
+          w.idempotencyKey === cleanIdempotencyKey
       );
       if (existing) {
+        if (existing.amount !== Math.round(Number(amount)) || existing.bankAccount !== String(bankAccount || '').replace(/\s+/g, '') || existing.bankName !== String(bankName || '').trim() || existing.bankOwner !== String(bankOwner || '').trim().toUpperCase()) {
+          throw new Error('Idempotency key đã được sử dụng cho yêu cầu khác.');
+        }
         logger.logLeave('executeAtomicWithdrawal', {
           wdId: existing.id,
           amount: existing.amount,
@@ -2183,7 +2357,7 @@ async function executeAtomicWithdrawal({
       : Number(db.settings.minWithdrawAmount ?? 50000);
 
     const numAmount = Math.round(Number(amount));
-    if (!Number.isFinite(numAmount) || numAmount <= 0) {
+    if (!Number.isSafeInteger(numAmount) || numAmount <= 0) {
       throw new Error('Số tiền rút phải lớn hơn 0đ.');
     }
     if (numAmount < effectiveMin) {
@@ -2196,12 +2370,12 @@ async function executeAtomicWithdrawal({
       .filter((e) => e.userId === user.id)
       .reduce((acc, e) => acc + Number(e.amount || 0), 0);
 
-    if (strictLedgerSum < 0) {
+    if (!pgPool && strictLedgerSum < 0) {
       throw new Error(
         `Tài khoản đang có số dư âm (${strictLedgerSum.toLocaleString('vi-VN')}đ) do đơn hàng hoàn trả sau khi rút. Hệ thống sẽ tự động cấn trừ vào đơn tiếp theo.`
       );
     }
-    if (numAmount > strictLedgerSum) {
+    if (!pgPool && numAmount > strictLedgerSum) {
       throw new Error('Số dư khả dụng trên Sổ cái không đủ để thực hiện lệnh rút này.');
     }
 
@@ -2217,6 +2391,8 @@ async function executeAtomicWithdrawal({
       const client = await pgPool.connect();
       try {
         await client.query('BEGIN');
+        // All direct financial writes participate in snapshot concurrency control.
+        await client.query("UPDATE hoantienshop_state SET version = version + 1 WHERE id = 'main'");
 
         // Upsert user to ensure row exists for locking
         await client.query(
@@ -2234,6 +2410,17 @@ async function executeAtomicWithdrawal({
           throw new Error('Tài khoản đang bị tạm khóa đối soát.');
         }
 
+        if (cleanIdempotencyKey) {
+          const replay = await client.query('SELECT * FROM withdrawals WHERE user_id = $1 AND idempotency_key = $2 LIMIT 1', [user.id, cleanIdempotencyKey]);
+          if (replay.rows.length) {
+            const row = replay.rows[0];
+            if (Number(row.amount) !== numAmount || row.bank_account !== cleanBankAccount || row.bank_name !== cleanBankName || row.bank_owner !== cleanBankOwner) {
+              throw new Error('Idempotency key đã được sử dụng cho yêu cầu khác.');
+            }
+            await client.query('ROLLBACK');
+            return { withdrawal: { id: row.id, userId: row.user_id, amount: Number(row.amount), status: row.status, bankName: row.bank_name, bankAccount: row.bank_account, bankOwner: row.bank_owner, idempotencyKey: row.idempotency_key, createdAt: row.created_at }, user: sanitizeUser(user), idempotent: true };
+          }
+        }
         const sumRes = await client.query(
           'SELECT COALESCE(SUM(amount), 0) AS ledger_sum FROM ledger WHERE user_id = $1',
           [user.id]
@@ -2313,7 +2500,11 @@ async function executeAtomicWithdrawal({
     db.withdrawals.unshift(withdrawal);
 
     recalculateUserWallet(user.id, { persist: false });
-    await saveDb(db);
+    if (pgPool) {
+      await reloadStateFromPostgres();
+    } else {
+      await saveDb(db);
+    }
 
     logger.logLeave('executeAtomicWithdrawal', {
       wdId,
@@ -2328,7 +2519,66 @@ async function executeAtomicWithdrawal({
  * Idempotently refund a withdrawal, restoring user's balance exactly once.
  * Rejects invalid/NaN amounts and paid withdrawals.
  */
+async function archiveWithdrawal(id, adminUser = {}) {
+  if (pgPool) {
+    if (!pgSchemaReady) throw new Error('Postgres schema is not ready');
+    const result = await require('../repositories/withdrawalRepository').settleWithdrawal(pgPool, id, 'rejected', adminUser, { archive: true });
+    await reloadStateFromPostgres();
+    return result;
+  }
+  const db = ensureDbLoaded();
+  const wd = db.withdrawals.find(w => w.id === id);
+  if (!wd) { const error = new Error('Không tìm thấy lệnh rút.'); error.status = 404; throw error; }
+  return withUserLock(wd.userId, async () => {
+    if (wd.status === 'paid') { const error = new Error('Không thể lưu trữ lệnh đã chi trả.'); error.status = 409; throw error; }
+    if (wd.archivedAt) return wd;
+    wd.status = 'rejected';
+    wd.processedAt = wd.processedAt || new Date().toISOString();
+    wd.archivedAt = new Date().toISOString();
+    recalculateUserWallet(wd.userId, { persist: false });
+    recordAuditLog(db, { adminId: adminUser.id, adminName: adminUser.name, action: 'archive_withdrawal', targetId: id, details: { status: wd.status, amount: wd.amount } });
+    await saveDb(db);
+    return wd;
+  });
+}
+
+async function settleWithdrawal(id, status, adminUser = {}) {
+  if (pgPool) {
+    if (!pgSchemaReady) throw new Error('Postgres schema is not ready');
+    const result = await require('../repositories/withdrawalRepository').settleWithdrawal(pgPool, id, status, adminUser);
+    await reloadStateFromPostgres();
+    return result;
+  }
+  const db = ensureDbLoaded();
+  const wd = db.withdrawals.find(w => w.id === id);
+  if (!wd || !['paid', 'rejected'].includes(status)) {
+    const error = new Error('Lệnh rút tiền hoặc trạng thái không hợp lệ.');
+    error.status = wd ? 400 : 404;
+    throw error;
+  }
+  if (status === 'rejected') return refundWithdrawal(db, wd, adminUser);
+  return withUserLock(wd.userId, async () => {
+    if (wd.status === 'paid') return wd;
+    if (wd.status !== 'pending') {
+      const error = new Error('Lệnh rút tiền đã xử lý, không thể đổi trạng thái.');
+      error.status = 409;
+      throw error;
+    }
+    wd.status = 'paid';
+    wd.processedAt = new Date().toISOString();
+    recalculateUserWallet(wd.userId, { persist: false });
+    recordAuditLog(db, { adminId: adminUser.id, adminName: adminUser.name, action: 'update_withdrawal', targetId: id, details: { status, amount: wd.amount } });
+    await saveDb(db);
+    return wd;
+  });
+}
+
 async function refundWithdrawal(db, wd, adminUser = {}) {
+  if (pgPool && wd?.id) {
+    const result = await settleWithdrawal(wd.id, 'rejected', adminUser);
+    Object.assign(wd, result);
+    return wd;
+  }
   logger.logEnter('refundWithdrawal', { wdId: wd?.id, userId: wd?.userId, amount: wd?.amount });
   if (!wd || typeof wd !== 'object') {
     const err = new Error('Invalid withdrawal object');
@@ -2383,6 +2633,7 @@ async function refundWithdrawal(db, wd, adminUser = {}) {
 
     // recalculateUserWallet detects wd.status === 'rejected' and creates a single withdrawal_refund entry
     recalculateUserWallet(wd.userId, { persist: false });
+    recordAuditLog(database, { adminId: adminUser.id, adminName: adminUser.name, action: 'update_withdrawal', targetId: wd.id, details: { status: 'rejected', amount: wd.amount } });
     await saveDb(database);
 
     logger.logLeave('refundWithdrawal', { wdId: wd.id, status: 'rejected' });
@@ -2478,7 +2729,7 @@ function recalculateAllWallets({ persist = true } = {}) {
 }
 
 function getCurrentDbVersion() {
-  return currentDbVersion;
+  return stateContext.getStore()?.version ?? currentDbVersion;
 }
 
 function getDatabaseStatus() {
@@ -2579,144 +2830,26 @@ function isTestOrderRecord(o, testUserIds) {
   return false;
 }
 
-/**
- * Remove automated test/demo artifacts from state & Cloud PostgreSQL while preserving real users/orders.
- */
-async function purgeTestArtifactsFromDb(targetDb = null) {
-  logger.logEnter('purgeTestArtifactsFromDb');
-  const db = targetDb || ensureDbLoaded();
-
-  const testUsers = (db.users || []).filter((u) => isTestUserRecord(u));
-  const testUserIds = new Set(testUsers.map((u) => u.id).filter(Boolean));
-  const remainingUsers = (db.users || []).filter((u) => !testUserIds.has(u.id));
-  const remainingUserIds = new Set(remainingUsers.map((u) => u.id).filter(Boolean));
-
-  const testOrders = (db.orders || []).filter((o) => isTestOrderRecord(o, testUserIds));
-  const testOrderSns = new Set(
-    testOrders.map((o) => String(o.orderSn || '').trim().toUpperCase()).filter(Boolean)
-  );
-  const remainingOrders = (db.orders || []).filter((o) => !isTestOrderRecord(o, testUserIds));
-
-  const isTestWithdrawal = (w) => {
-    if (!w || typeof w !== 'object') return false;
-    if (w.userId && (testUserIds.has(w.userId) || !remainingUserIds.has(w.userId))) return true;
-    if (/test/i.test(String(w.id || '')) || /test/i.test(String(w.userName || ''))) return true;
-    return false;
+/** Heuristics are hints for review only, never authorization to delete financial data. */
+function inspectTestArtifacts(db = ensureDbLoaded()) {
+  const users = db.users.filter(isTestUserRecord);
+  const userIds = new Set(users.map(u => u.id));
+  const orders = db.orders.filter(o => isTestOrderRecord(o, userIds));
+  const withdrawals = db.withdrawals.filter(w => userIds.has(w.userId) || /test/i.test(`${w.id || ''} ${w.userName || ''}`));
+  return {
+    previewOnly: true,
+    candidates: {
+      userIds: users.map(u => u.id),
+      orderSns: orders.map(o => o.orderSn),
+      withdrawalIds: withdrawals.map(w => w.id)
+    },
+    counts: { users: users.length, orders: orders.length, withdrawals: withdrawals.length }
   };
-  const testWithdrawals = (db.withdrawals || []).filter(isTestWithdrawal);
-  const testWithdrawalIds = new Set(testWithdrawals.map((w) => w.id).filter(Boolean));
-  const remainingWithdrawals = (db.withdrawals || []).filter((w) => !isTestWithdrawal(w));
-
-  const isTestClick = (c) => {
-    if (!c || typeof c !== 'object') return false;
-    if (c.userId && testUserIds.has(c.userId)) return true;
-    if (String(c.userCode || '').toUpperCase() === 'U108899') return true;
-    if (String(c.clickId || '').startsWith('clk_test')) return true;
-    if (/example\.com/i.test(String(c.originalUrl || ''))) return true;
-    return false;
-  };
-  const testClicks = (db.clicks || []).filter(isTestClick);
-  const testClickIds = new Set(testClicks.map((c) => c.clickId).filter(Boolean));
-  const remainingClicks = (db.clicks || []).filter((c) => !isTestClick(c));
-
-  const isTestLedger = (e) => {
-    if (!e || typeof e !== 'object') return false;
-    if (e.id === 'led_1794458515533_fd75d4f3') return true;
-    if (e.userId && (testUserIds.has(e.userId) || !remainingUserIds.has(e.userId))) return true;
-    const refUpper = String(e.refId || '').toUpperCase();
-    for (const sn of testOrderSns) {
-      if (refUpper.includes(sn)) return true;
-    }
-    for (const wid of testWithdrawalIds) {
-      if (String(e.refId || '').includes(wid)) return true;
-    }
-    if (/261111ABC8899/i.test(`${e.refId || ''}_${e.note || ''}`)) return true;
-    return false;
-  };
-  const testLedger = (db.ledger || []).filter(isTestLedger);
-  const testLedgerIds = new Set(testLedger.map((e) => e.id).filter(Boolean));
-  const remainingLedger = (db.ledger || []).filter((e) => !isTestLedger(e));
-
-  db.users = remainingUsers;
-  db.orders = remainingOrders;
-  db.withdrawals = remainingWithdrawals;
-  db.clicks = remainingClicks;
-  db.ledger = remainingLedger;
-
-  // Recalculate all remaining users' wallets so balances stay 100% synced
-  for (const u of db.users) {
-    recalculateUserWallet(u.id, { persist: false });
-  }
-
-  // Purge relational tables in PostgreSQL (including immutable ledger rows inside a single TX)
-  if (pgPool && pgSchemaReady) {
-    const client = await pgPool.connect();
-    try {
-      await client.query('BEGIN');
-      if (testLedgerIds.size > 0 || testUserIds.size > 0) {
-        await client.query('ALTER TABLE ledger DISABLE TRIGGER ledger_no_update');
-        try {
-          if (testLedgerIds.size > 0) {
-            await client.query('DELETE FROM ledger WHERE id = ANY($1::text[])', [
-              Array.from(testLedgerIds)
-            ]);
-          }
-          if (testUserIds.size > 0) {
-            await client.query('DELETE FROM ledger WHERE user_id = ANY($1::text[])', [
-              Array.from(testUserIds)
-            ]);
-          }
-        } finally {
-          await client.query('ALTER TABLE ledger ENABLE TRIGGER ledger_no_update');
-        }
-      }
-      if (testOrderSns.size > 0) {
-        await client.query('DELETE FROM orders WHERE UPPER(order_sn) = ANY($1::text[])', [
-          Array.from(testOrderSns)
-        ]);
-      }
-      if (testWithdrawalIds.size > 0) {
-        await client.query('DELETE FROM withdrawals WHERE id = ANY($1::text[])', [
-          Array.from(testWithdrawalIds)
-        ]);
-      }
-      if (testClickIds.size > 0) {
-        await client.query('DELETE FROM clicks WHERE click_id = ANY($1::text[])', [
-          Array.from(testClickIds)
-        ]);
-      }
-      if (testUserIds.size > 0) {
-        await client.query('DELETE FROM users WHERE id = ANY($1::text[])', [
-          Array.from(testUserIds)
-        ]);
-      }
-      await client.query('COMMIT');
-    } catch (err) {
-      await client.query('ROLLBACK').catch(() => {});
-      logger.error('purgeTestArtifactsFromDb', 'Postgres cleanup error', { error: err.message });
-      throw err;
-    } finally {
-      client.release();
-    }
-  }
-
-  await saveDb(db);
-
-  const summary = {
-    removedUsers: testUsers.length,
-    removedOrders: testOrders.length,
-    removedWithdrawals: testWithdrawals.length,
-    removedClicks: testClicks.length,
-    removedLedger: testLedger.length,
-    remainingUsers: db.users.length,
-    remainingOrders: db.orders.length,
-    remainingWithdrawals: db.withdrawals.length
-  };
-  logger.logLeave('purgeTestArtifactsFromDb', summary);
-  return summary;
 }
 
 module.exports = {
+  revokeUserSessions,
+  runWithStateContext,
   ensureDbLoaded,
   saveDb,
   initPostgresIfConfigured,
@@ -2729,7 +2862,9 @@ module.exports = {
   recalculateUserWallet,
   recalculateAllWallets,
   executeAtomicWithdrawal,
+  archiveWithdrawal,
   refundWithdrawal,
+  settleWithdrawal,
   auditLedgerIntegrity,
   createToken,
   verifyToken,
@@ -2743,8 +2878,10 @@ module.exports = {
   persistUserToPostgres,
   persistLedgerToPostgres,
   persistWithdrawalToPostgres,
-  purgeTestArtifactsFromDb,
+  inspectTestArtifacts,
   recordAuditLog,
   normalizePhoneNumber,
-  getPgPool
+  getPgPool,
+  appendClickRecords,
+  findClickById
 };

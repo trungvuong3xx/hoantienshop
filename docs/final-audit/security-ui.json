@@ -1,0 +1,23 @@
+{
+  "unauthMe": 401,
+  "userAdmin": 403,
+  "csrf": 403,
+  "invalidRegister": 400,
+  "toast": {
+    "left": -152,
+    "right": 180,
+    "width": 332,
+    "viewport": 360,
+    "text": "Xin chào <img src=x onerror=\"window.auditXss=1\">!"
+  },
+  "profile": 200,
+  "xss": {
+    "executed": false,
+    "literalText": "<img src=x onerror=\"window.auditXss=1\">"
+  },
+  "previewErrorShown": false,
+  "offline": {
+    "url": "http://127.0.0.1:3456/",
+    "text": "LiLa\nBạn đang ngoại tuyến\n\nKhông thể kết nối đến máy chủ. Vui lòng kiểm tra lại kết nối Wi-Fi hoặc dữ liệu di động (4G/5G) trên thiết bị của bạn rồi thử lại.\n\nThử kết nối lại\nTrang"
+  }
+}

@@ -224,7 +224,7 @@ async function runTestSuite() {
   appendLedgerEntry(testUser.id, 'order_cashback', 300000, `credit_${testSuffix}`, 'Credit balance for withdrawal test');
   recalculateUserWallet(testUser.id);
   await saveDb(db);
-  assert(testUser.balanceAvailable >= 200000, 'User should have available balance');
+  assert(ensureDbLoaded().users.find(u => u.id === testUser.id).balanceAvailable >= 200000, 'User should have available balance');
 
   const idempotencyKey = `idemp_${testSuffix}_abc`;
   const withdrawBody = {
@@ -253,7 +253,7 @@ async function runTestSuite() {
 
   // Balance after first withdrawal
   recalculateUserWallet(testUser.id);
-  const balanceAfterFirstWd = testUser.balanceAvailable;
+  const balanceAfterFirstWd = ensureDbLoaded().users.find(u => u.id === testUser.id).balanceAvailable;
 
   // Immediate second withdrawal call with the same idempotency-key
   const wdRes2 = await fetch(`${baseUrl}/api/user/withdraw`, {
@@ -271,7 +271,7 @@ async function runTestSuite() {
 
   // Verify no double debit occurred
   recalculateUserWallet(testUser.id);
-  assert.strictEqual(testUser.balanceAvailable, balanceAfterFirstWd, 'Balance must NOT be debited a second time');
+  assert.strictEqual(ensureDbLoaded().users.find(u => u.id === testUser.id).balanceAvailable, balanceAfterFirstWd, 'Balance must NOT be debited a second time');
   console.log('  PASS: Bank info change requires password (400 on error), and withdrawal idempotency prevents double debiting.');
 
   // =========================================================================
@@ -417,8 +417,8 @@ async function runTestSuite() {
     })
   });
   assert.strictEqual(deleteActionRes.status, 200);
-  assert.strictEqual(testUser.accountLocked, true, 'User with financial records must be soft deleted (accountLocked = true)');
-  assert.strictEqual(testUser.isDeleted, true, 'User with financial records must have isDeleted = true');
+  assert.strictEqual(ensureDbLoaded().users.find(u => u.id === testUser.id).accountLocked, true, 'User with financial records must be soft deleted (accountLocked = true)');
+  assert.strictEqual(ensureDbLoaded().users.find(u => u.id === testUser.id).isDeleted, true, 'User with financial records must have isDeleted = true');
 
   // Verify Audit Logs structure in db.auditLogs
   assert(Array.isArray(db.auditLogs), 'db.auditLogs must be an array');
@@ -475,7 +475,7 @@ async function runTestSuite() {
     headers: { Authorization: `Bearer ${activeToken}` }
   });
   assert.strictEqual(logoutRes.status, 200);
-  assert.strictEqual(activeUser.tokenVersion, 2, 'Logout must increment tokenVersion');
+  assert.strictEqual(ensureDbLoaded().users.find(u => u.id === activeUser.id).tokenVersion, 2, 'Logout must increment tokenVersion');
 
   // Token should now be completely rejected (401)
   const meAfterLogoutRes = await fetch(`${baseUrl}/api/user/me`, {

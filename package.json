@@ -6,7 +6,14 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "test": "node tests/run_all_tests.js"
+    "test": "node tests/run_all_tests.js",
+    "test:postgres": "node tests/postgres.integration.js",
+    "lint": "eslint .",
+    "test:regression": "node tests/final-audit-diagnostics.js",
+    "test:browser": "node tests/withdrawal-ui.e2e.js",
+    "test:csv:postgres": "node tests/csv-postgres.integration.js",
+    "test:csv:browser": "node tests/csv-import.e2e.js",
+    "test:capacity": "node tests/load.capacity.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
@@ -15,6 +22,11 @@
     "pg": "^8.23.1"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": "^20.19.0 || ^22.13.0 || >=24"
+  },
+  "devDependencies": {
+    "eslint": "10.15.0",
+    "globals": "17.14.0",
+    "playwright": "1.65.1"
   }
 }

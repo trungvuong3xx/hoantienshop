@@ -54,7 +54,7 @@ async function runWalletLedgerTests() {
   appendLedgerEntry(testUserId, 'order_cashback', 1000000, initialCreditRef, 'Initial 1M cashback');
   recalculateUserWallet(testUserId);
   await saveDb(db);
-  assert.strictEqual(testUser.balanceAvailable, 1000000, 'User should start with exactly 1,000,000đ available');
+  assert.strictEqual(ensureDbLoaded().users.find(u => u.id === testUser.id).balanceAvailable, 1000000, 'User should start with exactly 1,000,000đ available');
 
   // ----------------------------------------------------
   // TEST 1: Pending withdrawal creation and ledger lock
@@ -77,7 +77,7 @@ async function runWalletLedgerTests() {
   assert.strictEqual(createdWd.status, 'pending', 'Withdrawal status must be pending');
 
   recalculateUserWallet(testUserId);
-  assert.strictEqual(testUser.balanceAvailable, 700000, 'Available balance must be exactly 700,000đ (1,000,000 - 300,000)');
+  assert.strictEqual(ensureDbLoaded().users.find(u => u.id === testUser.id).balanceAvailable, 700000, 'Available balance must be exactly 700,000đ (1,000,000 - 300,000)');
 
   const debitEntry = db.ledger.find((l) => l.refId === `withdraw_debit_${createdWd.id}`);
   assert.ok(debitEntry, 'Debit lock ledger entry must exist');
@@ -104,7 +104,7 @@ async function runWalletLedgerTests() {
 
   recalculateUserWallet(testUserId);
   assert.strictEqual(
-    testUser.balanceAvailable,
+    ensureDbLoaded().users.find(u => u.id === testUser.id).balanceAvailable,
     1000000,
     'Available balance must be restored to exactly 1,000,000đ (+300,000 refund, NOT +600,000 double refund)'
   );
@@ -121,7 +121,7 @@ async function runWalletLedgerTests() {
   // Call refundWithdrawal again on the already-rejected withdrawal
   await refundWithdrawal(db, createdWd, adminUser);
   assert.strictEqual(
-    testUser.balanceAvailable,
+    ensureDbLoaded().users.find(u => u.id === testUser.id).balanceAvailable,
     1000000,
     'Balance must stay exactly 1,000,000đ after calling refundWithdrawal again'
   );
@@ -133,7 +133,7 @@ async function runWalletLedgerTests() {
   for (let i = 0; i < 5; i++) {
     recalculateUserWallet(testUserId);
     assert.strictEqual(
-      testUser.balanceAvailable,
+      ensureDbLoaded().users.find(u => u.id === testUser.id).balanceAvailable,
       1000000,
       `Balance must remain 1,000,000đ on recalculation iteration ${i + 1}`
     );
@@ -142,7 +142,7 @@ async function runWalletLedgerTests() {
   // Call recalculateAllWallets
   recalculateAllWallets({ persist: false });
   assert.strictEqual(
-    testUser.balanceAvailable,
+    ensureDbLoaded().users.find(u => u.id === testUser.id).balanceAvailable,
     1000000,
     'Balance must remain 1,000,000đ after recalculateAllWallets'
   );
@@ -176,7 +176,7 @@ async function runWalletLedgerTests() {
     minWithdraw: 50000
   });
   const apiWd = apiWdRes.withdrawal;
-  assert.strictEqual(testUser.balanceAvailable, 800000, 'Balance must be 800,000đ after withdrawing 200,000đ');
+  assert.strictEqual(ensureDbLoaded().users.find(u => u.id === testUser.id).balanceAvailable, 800000, 'Balance must be 800,000đ after withdrawing 200,000đ');
 
   // Test /api/admin/withdrawals/cancel
   const cancelRes = await fetch(`http://127.0.0.1:${port}/api/admin/withdrawals/cancel`, {
@@ -192,7 +192,7 @@ async function runWalletLedgerTests() {
   assert.strictEqual(cancelData.status, 'ok', 'Response status must be ok');
 
   recalculateUserWallet(testUserId);
-  assert.strictEqual(testUser.balanceAvailable, 1000000, 'Balance must be restored to 1,000,000đ after cancel');
+  assert.strictEqual(ensureDbLoaded().users.find(u => u.id === testUser.id).balanceAvailable, 1000000, 'Balance must be restored to 1,000,000đ after cancel');
 
   // Attempt to cancel again (must return 400 error and not duplicate refund)
   const cancelAgainRes = await fetch(`http://127.0.0.1:${port}/api/admin/withdrawals/cancel`, {
@@ -207,7 +207,7 @@ async function runWalletLedgerTests() {
   await cancelAgainRes.json().catch(() => null);
 
   recalculateUserWallet(testUserId);
-  assert.strictEqual(testUser.balanceAvailable, 1000000, 'Balance must stay 1,000,000đ (no double refund)');
+  assert.strictEqual(ensureDbLoaded().users.find(u => u.id === testUser.id).balanceAvailable, 1000000, 'Balance must stay 1,000,000đ (no double refund)');
 
   const apiRefunds = db.ledger.filter((l) => l.refId === `withdraw_refund_${apiWd.id}`);
   assert.strictEqual(apiRefunds.length, 1, 'Only one refund ledger entry must exist for api withdrawal');
@@ -332,9 +332,9 @@ async function runWalletLedgerTests() {
 
   // Recalculate should skip the corrupted withdrawal without adding NaN to ledger
   recalculateUserWallet(testUserId);
-  assert.ok(Number.isFinite(testUser.balanceAvailable), 'User balanceAvailable must remain a valid finite number');
+  assert.ok(Number.isFinite(ensureDbLoaded().users.find(u => u.id === testUser.id).balanceAvailable), 'User balanceAvailable must remain a valid finite number');
   assert.ok(Number.isFinite(testUser.totalWithdrawn), 'User totalWithdrawn must remain a valid finite number');
-  assert.strictEqual(testUser.balanceAvailable, 1000000, 'Balance must remain 1,000,000đ');
+  assert.strictEqual(ensureDbLoaded().users.find(u => u.id === testUser.id).balanceAvailable, 1000000, 'Balance must remain 1,000,000đ');
 
   const rogueDebit = db.ledger.find((l) => l.refId === `withdraw_debit_${rogueWd.id}`);
   assert.strictEqual(rogueDebit, undefined, 'No ledger entry should be created for rogue NaN withdrawal');

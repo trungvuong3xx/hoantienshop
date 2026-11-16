@@ -1,0 +1,84 @@
+{
+  "model": {
+    "users": 20,
+    "clicksPerUserDay": 5000,
+    "conversionsPerUserDay": 100,
+    "seedClicks": 60000,
+    "providerDelayMs": 100,
+    "logging": "muted",
+    "limiter": "real control test, then bypassed for saturation measurement"
+  },
+  "stages": [
+    {
+      "label": "real-rate-limit-one-IP",
+      "requests": 40,
+      "concurrency": 1,
+      "seconds": 4.992394099999999,
+      "p50Ms": 125.22680000000014,
+      "p95Ms": 130.22699999999986,
+      "p99Ms": 162.73929999999996,
+      "statuses": {
+        "200": 40
+      },
+      "invalid": 0,
+      "requestsPerSecond": 8.012187980111587
+    },
+    {
+      "label": "real-rate-limit-single-account",
+      "requests": 35,
+      "concurrency": 1,
+      "seconds": 3.5080422000000007,
+      "p50Ms": 123.44840000000022,
+      "p95Ms": 128.9429999999993,
+      "p99Ms": 130.10030000000006,
+      "statuses": {
+        "200": 28,
+        "429": 7
+      },
+      "invalid": 0,
+      "requestsPerSecond": 9.977074962211114
+    },
+    {
+      "label": "100000-redirects-20-users",
+      "requests": 100000,
+      "concurrency": 20,
+      "seconds": 47.623221599999994,
+      "p50Ms": 8.260800000000017,
+      "p95Ms": 20.252300000000105,
+      "p99Ms": 29.487699999997858,
+      "statuses": {
+        "302": 100000
+      },
+      "invalid": 0,
+      "requestsPerSecond": 2099.8159435732086
+    },
+    {
+      "label": "2000-conversions-20-users-limiter-bypassed",
+      "requests": 2000,
+      "concurrency": 20,
+      "seconds": 11.781454200000008,
+      "p50Ms": 115.10190000000148,
+      "p95Ms": 126.8176999999996,
+      "p99Ms": 163.52040000000125,
+      "statuses": {
+        "200": 2000
+      },
+      "invalid": 0,
+      "requestsPerSecond": 169.75833085189083
+    }
+  ],
+  "redirectStats": {
+    "rssMB": 194.2265625,
+    "heapMB": 46.6875,
+    "eventLoopP99Ms": 39.550975,
+    "eventLoopMaxMs": 92.209151
+  },
+  "persistedNewClicks": 2000,
+  "convertStats": {
+    "rssMB": 197.41015625,
+    "heapMB": 47.718544006347656,
+    "eventLoopP99Ms": 34.963455,
+    "eventLoopMaxMs": 35.782655
+  },
+  "databaseBytes": 21157567
+}

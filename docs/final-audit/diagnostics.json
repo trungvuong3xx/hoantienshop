@@ -1,0 +1,32 @@
+{
+  "crossInstanceRegistration": {
+    "same": 200,
+    "other": 200
+  },
+  "lockedLogin": {
+    "status": 401,
+    "returnsUser": false
+  },
+  "reassignment": {
+    "displayed": 6300,
+    "ledger": 6300,
+    "afterReload": 6300
+  },
+  "platformCollision": [
+    {
+      "platform": "tiktok",
+      "gross": 20000
+    },
+    {
+      "platform": "shopee",
+      "gross": 10000
+    }
+  ],
+  "claimApiParity": {
+    "cache": true,
+    "sql": true
+  },
+  "logoutAfterConflict": {
+    "status": 200
+  }
+}

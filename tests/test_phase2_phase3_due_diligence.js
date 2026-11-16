@@ -68,8 +68,8 @@ async function main() {
   const dbServiceSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'services', 'dbService.js'), 'utf8');
   assert.ok(dbServiceSrc.includes('PG_SSL_CA'), 'dbService must support PG_SSL_CA');
   assert.ok(
-    dbServiceSrc.includes('PG_SSL_REJECT_UNAUTHORIZED'),
-    'dbService must support PG_SSL_REJECT_UNAUTHORIZED'
+    !dbServiceSrc.includes('rejectUnauthorized: false'),
+    'Postgres TLS must not disable certificate verification'
   );
   console.log('  PASS: Postgres TLS SSL configuration verified.');
 

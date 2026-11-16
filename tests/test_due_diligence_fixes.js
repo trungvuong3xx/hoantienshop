@@ -1,3 +1,4 @@
+const { orderKey, ledgerOrderKey } = require('../src/services/orderIdentity');
 process.env.NODE_ENV = 'test';
 
 const assert = require('assert');
@@ -79,9 +80,9 @@ async function runTests() {
 
       await saveDb(db);
       const persisted = JSON.parse(fs.readFileSync(TEST_DB_PATH, 'utf8'));
-      assert.strictEqual(persisted.clicks.length, 5000, 'Persisted clicks should cap at 5000');
+      assert.strictEqual(persisted.clicks.length, 5005, 'All unexpired clicks must survive persistence');
       assert.strictEqual(persisted.clicks[0].id, 'click_5005', 'Newest click (index 0) must be kept');
-      assert.strictEqual(persisted.clicks[4999].id, 'click_6', '5000th kept click should be click_6');
+      assert.strictEqual(persisted.clicks[5004].id, 'click_1', 'Oldest unexpired click must survive');
 
       db.clicks = savedClicksBackup;
       await saveDb(db);
@@ -207,7 +208,7 @@ async function runTests() {
       const userAfter = dbAfter.users.find((u) => u.id === testUserId);
       assert.strictEqual(userAfter.balanceAvailable, 0, 'User balance must drop back to 0 after approved order deletion');
       const hasRevocation = dbAfter.ledger.some(
-        (entry) => entry.userId === testUserId && String(entry.refId || '').includes(`order_revocation_${testOrderSn}_deleted_`)
+        (entry) => entry.userId === testUserId && ledgerOrderKey(entry, dbAfter) === orderKey({ orderSn: testOrderSn }) && entry.amount === -15000
       );
       assert.strictEqual(hasRevocation, true, 'Ledger must contain revocation entry for deleted approved order');
 

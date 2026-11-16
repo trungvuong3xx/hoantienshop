@@ -1,3 +1,4 @@
+const { orderKey, ledgerOrderKey } = require('../src/services/orderIdentity');
 const assert = require('assert');
 const crypto = require('crypto');
 const logger = require('../src/utils/logger');
@@ -222,10 +223,10 @@ async function runUpsertOrderTests() {
   assert.ok(Number.isFinite(parsedClawbackTime), 'clawbackAt must be a valid ISO date');
 
   // Verify ledger entry for clawback
-  const clawbackRef = `clawback_${sn4}`;
-  const clawbackEntry = db.ledger.find((l) => l.refId === clawbackRef);
+  const clawbackEntry = db.ledger.find(l => ledgerOrderKey(l, db) === orderKey({ orderSn: sn4 }) && l.amount < 0);
+  const clawbackRef = clawbackEntry?.refId;
   assert.ok(clawbackEntry, 'Ledger entry with refId clawback_SN must exist');
-  assert.strictEqual(clawbackEntry.type, 'order_clawback', 'Ledger type must be order_clawback');
+  assert.strictEqual(clawbackEntry.type, 'order_revocation', 'Cancellation must use a compensating debit');
   assert.strictEqual(clawbackEntry.amount, -creditedCashback4, 'Clawback amount must exactly equal negative of credited cashback');
 
   // Verify wallet balance is reduced cleanly

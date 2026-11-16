@@ -1,8 +1,13 @@
+const { acceptWebhookReceipt } = require('./webhookReceiptService');
+const { mapUserRow } = require('./userMapper');
+const { sameOrder, orderId, migrateLegacyOrderIdentity } = require('./orderIdentity');
 const crypto = require('crypto');
 const express = require('express');
 const logger = require('../utils/logger');
 const {
   ensureDbLoaded,
+  runWithStateContext,
+  revokeUserSessions,
   saveDb,
   initPostgresIfConfigured,
   hashPassword,
@@ -13,16 +18,21 @@ const {
   recalculateUserWallet,
   recalculateAllWallets,
   executeAtomicWithdrawal,
+  archiveWithdrawal,
   refundWithdrawal,
+  settleWithdrawal,
   appendLedgerEntry,
   auditLedgerIntegrity,
   createToken,
   verifyToken,
   sanitizeUser,
   getDatabaseStatus,
+  getPgPool,
+  appendClickRecords,
+  findClickById,
   reloadStateFromPostgres,
   withUserLock,
-  purgeTestArtifactsFromDb,
+  inspectTestArtifacts,
   recordAuditLog,
   normalizePhoneNumber
 } = require('./dbService');
@@ -50,7 +60,6 @@ const {
   buildVietQrImageUrl,
   createCsrfGuard
 } = require('../utils/securityMiddleware');
-const { cleanExpiredClicks } = require('../utils/clickManager');
 const {
   DEFAULT_ZALO_GROUP_URL,
   isValidZaloGroupUrl,
@@ -156,12 +165,18 @@ function getAuthUser(req) {
   const payload = verifyToken(token);
   if (!payload) return null;
   const db = ensureDbLoaded();
-  const user = db.users.find((u) => u.id === payload.id);
+  let user = db.users.find((u) => u.id === payload.id);
+  if (req.authoritativeAuth !== undefined) {
+    const row = req.authoritativeAuth;
+    if (!row || row.account_locked || row.is_deleted || Number(row.token_version || 1) !== Number(payload.ver || 1)) return null;
+    if (!user) { user = mapUserRow(row); db.users.push(user); }
+    else Object.assign(user, mapUserRow(row));
+  }
   if (!user) return null;
   if (Number(user.tokenVersion || 1) !== Number(payload.ver || 1)) {
     return null; // Token revoked after password change
   }
-  if (user.accountLocked) {
+  if (user.accountLocked || user.isDeleted) {
     return null; // Account temporarily locked
   }
   return user;
@@ -212,6 +227,7 @@ function upsertNetworkOrder(db, {
   purchaseTime,
   commissionEstimated
 }) {
+  migrateLegacyOrderIdentity(db);
   const cleanSn = String(orderSn || '').trim().toUpperCase();
   if (!cleanSn) return null;
 
@@ -237,7 +253,12 @@ function upsertNetworkOrder(db, {
     ? Number(grossCommission)
     : 0;
 
-  const existing = db.orders.find((o) => String(o.orderSn || '').toUpperCase() === cleanSn);
+  const normalizedPlatform =
+    String(platform || clickRecord?.platform || '').toLowerCase() === 'tiktok'
+      ? 'tiktok'
+      : 'shopee';
+
+  const existing = db.orders.find((o) => sameOrder(o, cleanSn, normalizedPlatform));
 
   const cbRateToUse = existing?.lockedCashbackRate !== undefined && existing?.lockedCashbackRate !== null
     ? existing.lockedCashbackRate
@@ -252,10 +273,7 @@ function upsertNetworkOrder(db, {
     taxRateToUse
   );
 
-  const normalizedPlatform =
-    String(platform || clickRecord?.platform || '').toLowerCase() === 'tiktok'
-      ? 'tiktok'
-      : 'shopee';
+
 
   const incomingEventTime = parseTimestamp(eventTime) || parseTimestamp(purchaseTime);
 
@@ -351,46 +369,25 @@ function upsertNetworkOrder(db, {
             String(u.code).toUpperCase() === String(existing.userCode).toUpperCase()
         )?.id;
 
-      let creditedAmount = 0;
-      if (targetUserId) {
-        const orderLedgerEntries = db.ledger.filter(
-          (e) =>
-            e.userId === targetUserId &&
-            (e.refId === `order_credit_${cleanSn}` ||
-              (e.refId && e.refId.startsWith(`ord_adj_${cleanSn}_`)) ||
-              (e.refId && e.refId.startsWith(`clawback_${cleanSn}`)))
-        );
-        const netCredited = orderLedgerEntries.reduce((sum, e) => sum + Number(e.amount || 0), 0);
-        if (netCredited > 0) {
-          creditedAmount = netCredited;
-        }
-      }
-
       existing.status = 'cancelled';
       existing.statusUpdatedAt = new Date().toISOString();
       existing.clawbackAt = new Date().toISOString();
+      // CSV cancellation reports carry explicit zero commissions. Preserve those
+      // reported amounts so a repeated import matches the persisted record.
+      if (grossCommission !== undefined && grossCommission !== null) {
+        existing.grossCommission = split.grossCommission;
+        existing.taxAmount = split.taxAmount;
+        existing.netCommission = split.netCommission;
+        existing.totalCommission = split.netCommission;
+        if (!existing.hasCustomCashback) existing.userCashbackAmount = split.userCashbackAmount;
+        existing.adminShareAmount = Math.max(0, split.netCommission - Number(existing.userCashbackAmount || 0));
+      }
+      if (orderAmount != null && Number.isFinite(Number(orderAmount)) && Number(orderAmount) >= 0) existing.orderAmount = Number(orderAmount);
       if (incomingEventTime > 0) {
-        existing.eventTime = eventTime || incomingEventTime;
+        existing.eventTime = incomingEventTime;
       }
 
-      const clawbackRefId = `clawback_${cleanSn}`;
-      if (creditedAmount > 0 && targetUserId && !db.ledger.some((e) => e.refId === clawbackRefId)) {
-        const clawbackAmt = -Math.abs(Math.round(creditedAmount));
-        appendLedgerEntry(
-          targetUserId,
-          'order_clawback',
-          clawbackAmt,
-          clawbackRefId,
-          `Thu hồi hoàn tiền đơn hàng bị hủy #${cleanSn} (${clawbackAmt.toLocaleString('vi-VN')} đ)`
-        );
-        recalculateUserWallet(targetUserId, { persist: false });
-        logger.log('upsertNetworkOrder', 'Đã ghi nhận bút toán thu hồi hoàn tiền clawback', {
-          orderSn: cleanSn,
-          userId: targetUserId,
-          amount: clawbackAmt,
-          refId: clawbackRefId
-        });
-      }
+      if (targetUserId) recalculateUserWallet(targetUserId, { persist: false });
 
       existing.updatedAt = new Date().toISOString();
       logger.logLeave('upsertNetworkOrder', {
@@ -438,7 +435,7 @@ function upsertNetworkOrder(db, {
       existing.statusUpdatedAt = new Date().toISOString();
     }
     if (incomingEventTime > 0) {
-      existing.eventTime = eventTime || incomingEventTime;
+      existing.eventTime = incomingEventTime;
     }
     if (!existing.clickId && cleanSub) {
       existing.clickId = cleanSub;
@@ -452,9 +449,12 @@ function upsertNetworkOrder(db, {
           if (existing.submittedByUserId === matchedUser.id) {
             existing.claimPending = false;
             existing.claimVerified = true;
+            existing.claimRejected = false;
+            existing.claimRejectReason = null;
           } else {
             existing.claimPending = false;
             existing.claimRejected = true;
+            existing.claimVerified = false;
             existing.claimRejectReason = 'Mã đơn đã được ghi nhận cho tài khoản mua hàng thực tế qua liên kết tiếp thị.';
           }
         }
@@ -474,7 +474,7 @@ function upsertNetworkOrder(db, {
 
   const validOrderAmt = Number(orderAmount);
   const created = {
-    id: `ord_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`,
+    id: orderId({ orderSn: cleanSn, platform: normalizedPlatform }),
     orderSn: cleanSn,
     platform: normalizedPlatform,
     clickId: clickRecord ? clickRecord.clickId : cleanSub || null,
@@ -496,7 +496,7 @@ function upsertNetworkOrder(db, {
     status,
     hasCustomCashback: false,
     commissionEstimated: Boolean(commissionEstimated),
-    eventTime: eventTime || (incomingEventTime || null),
+    eventTime: incomingEventTime || null,
     createdAt: new Date().toISOString(),
     statusUpdatedAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
@@ -530,15 +530,15 @@ async function runShopeeAutoSync() {
 
   for (const parsed of parsedOrders) {
     try {
+      if (parsed.rawSubId) await findClickById(String(parsed.rawSubId).split('-')[0].trim());
       upsertNetworkOrder(db, parsed);
       syncedCount++;
     } catch (itemErr) {
-      logger.warning('runShopeeAutoSync', 'Bỏ qua đơn Shopee hỏng định dạng', { error: itemErr.message });
+      throw itemErr;
     }
   }
 
-  db.settings.lastAutoSyncAt = new Date().toISOString();
-  recalculateAllWallets();
+  recalculateAllWallets({ persist: false });
   await saveDb(db);
   logger.logLeave('runShopeeAutoSync', { syncedCount });
   return { syncedCount, orders: parsedOrders };
@@ -547,6 +547,14 @@ async function runShopeeAutoSync() {
 /**
  * Shared logic to synchronize orders from AccessTrade Publisher API (/v1/orders).
  */
+function accessTradeAggregateStatus(row) {
+  const pending = Number(row.order_pending || 0), approved = Number(row.order_approved || 0), rejected = Number(row.order_reject || 0);
+  if (pending > 0) return 'pending';
+  if (approved > 0 && rejected === 0) return 'approved';
+  if (rejected > 0 && approved === 0) return 'cancelled';
+  throw new Error('Đơn AccessTrade có trạng thái sản phẩm hỗn hợp/không xác định; cần đối soát theo sản phẩm.');
+}
+
 async function runAccessTradeAutoSync() {
   logger.logEnter('runAccessTradeAutoSync');
   const db = ensureDbLoaded();
@@ -558,6 +566,9 @@ async function runAccessTradeAutoSync() {
   }
 
   const rows = await fetchAccessTradeOrders(apiKey, 30);
+  for (const row of rows) {
+    if (row.status == null && row.order_status == null && row.approval_status == null) accessTradeAggregateStatus(row);
+  }
   let syncedCount = 0;
 
   for (const row of rows) {
@@ -578,7 +589,7 @@ async function runAccessTradeAutoSync() {
         row.billing ?? row.total_amount ?? row.amount ?? 0
       );
       const status = normalizeNetworkStatus(
-        row.status ?? row.order_status ?? row.approval_status
+        row.status ?? row.order_status ?? row.approval_status ?? accessTradeAggregateStatus(row)
       );
       const merchantRaw = String(row.merchant || '').toLowerCase();
       const platform = merchantRaw.includes('shopee') ? 'shopee' : 'tiktok';
@@ -588,6 +599,7 @@ async function runAccessTradeAutoSync() {
         row.product_name ||
         `Đơn ${platform === 'tiktok' ? 'TikTok' : 'Shopee'} #${orderSn}`;
 
+      if (rawSubId) await findClickById(String(rawSubId).split('-')[0].trim());
       upsertNetworkOrder(db, {
         orderSn,
         rawSubId,
@@ -595,16 +607,17 @@ async function runAccessTradeAutoSync() {
         orderAmount,
         status,
         platform,
-        productName
+        productName,
+        eventTime: row.update_time,
+        purchaseTime: row.sales_time
       });
       syncedCount++;
     } catch (rowErr) {
-      logger.warning('runAccessTradeAutoSync', 'Bỏ qua bản ghi AccessTrade hỏng định dạng', { error: rowErr.message });
+      throw rowErr;
     }
   }
 
-  db.settings.lastAutoSyncAt = new Date().toISOString();
-  recalculateAllWallets();
+  recalculateAllWallets({ persist: false });
   await saveDb(db);
   logger.logLeave('runAccessTradeAutoSync', { syncedCount });
   return { syncedCount };
@@ -632,7 +645,7 @@ async function runAutoSyncAll({ requireAtLeastOne = false } = {}) {
 
   if (hasShopee) {
     try {
-      const r = await runShopeeAutoSync();
+      const r = await runWithStateContext(() => runShopeeAutoSync());
       shopeeSynced = r.syncedCount;
     } catch (err) {
       errors.push(`Shopee: ${err.message}`);
@@ -641,19 +654,20 @@ async function runAutoSyncAll({ requireAtLeastOne = false } = {}) {
 
   if (hasAccessTrade) {
     try {
-      const r = await runAccessTradeAutoSync();
+      const r = await runWithStateContext(() => runAccessTradeAutoSync());
       accesstradeSynced = r.syncedCount;
     } catch (err) {
       errors.push(`AccessTrade: ${err.message}`);
     }
   }
 
+  await reloadStateFromPostgres({ strict: true });
   const nowIso = new Date().toISOString();
   db.settings.lastSyncAttemptAt = nowIso;
 
   // Only update lastAutoSyncAt if at least one configured network succeeded without 100% failure
   const totalConfigured = Number(hasShopee) + Number(hasAccessTrade);
-  if (totalConfigured > 0 && errors.length < totalConfigured) {
+  if (totalConfigured > 0 && errors.length === 0) {
     db.settings.lastAutoSyncAt = nowIso;
     db.settings.syncFailureCount = 0;
   } else if (totalConfigured > 0) {
@@ -697,7 +711,7 @@ function triggerLazyAutoSyncIfNeeded() {
     if (Date.now() - lastMs < 10 * 60 * 1000) return; // Synced within last 10 mins
 
     isAutoSyncInFlight = true;
-    runAutoSyncAll({ requireAtLeastOne: false })
+    runWithStateContext(() => runAutoSyncAll({ requireAtLeastOne: false }))
       .catch((err) => {
         logger.warning('triggerLazyAutoSyncIfNeeded', 'Background sync warning', { error: err.message });
       })
@@ -726,7 +740,15 @@ function registerCashbackRoutes(app) {
     keyPrefix: 'auth',
     failClosed: true
   });
-  const convertLimiter = createRateLimiter({ windowMs: 60000, max: 30, keyPrefix: 'convert' });
+  // Account quota is independent of shared NAT, with an aggregate IP abuse ceiling.
+  const convertIpLimiter = createRateLimiter({ windowMs: 60000, max: 600, keyPrefix: 'convert-ip', failClosed: true });
+  const convertLimiter = createRateLimiter({
+    windowMs: 60000, max: 30, keyPrefix: 'convert-identity', failClosed: true,
+    keyGenerator(req) {
+      const user = getAuthUser(req);
+      return user ? 'user:' + user.id : 'guest:' + getClientIp(req);
+    }
+  });
   const withdrawLimiter = createRateLimiter({
     windowMs: 15 * 60 * 1000,
     max: 5,
@@ -738,9 +760,17 @@ function registerCashbackRoutes(app) {
   app.use(async (req, res, next) => {
     try {
       await initPostgresIfConfigured();
+      await runWithStateContext(async () => {
+      const pool = getPgPool();
+      if (pool) {
+        const token = parseCookieToken(req) || (req.headers.authorization || '').replace(/^Bearer /, '');
+        const payload = verifyToken(token);
+        req.authoritativeAuth = payload ? (await pool.query('SELECT * FROM users WHERE id = $1', [payload.id])).rows[0] || null : null;
+      }
       const activeDb = ensureDbLoaded();
       migrateZaloSettings(activeDb);
       next();
+      }, { incrementalOnly: Boolean(getPgPool()) && (req.path.startsWith('/go/') || ['/api/convert', '/api/preview', '/api/settings', '/api/public-config'].includes(req.path) || !req.path.startsWith('/api/')) });
     } catch (err) {
       logger.error('initMiddleware', 'Postgres startup error', { error: err.message });
       if (process.env.DATABASE_URL || process.env.POSTGRES_URL) {
@@ -753,10 +783,10 @@ function registerCashbackRoutes(app) {
   });
 
   // Safe Outbound Redirect Route (/go/:clickId) - Whitelist enforced & strict-origin-when-cross-origin
-  app.get('/go/:clickId', (req, res) => {
+  app.get('/go/:clickId', asyncHandler(async (req, res) => {
     logger.logEnter('GET /go/:clickId', { clickId: req.params.clickId });
     const db = ensureDbLoaded();
-    const click = db.clicks.find((c) => c.clickId === req.params.clickId);
+    const click = await findClickById(req.params.clickId);
     if (!click || !click.affiliateUrl) {
       logger.logLeave('GET /go/:clickId', { redirect: 'home_missing' });
       return res.redirect(302, '/');
@@ -780,7 +810,7 @@ function registerCashbackRoutes(app) {
       logger.logLeave('GET /go/:clickId', { redirect: 'home_error' });
       return res.redirect(302, '/');
     }
-  });
+  }));
 
   // 1. Public Config (Never exposes secrets)
   app.get('/api/public-config', (req, res) => {
@@ -933,7 +963,7 @@ function registerCashbackRoutes(app) {
           (u.code && String(u.code).toLowerCase() === cleanId)
       );
 
-      if (!user || !(await verifyPasswordAsync(password, user.passwordHash))) {
+      if (!user || user.accountLocked || user.isDeleted || !(await verifyPasswordAsync(password, user.passwordHash))) {
         return res.status(401).json({ error: 'Thông tin đăng nhập không chính xác.' });
       }
 
@@ -954,18 +984,16 @@ function registerCashbackRoutes(app) {
     }
   });
 
-  app.post('/api/auth/logout', async (req, res) => {
+  app.post('/api/auth/logout', asyncHandler(async (req, res) => {
     logger.logEnter('POST /api/auth/logout');
     const user = getAuthUser(req);
     if (user) {
-      user.tokenVersion = Number(user.tokenVersion || 1) + 1;
-      const db = ensureDbLoaded();
-      await saveDb(db);
+      await revokeUserSessions(user.id);
     }
     clearAuthCookie(res);
     logger.logLeave('POST /api/auth/logout');
     return res.json({ status: 'ok' });
-  });
+  }));
 
   // 4. Current User Dashboard (Includes Orders, Withdrawals, Immutable Ledger & Referral Count)
   app.get('/api/user/me', asyncHandler(async (req, res) => {
@@ -989,12 +1017,17 @@ function registerCashbackRoutes(app) {
     });
 
     const userWithdrawals = db.withdrawals
-      .filter((w) => w.userId === user.id)
+      .filter((w) => w.userId === user.id && !w.archivedAt)
       .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
-    const userLedger = db.ledger
+    const allUserLedger = db.ledger
       .filter((l) => l.userId === user.id)
-      .slice(0, 30);
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt) || String(b.id).localeCompare(String(a.id)));
+    const ledgerLimit = 30;
+    const ledgerPages = Math.max(1, Math.ceil(allUserLedger.length / ledgerLimit));
+    const ledgerPage = Math.min(ledgerPages, Math.max(1, Math.floor(Number(req.query.ledgerPage) || 1)));
+    const userLedger = allUserLedger.slice((ledgerPage - 1) * ledgerLimit, ledgerPage * ledgerLimit);
+    const ledgerPagination = { page: ledgerPage, limit: ledgerLimit, total: allUserLedger.length, totalPages: ledgerPages };
 
     const userCodeUpper = String(user.code || '').toUpperCase();
     const referralCount = db.users.filter(
@@ -1009,6 +1042,7 @@ function registerCashbackRoutes(app) {
       ordersPagination,
       withdrawals: userWithdrawals,
       ledger: userLedger,
+      ledgerPagination,
       referralCount,
       referralBountyAmount
     });
@@ -1144,6 +1178,7 @@ function registerCashbackRoutes(app) {
     if (!user) return res.status(401).json({ error: 'Vui lòng đăng nhập để tra cứu đơn hàng.' });
 
     const { orderSn, platform, productName } = req.body || {};
+    if (platform && !['shopee', 'tiktok'].includes(String(platform).toLowerCase())) return res.status(400).json({ error: 'Nền tảng không hợp lệ.' });
     const cleanSn = String(orderSn || '')
       .trim()
       .toUpperCase()
@@ -1154,7 +1189,7 @@ function registerCashbackRoutes(app) {
 
     return withUserLock(user.id, async () => {
       const db = ensureDbLoaded();
-      const existing = db.orders.find((o) => String(o.orderSn || '').toUpperCase() === cleanSn);
+      const existing = db.orders.find((o) => sameOrder(o, cleanSn, platform));
       if (existing) {
         if (existing.userId === user.id) {
           return res.json({
@@ -1214,7 +1249,7 @@ function registerCashbackRoutes(app) {
       // Never trust client for orderAmount or commission; set 0 until network postback/report confirms
       // Secure attribution: Keep userId null and mark claimPending so a user cannot hijack other buyers' orders
       const newOrd = {
-        id: `ord_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`,
+        id: orderId({ orderSn: cleanSn, platform }),
         orderSn: cleanSn,
         platform: String(platform || '').toLowerCase() === 'tiktok' ? 'tiktok' : 'shopee',
         clickId: null,
@@ -1294,23 +1329,6 @@ function registerCashbackRoutes(app) {
 
     const rawIdempotencyKey = req.headers['idempotency-key'] || req.headers['Idempotency-Key'];
     const idempotencyKey = rawIdempotencyKey ? String(rawIdempotencyKey).trim() : null;
-
-    if (idempotencyKey) {
-      const tenMinutesAgo = Date.now() - 10 * 60 * 1000;
-      const existing = db.withdrawals.find(
-        (w) =>
-          w.userId === user.id &&
-          w.idempotencyKey === idempotencyKey &&
-          new Date(w.createdAt).getTime() >= tenMinutesAgo
-      );
-      if (existing) {
-        logger.log('POST /api/user/withdraw', 'Idempotent request returning existing withdrawal', {
-          wdId: existing.id,
-          idempotencyKey
-        });
-        return res.json({ withdrawal: existing, user: sanitizeUser(user), idempotent: true });
-      }
-    }
 
     try {
       const result = await executeAtomicWithdrawal({
@@ -1603,7 +1621,7 @@ function registerCashbackRoutes(app) {
   }));
 
   // 8. Convert Link (Generates opaque random click_id -> maps to userId in db.clicks)
-  app.post('/api/convert', convertLimiter, asyncHandler(async (req, res) => {
+  app.post('/api/convert', convertIpLimiter, convertLimiter, asyncHandler(async (req, res) => {
     logger.logEnter('POST /api/convert');
     try {
       const { text } = req.body || {};
@@ -1648,6 +1666,7 @@ function registerCashbackRoutes(app) {
       const cashbackPercent = Number(s.cashbackPercent || 70);
       const taxDeductPercent = Number(s.taxDeductPercent ?? 10);
 
+      const newClicks = [];
       for (const item of result.items) {
         item.cashbackPercent = cashbackPercent;
         // Never leak affiliateUrl + user sub_id to third-party QR image servers
@@ -1679,7 +1698,7 @@ function registerCashbackRoutes(app) {
             affiliateUrl: item.affiliateUrl,
             createdAt: new Date().toISOString()
           };
-          db.clicks.unshift(clickRecord);
+          newClicks.push(clickRecord);
           logger.log('POST /api/convert', 'Click recorded', {
             clickId: item.clickId,
             userCode: clickRecord.userCode,
@@ -1688,8 +1707,7 @@ function registerCashbackRoutes(app) {
         }
       }
 
-      db.clicks = cleanExpiredClicks(db.clicks);
-      await saveDb(db);
+      await appendClickRecords(newClicks);
 
       logger.logLeave('POST /api/convert', { total: result.summary.total });
       return res.json({
@@ -1763,13 +1781,15 @@ function registerCashbackRoutes(app) {
     const productName = src.product_name || src.productName || '';
 
     const cleanSn = String(orderSn).trim().toUpperCase();
-    const existing = db.orders.find((o) => String(o.orderSn || '').toUpperCase() === cleanSn);
+    const existing = db.orders.find((o) => sameOrder(o, cleanSn, platform));
+    if (!(await acceptWebhookReceipt(db, 'accesstrade', src, existing, status))) return res.json({ status: 'ok', idempotent: true });
     if (
       existing &&
       existing.status === status &&
       Math.round(Number(existing.grossCommission || 0)) === Math.round(grossCommission) &&
       Math.round(Number(existing.orderAmount || 0)) === Math.round(orderAmount)
     ) {
+      await saveDb(db);
       logger.logLeave('AccessTradePostback', { orderSn: cleanSn, idempotent: true });
       return res.json({ status: 'ok', orderSn: cleanSn, idempotent: true });
     }
@@ -1777,7 +1797,7 @@ function registerCashbackRoutes(app) {
     try {
       let order;
       const cleanSub = String(rawSubId || '').split('-')[0].trim();
-      const clickRecord = cleanSub ? db.clicks.find((c) => c.clickId === cleanSub) : null;
+      const clickRecord = cleanSub ? await findClickById(cleanSub) : null;
       const matchedUserId = clickRecord?.userId || db.users.find((u) => (u.code && String(u.code).toUpperCase() === cleanSub.toUpperCase()) || u.phone === cleanSub)?.id;
       const lockKey = matchedUserId || 'global';
 
@@ -1790,7 +1810,7 @@ function registerCashbackRoutes(app) {
           status,
           platform,
           productName,
-          eventTime: src.event_time || src.eventTime || src.timestamp,
+          eventTime: src.event_time || src.eventTime || src.update_time || src.timestamp,
           purchaseTime: src.purchase_time || src.purchaseTime
         });
 
@@ -1814,7 +1834,7 @@ function registerCashbackRoutes(app) {
       });
     } catch (err) {
       logger.error('AccessTradePostback', 'Error processing postback', { error: err.message });
-      return res.status(500).json({ error: 'Failed to process postback order.' });
+      return res.status(err.status || 500).json({ error: 'Failed to process postback order.' });
     }
   }
 
@@ -1845,6 +1865,8 @@ function registerCashbackRoutes(app) {
       billing
     } = req.body || {};
     if (!orderSn) return res.status(400).json({ error: 'Missing orderSn' });
+    const existing = db.orders.find(o => sameOrder(o, orderSn, platform));
+    if (!(await acceptWebhookReceipt(db, 'postback', req.body, existing, normalizeNetworkStatus(status)))) return res.json({ status: 'ok', idempotent: true });
 
     const rawComm = Number(grossCommission ?? pub_commission ?? 0);
     const validComm = Number.isFinite(rawComm) && rawComm >= 0 ? rawComm : 0;
@@ -1853,7 +1875,7 @@ function registerCashbackRoutes(app) {
 
     try {
       const cleanSub = String(clickId || sub1 || sub_id || '').split('-')[0].trim();
-      const clickRecord = cleanSub ? db.clicks.find((c) => c.clickId === cleanSub) : null;
+      const clickRecord = cleanSub ? await findClickById(cleanSub) : null;
       const matchedUserId = clickRecord?.userId || db.users.find((u) => (u.code && String(u.code).toUpperCase() === cleanSub.toUpperCase()) || u.phone === cleanSub)?.id;
       const lockKey = matchedUserId || 'global';
 
@@ -1867,7 +1889,7 @@ function registerCashbackRoutes(app) {
           status: normalizeNetworkStatus(status),
           platform,
           productName,
-          eventTime: req.body?.eventTime || req.body?.event_time || req.body?.timestamp,
+          eventTime: req.body?.eventTime || req.body?.event_time || req.body?.update_time || req.body?.timestamp,
           purchaseTime: req.body?.purchaseTime || req.body?.purchase_time
         });
 
@@ -1883,7 +1905,7 @@ function registerCashbackRoutes(app) {
       return res.json({ status: 'ok', orderSn: order?.orderSn });
     } catch (err) {
       logger.error('POST /api/webhooks/postback', 'Error saving postback', { error: err.message });
-      return res.status(500).json({ error: 'Failed to process postback order.' });
+      return res.status(err.status || 500).json({ error: 'Failed to process postback order.' });
     }
   }));
 
@@ -2314,9 +2336,13 @@ function registerCashbackRoutes(app) {
 
     let targetOrder = db.orders.find(
       (o) =>
-        (id && o.id === id) ||
-        String(o.orderSn || '').toUpperCase() === cleanOrderSn
+        id ? (o.id === id || orderId(o) === id) : sameOrder(o, cleanOrderSn, validPlatform)
     );
+    if (id && !targetOrder) return res.status(404).json({ error: 'Không tìm thấy đơn hàng.' });
+    if (targetOrder && !sameOrder(targetOrder, cleanOrderSn, validPlatform)) {
+      return res.status(409).json({ error: 'Không thể đổi mã hoặc nền tảng của đơn đã tồn tại. Hãy tạo đơn riêng và đối soát đơn cũ.' });
+    }
+    migrateLegacyOrderIdentity(db);
     const targetOrderExisted = Boolean(targetOrder);
 
     const cbRateToUse = targetOrder?.lockedCashbackRate ?? db.settings.cashbackPercent;
@@ -2427,7 +2453,7 @@ function registerCashbackRoutes(app) {
       }
 
       targetOrder = {
-        id: `ord_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`,
+        id: orderId({ orderSn: cleanOrderSn, platform: validPlatform }),
         orderSn: cleanOrderSn,
         platform: validPlatform,
         clickId: matchedClick ? matchedClick.clickId : null,
@@ -2482,7 +2508,7 @@ function registerCashbackRoutes(app) {
     logger.logEnter('POST /api/admin/orders/delete');
     if (!requireAdmin(req, res)) return;
 
-    const { id, orderSn } = req.body || {};
+    const { id, orderSn, platform } = req.body || {};
     if (!id && !orderSn) {
       return res.status(400).json({ error: 'Thiếu ID hoặc Mã đơn hàng để xóa.' });
     }
@@ -2490,8 +2516,7 @@ function registerCashbackRoutes(app) {
     const db = ensureDbLoaded();
     const preliminary = db.orders.find(
       (o) =>
-        (id && o.id === id) ||
-        (orderSn && String(o.orderSn || '').toUpperCase() === String(orderSn).trim().toUpperCase())
+        id ? (o.id === id || orderId(o) === id) : sameOrder(o, orderSn, platform)
     );
     if (!preliminary) {
       return res.status(404).json({ error: 'Không tìm thấy đơn hàng cần xóa.' });
@@ -2501,8 +2526,7 @@ function registerCashbackRoutes(app) {
     const deletedOrder = await withUserLock(lockKey, async () => {
       const idx = db.orders.findIndex(
         (o) =>
-          (id && o.id === id) ||
-          (orderSn && String(o.orderSn || '').toUpperCase() === String(orderSn).trim().toUpperCase())
+          id ? (o.id === id || orderId(o) === id) : sameOrder(o, orderSn, platform)
       );
       if (idx === -1) return null;
 
@@ -2544,12 +2568,32 @@ function registerCashbackRoutes(app) {
       return res.status(400).json({ error: 'Mỗi lần nhập tối đa 500 dòng để đảm bảo hiệu năng máy chủ.' });
     }
 
+    // Validate the entire batch before touching financial state. UI validation
+    // alone is insufficient, including when an older client posts directly.
+    const uniqueRows = new Map();
+    for (const row of rows) {
+      if (!row || !/^[A-Za-z0-9_.-]{2,64}$/.test(String(row.orderSn || '')) ||
+          !['shopee', 'tiktok'].includes(row.platform) ||
+          !['pending', 'approved', 'cancelled'].includes(row.status) ||
+          ![row.totalCommission, row.orderAmount].every(n => typeof n === 'number' && Number.isFinite(n) && n >= 0 && n <= Number.MAX_SAFE_INTEGER / 100) ||
+          (row.eventTime != null && (!Number.isSafeInteger(row.eventTime) || row.eventTime <= 0))) {
+        return res.status(400).json({ error: 'Dữ liệu nhập không hợp lệ: kiểm tra mã đơn, sàn, trạng thái, số tiền và thời điểm báo cáo.' });
+      }
+      const key = JSON.stringify([row.platform, row.orderSn.toUpperCase()]);
+      const previous = uniqueRows.get(key);
+      if (previous && ['status', 'userCode', 'totalCommission', 'orderAmount', 'eventTime'].some(k => previous[k] !== row[k])) {
+        return res.status(400).json({ error: 'Các dòng cùng mã đơn có dữ liệu đối soát mâu thuẫn.' });
+      }
+      uniqueRows.set(key, row);
+    }
+
     const db = ensureDbLoaded();
     let importedCount = 0;
     const errors = [];
 
-    for (let i = 0; i < rows.length; i++) {
-      const r = rows[i];
+    const preparedRows = [...uniqueRows.values()];
+    for (let i = 0; i < preparedRows.length; i++) {
+      const r = preparedRows[i];
       if (!r || typeof r !== 'object') {
         errors.push(`Dòng ${i + 1}: Dữ liệu không hợp lệ.`);
         continue;
@@ -2561,6 +2605,21 @@ function registerCashbackRoutes(app) {
       }
 
       try {
+        const existing = db.orders.find(o => sameOrder(o, orderSn, r.platform));
+        const incomingTime = parseTimestamp(r.eventTime);
+        const existingTime = parseTimestamp(existing?.eventTime);
+        if (existing && incomingTime && existingTime && incomingTime < existingTime) {
+          throw new Error('Báo cáo cũ hơn dữ liệu đã nhập; đã bỏ qua.');
+        }
+        if (existing && incomingTime && incomingTime === existingTime &&
+            (existing.status !== r.status || Number(existing.grossCommission) !== r.totalCommission || Number(existing.orderAmount) !== r.orderAmount)) {
+          throw new Error('Hai báo cáo cùng thời điểm có dữ liệu khác nhau; cần đối soát thủ công.');
+        }
+        if (existing?.status === 'cancelled' && r.status === 'approved' && !incomingTime) {
+          throw new Error('Cần thời điểm xuất báo cáo để duyệt lại đơn đã hủy. Hãy giữ tên file gốc Shopee.');
+        }
+        const attributionId = String(r.userCode || r.sub1 || '').split('-')[0].trim();
+        if (attributionId) await findClickById(attributionId);
         upsertNetworkOrder(db, {
           orderSn,
           rawSubId: r.userCode || r.sub1 || '',
@@ -2568,7 +2627,8 @@ function registerCashbackRoutes(app) {
           orderAmount: r.orderAmount,
           status: normalizeNetworkStatus(r.status),
           platform: r.platform,
-          productName: r.productName
+          productName: r.productName,
+          eventTime: r.eventTime
         });
         importedCount++;
       } catch (err) {
@@ -2576,8 +2636,15 @@ function registerCashbackRoutes(app) {
       }
     }
 
-    recalculateAllWallets({ persist: false });
-    await saveDb(db);
+    if (importedCount > 0) {
+      recalculateAllWallets({ persist: false });
+      recordAuditLog(db, {
+        adminId: req.adminUser.id, adminName: req.adminUser.name,
+        action: 'import_orders', targetId: 'csv',
+        details: { importedCount, errorCount: errors.length, sourceRows: rows.length }
+      });
+      await saveDb(db);
+    }
     logger.logLeave('POST /api/admin/import-orders', { importedCount, errorCount: errors.length });
     return res.json({ importedCount, errors });
   }));
@@ -2594,6 +2661,10 @@ function registerCashbackRoutes(app) {
       });
     }
 
+    if (getPgPool()) {
+      const withdrawal = await settleWithdrawal(id, status, admin);
+      return res.json({ withdrawal });
+    }
     const db = ensureDbLoaded();
     const wd = db.withdrawals.find((w) => w.id === id);
     if (!wd) {
@@ -2609,43 +2680,11 @@ function registerCashbackRoutes(app) {
 
     if (status === 'rejected') {
       await refundWithdrawal(db, wd, admin);
-      recordAuditLog(db, {
-        adminId: admin?.id || 'admin',
-        adminName: admin?.name || admin?.phone || admin?.code || 'Admin',
-        action: 'update_withdrawal',
-        targetId: wd.id,
-        details: { status: 'rejected', amount: wd.amount, userCode: wd.userCode }
-      });
       logger.logLeave('POST /api/admin/withdrawals/update', { id, status: 'rejected' });
       return res.json({ withdrawal: wd });
     }
 
-    await withUserLock(wd.userId, async () => {
-      if (wd.status === 'paid') {
-        const err = new Error('Lệnh rút tiền đã chi trả thành công, không thể thay đổi trạng thái.');
-        err.status = 400;
-        throw err;
-      }
-      if (wd.status === 'rejected') {
-        const err = new Error('Lệnh rút tiền đã bị từ chối trước đó, không thể thay đổi lại.');
-        err.status = 400;
-        throw err;
-      }
-      wd.status = 'paid';
-      wd.processedAt = new Date().toISOString();
-      wd.processedByAdminId = admin?.id || null;
-      wd.processedByAdmin = admin?.username || 'admin';
-      recalculateUserWallet(wd.userId, { persist: false });
-      await saveDb(db);
-    });
-
-    recordAuditLog(db, {
-      adminId: admin?.id || 'admin',
-      adminName: admin?.name || admin?.phone || admin?.code || 'Admin',
-      action: 'update_withdrawal',
-      targetId: wd.id,
-      details: { status: 'paid', amount: wd.amount, userCode: wd.userCode }
-    });
+    await settleWithdrawal(wd.id, 'paid', admin);
 
     logger.logLeave('POST /api/admin/withdrawals/update', { id, status: 'paid' });
     return res.json({ withdrawal: wd });
@@ -2661,6 +2700,10 @@ function registerCashbackRoutes(app) {
       return res.status(400).json({ error: 'Thiếu ID lệnh rút tiền cần hủy.' });
     }
 
+    if (getPgPool()) {
+      const withdrawal = await settleWithdrawal(id, 'rejected', admin);
+      return res.json({ status: 'ok', message: 'Đã hủy và hoàn tiền lệnh rút.', withdrawal });
+    }
     const db = ensureDbLoaded();
     const wd = db.withdrawals.find((w) => w.id === id);
     if (!wd) {
@@ -2681,13 +2724,6 @@ function registerCashbackRoutes(app) {
 
     await refundWithdrawal(db, wd, admin);
 
-    recordAuditLog(db, {
-      adminId: admin?.id || 'admin',
-      adminName: admin?.name || admin?.phone || admin?.code || 'Admin',
-      action: 'cancel_withdrawal',
-      targetId: wd.id,
-      details: { status: 'cancelled', amount: wd.amount, userCode: wd.userCode }
-    });
 
     logger.logLeave('POST /api/admin/withdrawals/cancel', { id });
     return res.json({ status: 'ok', message: `Đã hủy và hoàn tiền lệnh rút #${id} thành công!`, withdrawal: wd });
@@ -2706,58 +2742,16 @@ function registerCashbackRoutes(app) {
       return res.status(400).json({ error: 'Thiếu ID lệnh rút tiền cần xóa.' });
     }
 
-    const db = ensureDbLoaded();
-    const wd = db.withdrawals.find((w) => w.id === id);
-    if (!wd) {
-      return res.status(404).json({ error: 'Không tìm thấy lệnh rút tiền.' });
-    }
-    if (wd.status === 'paid') {
-      return res.status(400).json({
-        error: 'Không thể xóa lệnh rút tiền đã chi trả thành công để bảo toàn lịch sử đối soát.'
-      });
-    }
-
-    if (wd.status === 'pending') {
-      await refundWithdrawal(db, wd, admin);
-    }
-
-    db.withdrawals = db.withdrawals.filter((w) => w.id !== id);
-    recordAuditLog(db, {
-      adminId: admin?.id || 'admin',
-      adminName: admin?.name || admin?.phone || admin?.code || 'Admin',
-      action: 'delete_withdrawal',
-      targetId: id,
-      details: { previousStatus: wd.status, amount: wd.amount, userCode: wd.userCode }
-    });
-    await saveDb(db);
-
-    logger.logLeave('POST /api/admin/withdrawals/delete', { id, deleted: true });
-    return res.json({ status: 'ok', deleted: true, message: `Đã xóa lệnh rút tiền #${id} thành công!` });
+    await archiveWithdrawal(id, admin);
+    logger.logLeave('POST /api/admin/withdrawals/delete', { id, archived: true });
+    return res.json({ status: 'ok', deleted: true, archived: true, message: `Đã lưu trữ lệnh rút tiền #${id}; lịch sử đối soát được giữ lại.` });
   }));
 
-  // Admin One-Click Cleanup of Automated Test/Demo Garbage
+  // Legacy URL retained for older clients; inspection never deletes records.
   app.post('/api/admin/cleanup-test-data', requireAdmin, asyncHandler(async (req, res) => {
-    logger.logEnter('POST /api/admin/cleanup-test-data');
-    const admin = req.adminUser;
-    await reloadStateFromPostgres();
-    const db = ensureDbLoaded();
-    const summary = await purgeTestArtifactsFromDb(db);
-
-    recordAuditLog(db, {
-      adminId: admin?.id || 'admin',
-      adminName: admin?.name || admin?.phone || admin?.code || 'Admin',
-      action: 'cleanup_test_data',
-      targetId: 'system',
-      details: summary
-    });
-    await saveDb(db);
-
-    logger.logLeave('POST /api/admin/cleanup-test-data', summary);
-    return res.json({
-      status: 'ok',
-      summary,
-      message: `Đã dọn sạch ${summary.removedUsers} tài khoản test, ${summary.removedOrders} đơn rác, ${summary.removedWithdrawals} lệnh rút rác và ${summary.removedLedger} sổ cái test.`
-    });
+    await reloadStateFromPostgres({ strict: true });
+    const report = inspectTestArtifacts(ensureDbLoaded());
+    return res.json({ status: 'ok', ...report, message: `Chỉ kiểm tra: ${report.counts.users} tài khoản, ${report.counts.orders} đơn hàng và ${report.counts.withdrawals} lệnh rút cần rà soát. Không có dữ liệu nào bị xóa.` });
   }));
 
   // Admin User Management Action (Reset password, Lock/Unlock, Adjust balance, Reset balance, Delete)
@@ -2792,15 +2786,16 @@ function registerCashbackRoutes(app) {
           );
         }
         recalculateUserWallet(targetUser.id, { persist: false });
+        recordAuditLog(db, {
+          adminId,
+          adminName,
+          action: 'reset_balance',
+          targetId: targetUser.id,
+          details: { userCode: targetUser.code, previousBalance: currentAvailable }
+        });
         await saveDb(db);
       });
-      recordAuditLog(db, {
-        adminId,
-        adminName,
-        action: 'reset_balance',
-        targetId: targetUser.id,
-        details: { userCode: targetUser.code, previousBalance: currentAvailable }
-      });
+
       logger.logLeave('POST /api/admin/users/action', { action, userCode: targetUser.code });
       return res.json({
         status: 'ok',
@@ -2814,7 +2809,6 @@ function registerCashbackRoutes(app) {
       }
       targetUser.passwordHash = await hashPasswordAsync(String(newPassword).trim());
       targetUser.tokenVersion = Number(targetUser.tokenVersion || 1) + 1;
-      await saveDb(db);
       recordAuditLog(db, {
         adminId,
         adminName,
@@ -2822,6 +2816,7 @@ function registerCashbackRoutes(app) {
         targetId: targetUser.id,
         details: { userCode: targetUser.code }
       });
+      await saveDb(db);
       logger.logLeave('POST /api/admin/users/action', { action, userCode: targetUser.code });
       return res.json({ status: 'ok', message: `Đã đổi mật khẩu cho ${targetUser.code} thành công!` });
     }
@@ -2832,7 +2827,6 @@ function registerCashbackRoutes(app) {
       }
       targetUser.accountLocked = !targetUser.accountLocked;
       targetUser.tokenVersion = Number(targetUser.tokenVersion || 1) + 1;
-      await saveDb(db);
       recordAuditLog(db, {
         adminId,
         adminName,
@@ -2840,6 +2834,7 @@ function registerCashbackRoutes(app) {
         targetId: targetUser.id,
         details: { userCode: targetUser.code, accountLocked: targetUser.accountLocked }
       });
+      await saveDb(db);
       const msg = targetUser.accountLocked
         ? `Đã khóa tài khoản ${targetUser.code} (chặn đăng nhập & rút tiền)!`
         : `Đã mở khóa tài khoản cho ${targetUser.code}!`;
@@ -2866,16 +2861,17 @@ function registerCashbackRoutes(app) {
           String(note || `Điều chỉnh từ Quản trị viên (${adminName})`).trim().slice(0, 100)
         );
         recalculateUserWallet(targetUser.id, { persist: false });
+        recordAuditLog(db, {
+          adminId,
+          adminName,
+          action: 'adjust_balance',
+          targetId: targetUser.id,
+          details: { userCode: targetUser.code, amount: num, note }
+        });
         await saveDb(db);
       });
 
-      recordAuditLog(db, {
-        adminId,
-        adminName,
-        action: 'adjust_balance',
-        targetId: targetUser.id,
-        details: { userCode: targetUser.code, amount: num, note }
-      });
+
 
       logger.log('admin_audit', `Admin ${adminName} adjusted balance of ${targetUser.code} by ${num}`, {
         adminId,
@@ -2909,7 +2905,6 @@ function registerCashbackRoutes(app) {
         targetUser.deletedByAdminId = adminId;
         targetUser.tokenVersion = Number(targetUser.tokenVersion || 1) + 1;
         targetUser.phone = `DELETED_${Date.now()}_${String(targetUser.phone || '')}`;
-        await saveDb(db);
         recordAuditLog(db, {
           adminId,
           adminName,
@@ -2917,6 +2912,7 @@ function registerCashbackRoutes(app) {
           targetId: targetUser.id,
           details: { userCode: targetUser.code, reason: 'Has financial records' }
         });
+        await saveDb(db);
         logger.log('admin_audit', `Admin ${adminCode} soft-deleted user ${targetUser.code} (retained for ledger audit)`, {
           adminId,
           targetUserId: targetUser.id
@@ -2930,7 +2926,6 @@ function registerCashbackRoutes(app) {
 
       // If user has zero financial records, safe to hard delete
       db.users = db.users.filter((u) => u.id !== userId);
-      await saveDb(db);
       recordAuditLog(db, {
         adminId,
         adminName,
@@ -2938,6 +2933,7 @@ function registerCashbackRoutes(app) {
         targetId: userId,
         details: { userCode: targetUser.code }
       });
+      await saveDb(db);
       logger.log('admin_audit', `Admin ${adminCode} permanently deleted empty user ${targetUser.code}`, {
         adminId,
         targetUserId: targetUser.id

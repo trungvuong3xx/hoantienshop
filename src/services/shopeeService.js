@@ -311,14 +311,24 @@ async function fetchAddlivetagProductData({ platform, itemId, url, apiKey }) {
  * Fetch conversion report from Shopee Open API for Cron auto-sync.
  */
 async function fetchShopeeConversionReport(appId, appSecret, limit = 50) {
-  logger.logEnter('fetchShopeeConversionReport', { limit });
-  const query = `{ conversionReport(limit: ${Number(
-    limit
-  )}) { nodes { conversionId purchaseTime totalCommission netCommission utmContent orders { orderId orderStatus items { itemId itemName itemPrice itemCommission } } } } }`;
-  const data = await callShopeeGraphql(query, appId, appSecret);
-  const nodes = data?.conversionReport?.nodes || [];
-  logger.logLeave('fetchShopeeConversionReport', { count: nodes.length });
-  return nodes;
+  const pageSize = Math.max(1, Math.min(500, Math.floor(Number(limit) || 50)));
+  const nodes = [], cursors = new Set();
+  let cursor = null;
+  const deadline = Date.now() + 22000;
+  for (let page = 0; page < 100 && Date.now() < deadline; page++) {
+    const query = `{ conversionReport(limit: ${pageSize}${cursor ? ', scrollId: ' + JSON.stringify(cursor) : ''}) { nodes { conversionId purchaseTime totalCommission netCommission utmContent orders { orderId orderStatus items { itemId itemName itemPrice itemCommission } } } pageInfo { hasNextPage scrollId } } }`;
+    const data = await callShopeeGraphql(query, appId, appSecret);
+    const report = data?.conversionReport;
+    if (!Array.isArray(report?.nodes) || typeof report.pageInfo?.hasNextPage !== 'boolean') {
+      throw new Error('Shopee report thiếu dữ liệu hoặc thông tin phân trang; chưa đánh dấu đồng bộ hoàn tất.');
+    }
+    nodes.push(...report.nodes);
+    if (!report.pageInfo.hasNextPage) return nodes;
+    cursor = report.pageInfo.scrollId;
+    if (!cursor || cursors.has(cursor) || report.nodes.length === 0) throw new Error('Shopee report trả cursor không hợp lệ hoặc lặp lại.');
+    cursors.add(cursor);
+  }
+  throw new Error('Shopee report chưa lấy đủ trang trong giới hạn tác vụ; cần chạy đồng bộ trên worker dài hạn.');
 }
 
 /**

@@ -10,6 +10,9 @@ const { spawnSync } = require('child_process');
 const path = require('path');
 
 const TEST_SUITES = [
+  'test_csv_import.js',
+  'test_final_remediation.js',
+  'test_security_regressions.js',
   'clicks-ttl.test.js',
   'referral_sync.test.js',
   'wallet-ledger.test.js',
@@ -54,7 +57,8 @@ async function runAllTests() {
     const startTime = Date.now();
     const child = spawnSync(process.execPath, [suitePath], {
       stdio: 'inherit',
-      env: { ...process.env, NODE_ENV: 'test' }
+      env: { ...Object.fromEntries(Object.entries(process.env).filter(([key]) => ['PATH', 'SYSTEMROOT', 'COMSPEC', 'TEMP', 'TMP', 'USERPROFILE', 'APPDATA', 'LOCALAPPDATA', 'NODE_OPTIONS'].includes(key.toUpperCase()))), NODE_ENV: 'test', TEST_DATABASE_URL: '' },
+      timeout: 60000
     });
     const duration = Date.now() - startTime;
 

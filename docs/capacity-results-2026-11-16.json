@@ -1,0 +1,70 @@
+{
+  "model": {
+    "users": 20,
+    "clicksPerUserDay": 5000,
+    "conversionsPerUserDay": 100,
+    "seedClicks": 60000,
+    "providerDelayMs": 100,
+    "logging": "muted",
+    "limiter": "real control test, then bypassed for saturation measurement"
+  },
+  "stages": [
+    {
+      "label": "real-rate-limit-one-IP",
+      "requests": 40,
+      "concurrency": 1,
+      "seconds": 38.6009214,
+      "p50Ms": 1378.0869999999995,
+      "p95Ms": 1435.4696000000004,
+      "p99Ms": 1493.5645000000004,
+      "statuses": {
+        "200": 30,
+        "429": 10
+      },
+      "invalid": 0,
+      "requestsPerSecond": 1.036244694407735
+    },
+    {
+      "label": "100000-redirects-20-users",
+      "requests": 100000,
+      "concurrency": 20,
+      "seconds": 41.7352592,
+      "p50Ms": 7.36600000000908,
+      "p95Ms": 16.71179999999731,
+      "p99Ms": 23.611100000001898,
+      "statuses": {
+        "302": 100000
+      },
+      "invalid": 0,
+      "requestsPerSecond": 2396.0555634934212
+    },
+    {
+      "label": "2000-conversions-20-users-limiter-bypassed",
+      "requests": 2000,
+      "concurrency": 20,
+      "seconds": 283.1508384,
+      "p50Ms": 2817.42270000001,
+      "p95Ms": 3029.188200000004,
+      "p99Ms": 3274.6445999999996,
+      "statuses": {
+        "200": 2000
+      },
+      "invalid": 0,
+      "requestsPerSecond": 7.063373046328935
+    }
+  ],
+  "redirectStats": {
+    "rssMB": 266.2890625,
+    "heapMB": 51.20960998535156,
+    "eventLoopP99Ms": 56.819711,
+    "eventLoopMaxMs": 130.547711
+  },
+  "persistedNewClicks": 2000,
+  "convertStats": {
+    "rssMB": 318.5859375,
+    "heapMB": 57.34613800048828,
+    "eventLoopP99Ms": 110.886911,
+    "eventLoopMaxMs": 384.565247
+  },
+  "databaseBytes": 37844671
+}

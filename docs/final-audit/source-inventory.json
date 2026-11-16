@@ -1,0 +1,407 @@
+[
+  {
+    "path": "server.js",
+    "bytes": 11045,
+    "sha256": "7da19ae8c77b08fd763b6d9cae6ce30942277be8d01ca0b8b11102b52671c492",
+    "lines": 311,
+    "syntaxExit": 0,
+    "syntaxError": ""
+  },
+  {
+    "path": "src\\data\\seedDb.json",
+    "bytes": 1752,
+    "sha256": "ddc151b3c4d2308c6f7cb97521e2aee14de9e334122c6e9773cc99428f8231b5",
+    "lines": 56
+  },
+  {
+    "path": "src\\repositories\\postgresRepository.js",
+    "bytes": 9745,
+    "sha256": "2ef8957b099116465c1fc4a7ab38c95147e8864b8baeea44a0b8fc5dd5c68e71",
+    "lines": 234,
+    "syntaxExit": 0,
+    "syntaxError": ""
+  },
+  {
+    "path": "src\\repositories\\withdrawalRepository.js",
+    "bytes": 5091,
+    "sha256": "4a84e6ca0d09c71f5eafe28a1f72a80ae06c662a154285d9ffae3520a88f0943",
+    "lines": 89,
+    "syntaxExit": 0,
+    "syntaxError": ""
+  },
+  {
+    "path": "src\\services\\cashbackController.js",
+    "bytes": 116972,
+    "sha256": "b2f2fed1ab1270a8d1df95c6591aa3a5b955a9cb7be3e45118dc507bf1e84535",
+    "lines": 2934,
+    "syntaxExit": 0,
+    "syntaxError": ""
+  },
+  {
+    "path": "src\\services\\converterService.js",
+    "bytes": 5704,
+    "sha256": "63f5d9b163f32037f98ded34bddcc06e3d16a7c4e7da48494ceb72fb937c4620",
+    "lines": 174,
+    "syntaxExit": 0,
+    "syntaxError": ""
+  },
+  {
+    "path": "src\\services\\dbService.js",
+    "bytes": 109038,
+    "sha256": "a8e48578fb4d375a35027f815993ef53d2740840d5666dd6e81b59f078abbc1e",
+    "lines": 2834,
+    "syntaxExit": 0,
+    "syntaxError": ""
+  },
+  {
+    "path": "src\\services\\orderReconciliationService.js",
+    "bytes": 14703,
+    "sha256": "63b63c1cc31fa72975353c63f259d9b8ccce4dfaec23d269a06db956e0c82c33",
+    "lines": 451,
+    "syntaxExit": 0,
+    "syntaxError": ""
+  },
+  {
+    "path": "src\\services\\shopeeService.js",
+    "bytes": 14714,
+    "sha256": "77e93be1a4371aca2e381626b26bf67dc881cfe56f75c21dfa3687d4931c631b",
+    "lines": 422,
+    "syntaxExit": 0,
+    "syntaxError": ""
+  },
+  {
+    "path": "src\\services\\shortenerService.js",
+    "bytes": 1567,
+    "sha256": "1efdf4256d51348395865b343b49b24e74c9ea9a3a24b4ab732f3624f1be9a17",
+    "lines": 49,
+    "syntaxExit": 0,
+    "syntaxError": ""
+  },
+  {
+    "path": "src\\services\\tiktokService.js",
+    "bytes": 7820,
+    "sha256": "a0da197869c43e507fff4e1d14c4ef2e18846a246745e6cd9c05c672b6c539fb",
+    "lines": 240,
+    "syntaxExit": 0,
+    "syntaxError": ""
+  },
+  {
+    "path": "src\\services\\urlResolver.js",
+    "bytes": 37191,
+    "sha256": "5dd9fbdf96f0eba4d4a4accb88dd6cc15346eb3d9553b585c8a511de702d4730",
+    "lines": 1155,
+    "syntaxExit": 0,
+    "syntaxError": ""
+  },
+  {
+    "path": "src\\services\\webhookSecurityService.js",
+    "bytes": 5083,
+    "sha256": "2af46bc39d2735ccd826f65a72a9b88b9efde7f3bafe13b4bcb5abc303586785",
+    "lines": 135,
+    "syntaxExit": 0,
+    "syntaxError": ""
+  },
+  {
+    "path": "src\\utils\\clickManager.js",
+    "bytes": 2469,
+    "sha256": "1471a885416f43eb939b1627ea3cdf95986ca0c80d81694699c276c6b8246dea",
+    "lines": 82,
+    "syntaxExit": 0,
+    "syntaxError": ""
+  },
+  {
+    "path": "src\\utils\\logger.js",
+    "bytes": 2189,
+    "sha256": "04344ef4f1d9ef1185886aad8d88af78e9531ad0b12e4846d1018e22b5c9669a",
+    "lines": 72,
+    "syntaxExit": 0,
+    "syntaxError": ""
+  },
+  {
+    "path": "src\\utils\\securityMiddleware.js",
+    "bytes": 10905,
+    "sha256": "d5950e4f65abb12697aa61cdff5253c02f477036c5f27c76bb3ed5a9701131b5",
+    "lines": 327,
+    "syntaxExit": 0,
+    "syntaxError": ""
+  },
+  {
+    "path": "src\\utils\\urlResolver.js",
+    "bytes": 93,
+    "sha256": "6d7b860877894967a39e4152610eeba7eeb960a9f69243ff568236fd6db0da88",
+    "lines": 2,
+    "syntaxExit": 0,
+    "syntaxError": ""
+  },
+  {
+    "path": "src\\utils\\zalo.js",
+    "bytes": 2907,
+    "sha256": "bb1bc701457dbc3f81109ff45ac43acff67d0c7388db319fe7be78fcabe17e5e",
+    "lines": 103,
+    "syntaxExit": 0,
+    "syntaxError": ""
+  },
+  {
+    "path": "public\\app.js",
+    "bytes": 139404,
+    "sha256": "316fba37c86acac808292a2653dfde1a3f5089cf76cddd02896f9fffd3c97a14",
+    "lines": 3515,
+    "syntaxExit": 0,
+    "syntaxError": "",
+    "gzipBytes": 30880
+  },
+  {
+    "path": "public\\index.html",
+    "bytes": 126810,
+    "sha256": "f69eedeb82e7a99070433ece662c206db89cd0e49b10c1dff4bf7e66c060dd10",
+    "lines": 1803,
+    "gzipBytes": 23969
+  },
+  {
+    "path": "public\\offline.html",
+    "bytes": 4698,
+    "sha256": "55ac231dcf29b78bbd0cbe3bfbbe6b85eb5848a439616111492c868842e9dba5",
+    "lines": 145,
+    "gzipBytes": 1776
+  },
+  {
+    "path": "public\\styles.css",
+    "bytes": 80889,
+    "sha256": "d505b994873d7722557969b3789a79a1a15e0d4f0f184eaaa0a9670694785be8",
+    "lines": 4349,
+    "gzipBytes": 14426
+  },
+  {
+    "path": "public\\sw.js",
+    "bytes": 1092,
+    "sha256": "209af625239513315337a2f359971476ea8d2e7bf663df8f7dc4a5fe917ff80b",
+    "lines": 35,
+    "syntaxExit": 0,
+    "syntaxError": "",
+    "gzipBytes": 524
+  },
+  {
+    "path": "tests\\clicks-ttl.test.js",
+    "bytes": 4693,
+    "sha256": "07312d2d7974fa48c40d985dea836a7270c059f0e01edbb7c92255ebcb2b17e5",
+    "lines": 122,
+    "syntaxExit": 0,
+    "syntaxError": ""
+  },
+  {
+    "path": "tests\\final-audit-diagnostics.js",
+    "bytes": 25695,
+    "sha256": "43eddaf1ef7f8fefd06264a98b7f81bb7b372adde10b38e745810920e97dd250",
+    "lines": 294,
+    "syntaxExit": 0,
+    "syntaxError": ""
+  },
+  {
+    "path": "tests\\load.capacity.js",
+    "bytes": 7139,
+    "sha256": "ddaaca1e44b05bbff64edf9df98ae5b6991c73b0d7c7da5030e1138bafc36fc9",
+    "lines": 66,
+    "syntaxExit": 0,
+    "syntaxError": ""
+  },
+  {
+    "path": "tests\\postgres.integration.js",
+    "bytes": 22288,
+    "sha256": "b57e93393d96886ac852095af20fd9381e491cc3b4ad63f6a43a1a362fc2243b",
+    "lines": 261,
+    "syntaxExit": 0,
+    "syntaxError": ""
+  },
+  {
+    "path": "tests\\referral_sync.test.js",
+    "bytes": 11603,
+    "sha256": "6c6052068c6b32a428f59442afc8187517912adb0dec43243012c01e1f277032",
+    "lines": 232,
+    "syntaxExit": 0,
+    "syntaxError": ""
+  },
+  {
+    "path": "tests\\run_all_tests.js",
+    "bytes": 4183,
+    "sha256": "c6560f5211fa7d3c8795fb8f3f881b6ded9831e03ff9d674983b2a1a9996efe8",
+    "lines": 116,
+    "syntaxExit": 0,
+    "syntaxError": ""
+  },
+  {
+    "path": "tests\\test_audit_round2.js",
+    "bytes": 12570,
+    "sha256": "f67dee79876ffabc5538ab605e9e850b93865b281b45e3cbcb5bf8f98df663b8",
+    "lines": 303,
+    "syntaxExit": 0,
+    "syntaxError": ""
+  },
+  {
+    "path": "tests\\test_concurrency_lock.js",
+    "bytes": 14008,
+    "sha256": "41a22c1d19ab704ad2e945459378ebdf55e13db67050e8f7121b9a2cdde7e2ac",
+    "lines": 389,
+    "syntaxExit": 0,
+    "syntaxError": ""
+  },
+  {
+    "path": "tests\\test_due_diligence_fixes.js",
+    "bytes": 16026,
+    "sha256": "a675044c28a39728525c9954d26ef75d79822a694da02537cd80a442edcba9bc",
+    "lines": 375,
+    "syntaxExit": 0,
+    "syntaxError": ""
+  },
+  {
+    "path": "tests\\test_manual_checklist_simulation.js",
+    "bytes": 13477,
+    "sha256": "2aa9553a0f4b8911ca10bc11d660129e07b1737d09ae54737ac8b4af9079336e",
+    "lines": 330,
+    "syntaxExit": 0,
+    "syntaxError": ""
+  },
+  {
+    "path": "tests\\test_mobile_first_and_ux_upgrade.js",
+    "bytes": 9130,
+    "sha256": "aaafd74a6409febcfebf2e4e98db88870daf24f31101560ccc5d43437053eb5c",
+    "lines": 190,
+    "syntaxExit": 0,
+    "syntaxError": ""
+  },
+  {
+    "path": "tests\\test_p1_backend_fixes.js",
+    "bytes": 21883,
+    "sha256": "995f3dea3ee8e1b6f7cb009bc1d165fc8fdd39efb00abb7103183f4961027e22",
+    "lines": 514,
+    "syntaxExit": 0,
+    "syntaxError": ""
+  },
+  {
+    "path": "tests\\test_p1_frontend_fixes.js",
+    "bytes": 16172,
+    "sha256": "5207c8cf4b9843e8de272ff244984a6df740a586402d44538c79c5077d3dab9d",
+    "lines": 347,
+    "syntaxExit": 0,
+    "syntaxError": ""
+  },
+  {
+    "path": "tests\\test_p2_polish.js",
+    "bytes": 7388,
+    "sha256": "c942239e9012763bf3d726b85ef80c22dfa278130c9d94ad2cc166bb31478dfe",
+    "lines": 193,
+    "syntaxExit": 0,
+    "syntaxError": ""
+  },
+  {
+    "path": "tests\\test_phase2_phase3_due_diligence.js",
+    "bytes": 25770,
+    "sha256": "b60efaf4d7a228906e645a25c399088ee3b0be26c29bdd6956bc383377f1e59a",
+    "lines": 589,
+    "syntaxExit": 0,
+    "syntaxError": ""
+  },
+  {
+    "path": "tests\\test_product_features.js",
+    "bytes": 3835,
+    "sha256": "8c3176555cf16670a92ef0eaac329c0aba35ecd12b4279f709d3b06a262d9b9b",
+    "lines": 81,
+    "syntaxExit": 0,
+    "syntaxError": ""
+  },
+  {
+    "path": "tests\\test_security_regressions.js",
+    "bytes": 3730,
+    "sha256": "49bf3d3ff36b1b0096d5558164f5ff92cefe639e10967568c7c7a09c29339908",
+    "lines": 51,
+    "syntaxExit": 0,
+    "syntaxError": ""
+  },
+  {
+    "path": "tests\\test_shopee_sync_schema.js",
+    "bytes": 15496,
+    "sha256": "97c84dc88ff3ef2e0b82cacebe229b2e8ce1eff0a1aa89f72de5b27704b3ae2a",
+    "lines": 349,
+    "syntaxExit": 0,
+    "syntaxError": ""
+  },
+  {
+    "path": "tests\\test_upsert_order.js",
+    "bytes": 14962,
+    "sha256": "b56b9a22be8a2b537d82621b8466b7708586d78bd16df5bdbf5e250df3728bd4",
+    "lines": 372,
+    "syntaxExit": 0,
+    "syntaxError": ""
+  },
+  {
+    "path": "tests\\test_url_resolver.js",
+    "bytes": 6532,
+    "sha256": "e7fa96e3639b4a9c4a73c1dbbb17add28e3f608fa8492199cc47c3a2ea40f36a",
+    "lines": 124,
+    "syntaxExit": 0,
+    "syntaxError": ""
+  },
+  {
+    "path": "tests\\test_webhook_security.js",
+    "bytes": 16813,
+    "sha256": "44bd4ba348f9ae756ac0150491f5d14902b7e539b86bb90a7117118b31c3d9f2",
+    "lines": 380,
+    "syntaxExit": 0,
+    "syntaxError": ""
+  },
+  {
+    "path": "tests\\test_zalo_admin_ui.js",
+    "bytes": 18289,
+    "sha256": "e72ba6fcf7bada5e6ecf5e2a9991125e358b2c7b8624fdb05cef042e231fc268",
+    "lines": 519,
+    "syntaxExit": 0,
+    "syntaxError": ""
+  },
+  {
+    "path": "tests\\test_zalo_frontend.js",
+    "bytes": 12248,
+    "sha256": "c431496790394237bd3e645d4b29bb40bc330392826436c9de3e1603d4e4bfec",
+    "lines": 308,
+    "syntaxExit": 0,
+    "syntaxError": ""
+  },
+  {
+    "path": "tests\\test_zalo_safety_faq.js",
+    "bytes": 6503,
+    "sha256": "a527c6152e2f0da80d6d7921fab3902c36153a483b88ae94c613d444b590ab0f",
+    "lines": 140,
+    "syntaxExit": 0,
+    "syntaxError": ""
+  },
+  {
+    "path": "tests\\wallet-ledger.test.js",
+    "bytes": 15221,
+    "sha256": "f13c052e6d297fe56d00198a6bce977ee163a9806160bd2a25c1ed882a2f2f8d",
+    "lines": 374,
+    "syntaxExit": 0,
+    "syntaxError": ""
+  },
+  {
+    "path": "tests\\zalo.test.js",
+    "bytes": 11923,
+    "sha256": "5cf54225ddef579672fe2b3a0f878f205aed04cb51401f275bca6c2e9b8078fd",
+    "lines": 344,
+    "syntaxExit": 0,
+    "syntaxError": ""
+  },
+  {
+    "path": "scripts\\clean_test_data.js",
+    "bytes": 4137,
+    "sha256": "97b1795733be5bd06e31d592f95b54a24f119be39b566f8ec4284c7cb4b0975d",
+    "lines": 115,
+    "syntaxExit": 0,
+    "syntaxError": ""
+  },
+  {
+    "path": "api\\index.js",
+    "bytes": 57,
+    "sha256": "8d99935743c8def9926d5ec78cd4511f68137f4af2f038cb065d067a7017bdb3",
+    "lines": 3,
+    "syntaxExit": 0,
+    "syntaxError": ""
+  }
+]
