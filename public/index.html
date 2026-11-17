@@ -64,7 +64,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link id="webFont" media="print" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/styles.css?v=2.3.2" />
+  <link rel="stylesheet" href="/styles.css?v=2.3.3" />
   <link rel="stylesheet" href="/selectPopup.css?v=1" />
   <link rel="stylesheet" href="/adminMobile.css?v=1" />
   <script src="/csvImport.js?v=2.3.2" defer></script>
@@ -1441,8 +1441,11 @@
 
         <div class="modal-section-divider">
           <h4 style="margin: 0 0 8px 0; font-size: 14px;">1. Đổi / Cấp Lại Mật Khẩu</h4>
-          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-            <input type="password" id="manageNewPassword" autocomplete="new-password" minlength="6" maxlength="64" placeholder="Nhập mật khẩu mới (tối thiểu 6 ký tự)..." style="flex: 1; min-width: 180px;" />
+          <div class="manage-password-grid">
+            <div class="admin-adjust-field manage-full-width">
+              <label for="manageNewPassword">Mật khẩu mới</label>
+              <input type="password" id="manageNewPassword" autocomplete="new-password" minlength="6" maxlength="64" placeholder="Nhập ít nhất 6 ký tự" />
+            </div>
             <button type="button" class="btn btn-outline btn-sm" id="btnGenerateRandomPwd" title="Tạo mật khẩu ngẫu nhiên an toàn">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1"/><circle cx="15.5" cy="15.5" r="1"/><circle cx="15.5" cy="8.5" r="1"/><circle cx="8.5" cy="15.5" r="1"/></svg>
               <span>Tạo ngẫu nhiên</span>
@@ -1469,8 +1472,8 @@
               <input type="number" id="manageAdjustAmount" inputmode="numeric" placeholder="Nhập số tiền..." />
             </div>
           </div>
-          <div class="admin-adjust-row">
-            <div class="admin-adjust-field">
+          <div class="admin-adjust-row manage-adjust-submit">
+            <div class="admin-adjust-field manage-full-width">
               <label for="manageAdjustNote">Lý do điều chỉnh</label>
               <input type="text" id="manageAdjustNote" placeholder="Thưởng sự kiện, đền bù, phạt..." />
             </div>
@@ -1479,15 +1482,17 @@
               <span>Xác Nhận Điều Chỉnh</span>
             </button>
           </div>
-          <div style="text-align: right;">
+          <details class="manage-advanced">
+            <summary>Thao tác nâng cao với số dư</summary>
             <button type="button" class="btn btn-warning btn-sm btn-icon-svg" id="btnResetUserBalanceZero">
               <svg class="svg-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
               <span>Đặt Lại Số Dư = 0đ</span>
             </button>
-          </div>
+          </details>
         </div>
 
-        <div class="modal-section-divider" style="display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap;">
+        <div class="modal-section-divider manage-account-actions">
+          <h4>3. Trạng thái tài khoản</h4>
           <button type="button" class="btn btn-outline btn-sm btn-icon-svg" id="btnToggleUserLock">
             <svg class="svg-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
             <span>Khóa / Mở Khóa Tài Khoản</span>

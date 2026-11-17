@@ -81,6 +81,40 @@ body {
   #userManageModal .admin-adjust-row { grid-template-columns: minmax(0, 1fr); }
 }
 
+/* Member management: consistent fields and deliberate action hierarchy. */
+#userManageModal .modal-body-form { gap: 20px !important; padding: 20px; }
+#userManageModal .modal-info-card { padding: 14px 16px; line-height: 1.8; }
+#userManageModal .modal-section-divider { padding-top: 18px; border-top: 1px solid #e2e8f0; }
+#userManageModal .modal-section-divider h4 { margin: 0 0 14px !important; font-size: 14px; }
+#userManageModal input:not([type="hidden"]),
+#userManageModal select,
+#userManageModal .app-choice-trigger,
+#userManageModal .btn { min-height: 46px; height: auto; padding: 11px 12px; border-radius: 10px; font-size: 14px; line-height: 22px; box-sizing: border-box; }
+#userManageModal .btn { display: inline-flex; justify-content: center; align-items: center; gap: 6px; white-space: normal; text-align: center; }
+#userManageModal .btn svg { flex-shrink: 0; }
+#userManageModal .admin-adjust-field { align-content: start; gap: 8px; }
+#userManageModal .admin-adjust-row { align-items: start; gap: 12px; margin-bottom: 14px; }
+#userManageModal .manage-password-grid,
+#userManageModal .manage-account-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+#userManageModal .manage-full-width,
+#userManageModal .manage-account-actions h4,
+#userManageModal #btnAdjustUserBalance { grid-column: 1 / -1; }
+#userManageModal .manage-account-actions h4 { margin-bottom: 0 !important; }
+#userManageModal .manage-advanced { margin-top: 12px; border: 1px solid #e2e8f0; border-radius: 10px; padding: 0 12px; }
+#userManageModal .manage-advanced summary { cursor: pointer; min-height: 44px; padding: 12px 0; font-size: 13px; color: #64748b; }
+#userManageModal .manage-advanced .btn { width: 100%; margin-bottom: 12px; background: #fff7ed; color: #9a3412; border: 1px solid #fed7aa; }
+#userManageModal #btnDeleteUser { background: #fff1f2; border: 1px solid #fecdd3; }
+#userManageModal .admin-adjust-preview:empty { display: none; }
+#userManageModal .admin-adjust-preview:not(:empty) { margin: 0 0 14px; padding: 10px 12px; background: #f0fdf4; border-radius: 8px; }
+@media (max-width: 640px) {
+  #userManageModal .modal-body-form { padding: 16px; }
+  #userManageModal .admin-adjust-row { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 374px) {
+  #userManageModal .manage-password-grid,
+  #userManageModal .manage-account-actions { grid-template-columns: minmax(0, 1fr); }
+}
+
 /* Navbar */
 .navbar {
   position: sticky;

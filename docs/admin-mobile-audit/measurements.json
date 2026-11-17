@@ -450,7 +450,7 @@
     "modal": "userManageModal",
     "clientWidth": 518,
     "scrollWidth": 518,
-    "amountWidth": 235
+    "amountWidth": 233
   },
   {
     "width": 1440,
@@ -467,11 +467,11 @@
   {
     "width": 718,
     "enhancementBlocked": true,
-    "amountWidth": 232.78659057617188
+    "amountWidth": 231.01480102539062
   },
   {
     "width": 1440,
     "enhancementBlocked": true,
-    "amountWidth": 233.64886474609375
+    "amountWidth": 231.65838623046875
   }
 ]

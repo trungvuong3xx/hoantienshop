@@ -1,0 +1,466 @@
+{
+  "measuredAt": "2026-11-17T07:54:42.443Z",
+  "origin": "https://hoantiensan.online",
+  "version": {
+    "cache": "lila-pwa-v7",
+    "app": "/app.js?v=2.3.5",
+    "nonblockingFont": true
+  },
+  "methodology": "3 new browser contexts per profile; fresh and repeat visit each; mobile viewport; simulated 4G = 1.6 Mbps down, 750 Kbps up, 150ms latency, CPU x4 slowdown. LCP observed 1 second after config response; anonymous only.",
+  "summary": [
+    {
+      "profile": "current-network",
+      "visit": "fresh",
+      "ttfb": 80,
+      "fcp": 464,
+      "lcpObserved": 652,
+      "domReady": 605,
+      "configReady": 912,
+      "configDuration": 309,
+      "transferredBytes": 130487
+    },
+    {
+      "profile": "current-network",
+      "visit": "repeat",
+      "ttfb": 6,
+      "fcp": 128,
+      "lcpObserved": 300,
+      "domReady": 69,
+      "configReady": 351,
+      "configDuration": 284,
+      "transferredBytes": 600
+    },
+    {
+      "profile": "simulated-mobile-4g",
+      "visit": "fresh",
+      "ttfb": 202,
+      "fcp": 1000,
+      "lcpObserved": 1180,
+      "domReady": 1039,
+      "configReady": 1321,
+      "configDuration": 294,
+      "transferredBytes": 92596
+    },
+    {
+      "profile": "simulated-mobile-4g",
+      "visit": "repeat",
+      "ttfb": 5,
+      "fcp": 128,
+      "lcpObserved": 344,
+      "domReady": 150,
+      "configReady": 432,
+      "configDuration": 289,
+      "transferredBytes": 600
+    }
+  ],
+  "rows": [
+    {
+      "profile": "current-network",
+      "sample": 1,
+      "visit": "fresh",
+      "http": 200,
+      "configStatus": 200,
+      "ttfb": 86,
+      "fcp": 1404,
+      "lcpObserved": 1472,
+      "domReady": 1209,
+      "configReady": 5880,
+      "configDuration": 4675,
+      "transferredBytes": 130487,
+      "swControlled": true,
+      "slowest": [
+        {
+          "url": "https://hoantiensan.online/api/public-config",
+          "ms": 4675
+        },
+        {
+          "url": "https://hoantiensan.online/styles.css",
+          "ms": 545
+        },
+        {
+          "url": "https://hoantiensan.online/tiktokReply.js",
+          "ms": 535
+        },
+        {
+          "url": "https://hoantiensan.online/app.js",
+          "ms": 345
+        }
+      ],
+      "errors": []
+    },
+    {
+      "profile": "current-network",
+      "sample": 1,
+      "visit": "repeat",
+      "http": 200,
+      "configStatus": 200,
+      "ttfb": 7,
+      "fcp": 352,
+      "lcpObserved": 392,
+      "domReady": 332,
+      "configReady": 609,
+      "configDuration": 284,
+      "transferredBytes": 600,
+      "swControlled": true,
+      "slowest": [
+        {
+          "url": "https://hoantiensan.online/api/public-config",
+          "ms": 284
+        },
+        {
+          "url": "https://hoantiensan.online/icon-192.png",
+          "ms": 27
+        },
+        {
+          "url": "https://hoantiensan.online/adminMobile.js",
+          "ms": 4
+        },
+        {
+          "url": "https://hoantiensan.online/tiktokReply.js",
+          "ms": 4
+        }
+      ],
+      "errors": []
+    },
+    {
+      "profile": "current-network",
+      "sample": 2,
+      "visit": "fresh",
+      "http": 200,
+      "configStatus": 200,
+      "ttfb": 80,
+      "fcp": 464,
+      "lcpObserved": 652,
+      "domReady": 605,
+      "configReady": 912,
+      "configDuration": 309,
+      "transferredBytes": 130487,
+      "swControlled": true,
+      "slowest": [
+        {
+          "url": "https://hoantiensan.online/api/public-config",
+          "ms": 309
+        },
+        {
+          "url": "https://fonts.googleapis.com/css2",
+          "ms": 185
+        },
+        {
+          "url": "https://hoantiensan.online/app.js",
+          "ms": 53
+        },
+        {
+          "url": "https://hoantiensan.online/adminMobile.js",
+          "ms": 42
+        }
+      ],
+      "errors": []
+    },
+    {
+      "profile": "current-network",
+      "sample": 2,
+      "visit": "repeat",
+      "http": 200,
+      "configStatus": 200,
+      "ttfb": 6,
+      "fcp": 120,
+      "lcpObserved": 268,
+      "domReady": 69,
+      "configReady": 351,
+      "configDuration": 284,
+      "transferredBytes": 600,
+      "swControlled": true,
+      "slowest": [
+        {
+          "url": "https://hoantiensan.online/api/public-config",
+          "ms": 284
+        },
+        {
+          "url": "https://hoantiensan.online/icon-192.png",
+          "ms": 32
+        },
+        {
+          "url": "https://hoantiensan.online/adminMobile.js",
+          "ms": 9
+        },
+        {
+          "url": "https://hoantiensan.online/selectPopup.js",
+          "ms": 9
+        }
+      ],
+      "errors": []
+    },
+    {
+      "profile": "current-network",
+      "sample": 3,
+      "visit": "fresh",
+      "http": 200,
+      "configStatus": 200,
+      "ttfb": 80,
+      "fcp": 464,
+      "lcpObserved": 624,
+      "domReady": 578,
+      "configReady": 854,
+      "configDuration": 278,
+      "transferredBytes": 130487,
+      "swControlled": true,
+      "slowest": [
+        {
+          "url": "https://hoantiensan.online/api/public-config",
+          "ms": 278
+        },
+        {
+          "url": "https://fonts.googleapis.com/css2",
+          "ms": 165
+        },
+        {
+          "url": "https://hoantiensan.online/adminMobile.css",
+          "ms": 52
+        },
+        {
+          "url": "https://hoantiensan.online/selectPopup.css",
+          "ms": 46
+        }
+      ],
+      "errors": []
+    },
+    {
+      "profile": "current-network",
+      "sample": 3,
+      "visit": "repeat",
+      "http": 200,
+      "configStatus": 200,
+      "ttfb": 5,
+      "fcp": 128,
+      "lcpObserved": 300,
+      "domReady": 64,
+      "configReady": 332,
+      "configDuration": 270,
+      "transferredBytes": 600,
+      "swControlled": true,
+      "slowest": [
+        {
+          "url": "https://hoantiensan.online/api/public-config",
+          "ms": 270
+        },
+        {
+          "url": "https://hoantiensan.online/icon-192.png",
+          "ms": 29
+        },
+        {
+          "url": "https://hoantiensan.online/adminMobile.js",
+          "ms": 9
+        },
+        {
+          "url": "https://hoantiensan.online/tiktokReply.js",
+          "ms": 8
+        }
+      ],
+      "errors": []
+    },
+    {
+      "profile": "simulated-mobile-4g",
+      "sample": 1,
+      "visit": "fresh",
+      "http": 200,
+      "configStatus": 200,
+      "ttfb": 202,
+      "fcp": 992,
+      "lcpObserved": 1180,
+      "domReady": 1009,
+      "configReady": 1296,
+      "configDuration": 299,
+      "transferredBytes": 92594,
+      "swControlled": false,
+      "slowest": [
+        {
+          "url": "https://hoantiensan.online/app.js",
+          "ms": 552
+        },
+        {
+          "url": "https://hoantiensan.online/styles.css",
+          "ms": 461
+        },
+        {
+          "url": "https://fonts.googleapis.com/css2",
+          "ms": 314
+        },
+        {
+          "url": "https://hoantiensan.online/api/public-config",
+          "ms": 299
+        }
+      ],
+      "errors": []
+    },
+    {
+      "profile": "simulated-mobile-4g",
+      "sample": 1,
+      "visit": "repeat",
+      "http": 200,
+      "configStatus": 200,
+      "ttfb": 7,
+      "fcp": 128,
+      "lcpObserved": 344,
+      "domReady": 153,
+      "configReady": 462,
+      "configDuration": 317,
+      "transferredBytes": 600,
+      "swControlled": true,
+      "slowest": [
+        {
+          "url": "https://hoantiensan.online/api/public-config",
+          "ms": 317
+        },
+        {
+          "url": "https://hoantiensan.online/icon-192.png",
+          "ms": 185
+        },
+        {
+          "url": "https://hoantiensan.online/tiktokReply.js",
+          "ms": 22
+        },
+        {
+          "url": "https://hoantiensan.online/adminMobile.js",
+          "ms": 22
+        }
+      ],
+      "errors": []
+    },
+    {
+      "profile": "simulated-mobile-4g",
+      "sample": 2,
+      "visit": "fresh",
+      "http": 200,
+      "configStatus": 200,
+      "ttfb": 206,
+      "fcp": 1000,
+      "lcpObserved": 1136,
+      "domReady": 1046,
+      "configReady": 1321,
+      "configDuration": 286,
+      "transferredBytes": 92596,
+      "swControlled": false,
+      "slowest": [
+        {
+          "url": "https://hoantiensan.online/app.js",
+          "ms": 580
+        },
+        {
+          "url": "https://hoantiensan.online/styles.css",
+          "ms": 487
+        },
+        {
+          "url": "https://fonts.googleapis.com/css2",
+          "ms": 310
+        },
+        {
+          "url": "https://hoantiensan.online/api/public-config",
+          "ms": 286
+        }
+      ],
+      "errors": []
+    },
+    {
+      "profile": "simulated-mobile-4g",
+      "sample": 2,
+      "visit": "repeat",
+      "http": 200,
+      "configStatus": 200,
+      "ttfb": 5,
+      "fcp": 116,
+      "lcpObserved": 316,
+      "domReady": 136,
+      "configReady": 412,
+      "configDuration": 283,
+      "transferredBytes": 600,
+      "swControlled": true,
+      "slowest": [
+        {
+          "url": "https://hoantiensan.online/api/public-config",
+          "ms": 283
+        },
+        {
+          "url": "https://hoantiensan.online/icon-192.png",
+          "ms": 168
+        },
+        {
+          "url": "https://hoantiensan.online/tiktokReply.js",
+          "ms": 22
+        },
+        {
+          "url": "https://hoantiensan.online/selectPopup.js",
+          "ms": 22
+        }
+      ],
+      "errors": []
+    },
+    {
+      "profile": "simulated-mobile-4g",
+      "sample": 3,
+      "visit": "fresh",
+      "http": 200,
+      "configStatus": 200,
+      "ttfb": 201,
+      "fcp": 1012,
+      "lcpObserved": 1184,
+      "domReady": 1039,
+      "configReady": 1321,
+      "configDuration": 294,
+      "transferredBytes": 92596,
+      "swControlled": false,
+      "slowest": [
+        {
+          "url": "https://hoantiensan.online/app.js",
+          "ms": 608
+        },
+        {
+          "url": "https://hoantiensan.online/styles.css",
+          "ms": 500
+        },
+        {
+          "url": "https://hoantiensan.online/csvImport.js",
+          "ms": 309
+        },
+        {
+          "url": "https://fonts.googleapis.com/css2",
+          "ms": 304
+        }
+      ],
+      "errors": []
+    },
+    {
+      "profile": "simulated-mobile-4g",
+      "sample": 3,
+      "visit": "repeat",
+      "http": 200,
+      "configStatus": 200,
+      "ttfb": 4,
+      "fcp": 132,
+      "lcpObserved": 344,
+      "domReady": 150,
+      "configReady": 432,
+      "configDuration": 289,
+      "transferredBytes": 600,
+      "swControlled": true,
+      "slowest": [
+        {
+          "url": "https://hoantiensan.online/api/public-config",
+          "ms": 289
+        },
+        {
+          "url": "https://hoantiensan.online/icon-192.png",
+          "ms": 176
+        },
+        {
+          "url": "https://hoantiensan.online/tiktokReply.js",
+          "ms": 21
+        },
+        {
+          "url": "https://hoantiensan.online/selectPopup.js",
+          "ms": 21
+        }
+      ],
+      "errors": []
+    }
+  ]
+}

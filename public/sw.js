@@ -1,8 +1,8 @@
 // Service Worker for LiLa PWA
-const CACHE_NAME = 'lila-pwa-v7';
+const CACHE_NAME = 'lila-pwa-v8';
 const OFFLINE_URL = '/offline.html';
 // Bump CACHE_NAME whenever shell assets change; installation is all-or-nothing.
-const SHELL_ASSETS = ["/","/styles.css?v=2.3.2","/selectPopup.css?v=1","/adminMobile.css?v=1","/csvImport.js?v=2.3.2","/app.js?v=2.3.5","/tiktokReply.js?v=1","/selectPopup.js?v=1","/adminMobile.js?v=2"];
+const SHELL_ASSETS = ["/","/styles.css?v=2.3.3","/selectPopup.css?v=1","/adminMobile.css?v=1","/csvImport.js?v=2.3.2","/app.js?v=2.3.5","/tiktokReply.js?v=1","/selectPopup.js?v=1","/adminMobile.js?v=2"];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
