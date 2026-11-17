@@ -530,7 +530,7 @@ async function runShopeeAutoSync() {
 
   for (const parsed of parsedOrders) {
     try {
-      if (parsed.rawSubId) await findClickById(String(parsed.rawSubId).split('-')[0].trim());
+      if (parsed.rawSubId) await findClickById(String(parsed.rawSubId).split('-')[0].trim(), { forAttribution: true });
       upsertNetworkOrder(db, parsed);
       syncedCount++;
     } catch (itemErr) {
@@ -599,7 +599,7 @@ async function runAccessTradeAutoSync() {
         row.product_name ||
         `Đơn ${platform === 'tiktok' ? 'TikTok' : 'Shopee'} #${orderSn}`;
 
-      if (rawSubId) await findClickById(String(rawSubId).split('-')[0].trim());
+      if (rawSubId) await findClickById(String(rawSubId).split('-')[0].trim(), { forAttribution: true });
       upsertNetworkOrder(db, {
         orderSn,
         rawSubId,
@@ -1797,7 +1797,7 @@ function registerCashbackRoutes(app) {
     try {
       let order;
       const cleanSub = String(rawSubId || '').split('-')[0].trim();
-      const clickRecord = cleanSub ? await findClickById(cleanSub) : null;
+      const clickRecord = cleanSub ? await findClickById(cleanSub, { forAttribution: true }) : null;
       const matchedUserId = clickRecord?.userId || db.users.find((u) => (u.code && String(u.code).toUpperCase() === cleanSub.toUpperCase()) || u.phone === cleanSub)?.id;
       const lockKey = matchedUserId || 'global';
 
@@ -1875,7 +1875,7 @@ function registerCashbackRoutes(app) {
 
     try {
       const cleanSub = String(clickId || sub1 || sub_id || '').split('-')[0].trim();
-      const clickRecord = cleanSub ? await findClickById(cleanSub) : null;
+      const clickRecord = cleanSub ? await findClickById(cleanSub, { forAttribution: true }) : null;
       const matchedUserId = clickRecord?.userId || db.users.find((u) => (u.code && String(u.code).toUpperCase() === cleanSub.toUpperCase()) || u.phone === cleanSub)?.id;
       const lockKey = matchedUserId || 'global';
 
@@ -2291,11 +2291,12 @@ function registerCashbackRoutes(app) {
       status
     } = req.body || {};
 
-    if (!orderSn) {
-      return res.status(400).json({ error: 'Thiếu Mã đơn hàng (orderSn).' });
-    }
-
-    const cleanOrderSn = String(orderSn).trim().toUpperCase();
+    const orderById = id ? db.orders.find(o => o.id === id || orderId(o) === id) : null;
+    if (id && !orderById) return res.status(404).json({ error: 'Không tìm thấy đơn hàng.' });
+    // Manual entries may omit the marketplace number. Keep a stable internal
+    // identity for wallet/ledger operations, including later edits by ID.
+    const cleanOrderSn = String(orderSn ?? '').trim().toUpperCase() ||
+      orderById?.orderSn || `MANUAL-${crypto.randomUUID().toUpperCase()}`;
     if (cleanOrderSn.length < 4 || cleanOrderSn.length > 64) {
       return res.status(400).json({ error: 'Mã đơn hàng không hợp lệ (từ 4 đến 64 ký tự).' });
     }
@@ -2306,7 +2307,7 @@ function registerCashbackRoutes(app) {
         return res.status(400).json({ error: 'Nền tảng đơn hàng không hợp lệ (shopee hoặc tiktok).' });
       }
     }
-    const validPlatform = String(platform || '').toLowerCase() === 'tiktok' ? 'tiktok' : 'shopee';
+    const validPlatform = String(platform || orderById?.platform || '').toLowerCase() === 'tiktok' ? 'tiktok' : 'shopee';
 
     if (status !== undefined && status !== null && status !== '') {
       if (!['pending', 'approved', 'cancelled'].includes(status)) {
@@ -2619,7 +2620,7 @@ function registerCashbackRoutes(app) {
           throw new Error('Cần thời điểm xuất báo cáo để duyệt lại đơn đã hủy. Hãy giữ tên file gốc Shopee.');
         }
         const attributionId = String(r.userCode || r.sub1 || '').split('-')[0].trim();
-        if (attributionId) await findClickById(attributionId);
+        if (attributionId) await findClickById(attributionId, { forAttribution: true });
         upsertNetworkOrder(db, {
           orderSn,
           rawSubId: r.userCode || r.sub1 || '',

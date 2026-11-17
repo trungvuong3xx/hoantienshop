@@ -1,0 +1,1446 @@
+
+> aff-link-converter@1.0.0 test
+> node tests/run_all_tests.js
+
+================================================================
+     COMPREHENSIVE SYSTEM VERIFICATION & AUDIT TEST RUNNER      
+================================================================
+Found 25 test suites to execute.
+
+
+================================================================
+[1/25] RUNNING: tests/manual-order-optional-id.test.js
+================================================================
+[2026-11-17T05:00:27.743Z] | [ENTER] | [POST /api/admin/orders] | [reqId: c28b317e-b645-4ae0-b413-93da9588a377]
+[2026-11-17T05:00:27.744Z] | [ENTER] | [recordAuditLog] | [reqId: c28b317e-b645-4ae0-b413-93da9588a377] | [action: create_order] | [targetId: ord2:WyJ0aWt0b2siLCJNQU5VQUwtQzc3NEMyMjgtMzZDMi00MDAxLUJFNkEtNEVEMzU0NDYzMEFBIl0]
+[2026-11-17T05:00:27.744Z] | [LEAVE] | [recordAuditLog] | [reqId: c28b317e-b645-4ae0-b413-93da9588a377] | [id: audit_1794891627744_9d2659] | [action: create_order]
+[2026-11-17T05:00:27.744Z] | [ENTER] | [recalculateUserWallet] | [reqId: c28b317e-b645-4ae0-b413-93da9588a377] | [userId: usr_admin]
+[2026-11-17T05:00:27.744Z] | [LEAVE] | [recalculateUserWallet] | [reqId: c28b317e-b645-4ae0-b413-93da9588a377] | [userId: usr_admin] | [balanceAvailable: 0] | [totalEarned: 0] | [hasNegativeBalance: false]
+[2026-11-17T05:00:27.744Z] | [ENTER] | [auditLedgerIntegrity] | [reqId: c28b317e-b645-4ae0-b413-93da9588a377] | [autoRepair: false]
+[2026-11-17T05:00:27.744Z] | [LEAVE] | [auditLedgerIntegrity] | [reqId: c28b317e-b645-4ae0-b413-93da9588a377] | [ok: true] | [mismatchCount: 0] | [negativeBalanceCount: 0]
+[2026-11-17T05:00:27.745Z] | [LEAVE] | [POST /api/admin/orders] | [reqId: c28b317e-b645-4ae0-b413-93da9588a377] | [orderSn: MANUAL-C774C228-36C2-4001-BE6A-4ED3544630AA] | [status: pending] | [cashback: 15750]
+[2026-11-17T05:00:27.754Z] | [ENTER] | [POST /api/admin/orders] | [reqId: 179c5ce5-8ec2-415d-8c79-952841cba8c9]
+[2026-11-17T05:00:27.754Z] | [ENTER] | [recordAuditLog] | [reqId: 179c5ce5-8ec2-415d-8c79-952841cba8c9] | [action: create_order] | [targetId: ord2:WyJ0aWt0b2siLCJNQU5VQUwtNDM3ODU3RjQtNDNBNS00QUE0LTkyREUtQzgwNzc5MENCMUZGIl0]
+[2026-11-17T05:00:27.754Z] | [LEAVE] | [recordAuditLog] | [reqId: 179c5ce5-8ec2-415d-8c79-952841cba8c9] | [id: audit_1794891627754_7b910b] | [action: create_order]
+[2026-11-17T05:00:27.754Z] | [ENTER] | [recalculateUserWallet] | [reqId: 179c5ce5-8ec2-415d-8c79-952841cba8c9] | [userId: usr_admin]
+[2026-11-17T05:00:27.754Z] | [LEAVE] | [recalculateUserWallet] | [reqId: 179c5ce5-8ec2-415d-8c79-952841cba8c9] | [userId: usr_admin] | [balanceAvailable: 0] | [totalEarned: 0] | [hasNegativeBalance: false]
+[2026-11-17T05:00:27.754Z] | [ENTER] | [auditLedgerIntegrity] | [reqId: 179c5ce5-8ec2-415d-8c79-952841cba8c9] | [autoRepair: false]
+[2026-11-17T05:00:27.754Z] | [LEAVE] | [auditLedgerIntegrity] | [reqId: 179c5ce5-8ec2-415d-8c79-952841cba8c9] | [ok: true] | [mismatchCount: 0] | [negativeBalanceCount: 0]
+[2026-11-17T05:00:27.755Z] | [LEAVE] | [POST /api/admin/orders] | [reqId: 179c5ce5-8ec2-415d-8c79-952841cba8c9] | [orderSn: MANUAL-437857F4-43A5-4AA4-92DE-C807790CB1FF] | [status: pending] | [cashback: 15750]
+[2026-11-17T05:00:27.767Z] | [ENTER] | [POST /api/admin/orders] | [reqId: 212a065f-4ac3-4701-9ae0-ce931231f21b]
+[2026-11-17T05:00:27.768Z] | [ENTER] | [recordAuditLog] | [reqId: 212a065f-4ac3-4701-9ae0-ce931231f21b] | [action: update_order] | [targetId: ord2:WyJ0aWt0b2siLCJNQU5VQUwtQzc3NEMyMjgtMzZDMi00MDAxLUJFNkEtNEVEMzU0NDYzMEFBIl0]
+[2026-11-17T05:00:27.768Z] | [LEAVE] | [recordAuditLog] | [reqId: 212a065f-4ac3-4701-9ae0-ce931231f21b] | [id: audit_1794891627768_4a0255] | [action: update_order]
+[2026-11-17T05:00:27.768Z] | [ENTER] | [recalculateUserWallet] | [reqId: 212a065f-4ac3-4701-9ae0-ce931231f21b] | [userId: usr_admin]
+[2026-11-17T05:00:27.778Z] | [LEAVE] | [recalculateUserWallet] | [reqId: 212a065f-4ac3-4701-9ae0-ce931231f21b] | [userId: usr_admin] | [balanceAvailable: 15750] | [totalEarned: 15750] | [hasNegativeBalance: false]
+[2026-11-17T05:00:27.778Z] | [ENTER] | [auditLedgerIntegrity] | [reqId: 212a065f-4ac3-4701-9ae0-ce931231f21b] | [autoRepair: false]
+[2026-11-17T05:00:27.779Z] | [LEAVE] | [auditLedgerIntegrity] | [reqId: 212a065f-4ac3-4701-9ae0-ce931231f21b] | [ok: true] | [mismatchCount: 0] | [negativeBalanceCount: 0]
+[2026-11-17T05:00:27.780Z] | [LEAVE] | [POST /api/admin/orders] | [reqId: 212a065f-4ac3-4701-9ae0-ce931231f21b] | [orderSn: MANUAL-C774C228-36C2-4001-BE6A-4ED3544630AA] | [status: approved] | [cashback: 15750]
+[2026-11-17T05:00:27.782Z] | [ENTER] | [POST /api/admin/orders] | [reqId: 43e80ace-4906-4e03-aab1-0b48dfa3cfc6]
+[2026-11-17T05:00:27.783Z] | [ENTER] | [recordAuditLog] | [reqId: 43e80ace-4906-4e03-aab1-0b48dfa3cfc6] | [action: create_order] | [targetId: ord2:WyJ0aWt0b2siLCJUVC1FWFBMSUNJVC0wMDEiXQ]
+[2026-11-17T05:00:27.783Z] | [LEAVE] | [recordAuditLog] | [reqId: 43e80ace-4906-4e03-aab1-0b48dfa3cfc6] | [id: audit_1794891627783_7a39e6] | [action: create_order]
+[2026-11-17T05:00:27.783Z] | [ENTER] | [recalculateUserWallet] | [reqId: 43e80ace-4906-4e03-aab1-0b48dfa3cfc6] | [userId: usr_admin]
+[2026-11-17T05:00:27.783Z] | [LEAVE] | [recalculateUserWallet] | [reqId: 43e80ace-4906-4e03-aab1-0b48dfa3cfc6] | [userId: usr_admin] | [balanceAvailable: 15750] | [totalEarned: 15750] | [hasNegativeBalance: false]
+[2026-11-17T05:00:27.783Z] | [ENTER] | [auditLedgerIntegrity] | [reqId: 43e80ace-4906-4e03-aab1-0b48dfa3cfc6] | [autoRepair: false]
+[2026-11-17T05:00:27.783Z] | [LEAVE] | [auditLedgerIntegrity] | [reqId: 43e80ace-4906-4e03-aab1-0b48dfa3cfc6] | [ok: true] | [mismatchCount: 0] | [negativeBalanceCount: 0]
+[2026-11-17T05:00:27.784Z] | [LEAVE] | [POST /api/admin/orders] | [reqId: 43e80ace-4906-4e03-aab1-0b48dfa3cfc6] | [orderSn: TT-EXPLICIT-001] | [status: pending] | [cashback: 15750]
+[2026-11-17T05:00:27.787Z] | [ENTER] | [POST /api/admin/orders] | [reqId: 91a183e5-1ba5-479d-85c9-c446c98e860a]
+[2026-11-17T05:00:27.787Z] | [ENTER] | [recordAuditLog] | [reqId: 91a183e5-1ba5-479d-85c9-c446c98e860a] | [action: update_order] | [targetId: ord2:WyJ0aWt0b2siLCJUVC1FWFBMSUNJVC0wMDEiXQ]
+[2026-11-17T05:00:27.787Z] | [LEAVE] | [recordAuditLog] | [reqId: 91a183e5-1ba5-479d-85c9-c446c98e860a] | [id: audit_1794891627787_b80f09] | [action: update_order]
+[2026-11-17T05:00:27.787Z] | [ENTER] | [recalculateUserWallet] | [reqId: 91a183e5-1ba5-479d-85c9-c446c98e860a] | [userId: usr_admin]
+[2026-11-17T05:00:27.787Z] | [LEAVE] | [recalculateUserWallet] | [reqId: 91a183e5-1ba5-479d-85c9-c446c98e860a] | [userId: usr_admin] | [balanceAvailable: 15750] | [totalEarned: 15750] | [hasNegativeBalance: false]
+[2026-11-17T05:00:27.787Z] | [ENTER] | [auditLedgerIntegrity] | [reqId: 91a183e5-1ba5-479d-85c9-c446c98e860a] | [autoRepair: false]
+[2026-11-17T05:00:27.787Z] | [LEAVE] | [auditLedgerIntegrity] | [reqId: 91a183e5-1ba5-479d-85c9-c446c98e860a] | [ok: true] | [mismatchCount: 0] | [negativeBalanceCount: 0]
+[2026-11-17T05:00:27.789Z] | [LEAVE] | [POST /api/admin/orders] | [reqId: 91a183e5-1ba5-479d-85c9-c446c98e860a] | [orderSn: TT-EXPLICIT-001] | [status: pending] | [cashback: 15750]
+[2026-11-17T05:00:27.798Z] | [ENTER] | [POST /api/admin/orders] | [reqId: 5759f4ab-a78a-4241-92c9-7568248309ff]
+[2026-11-17T05:00:27.815Z] | [ENTER] | [POST /api/admin/orders] | [reqId: 47096edb-09c3-4399-b30b-676477f86f42]
+PASS: optional/blank codes, distinct manual orders, customer cashback, stable edits, explicit upsert and validation.
+--> manual-order-optional-id.test.js: PASSED ✔ (284ms)
+
+================================================================
+[2/25] RUNNING: tests/test_runtime_config.js
+================================================================
+[2026-11-17T05:00:27.859Z] | [WARN] | [rateLimitMiddleware] | [Rate limit exceeded (Upstash)] | [ip: 127.0.0.1] | [keyPrefix: rl]
+[2026-11-17T05:00:27.859Z] | [ERROR] | [rateLimitMiddleware] | [Upstash Redis error] | [keyPrefix: rl] | [failClosed: true] | [error: network failure]
+[2026-11-17T05:00:27.860Z] | [ERROR] | [rateLimitMiddleware] | [Fail-closed route blocked: Upstash Redis not configured] | [keyPrefix: rl]
+PASS: startup requirements, paired Redis aliases, fail-closed errors, quota enforcement and secret-free output
+--> test_runtime_config.js: PASSED ✔ (37ms)
+
+================================================================
+[3/25] RUNNING: tests/test_csv_import.js
+================================================================
+PASS: exact 48-column schema, money, BOM, quotes/newlines, duplicate items and invalid/conflicting rows
+[2026-11-17T05:00:28.097Z] | [ENTER] | [POST /api/admin/import-orders] | [reqId: a85cbbde-5621-4497-924b-f60b6c48eb71]
+[2026-11-17T05:00:28.097Z] | [ENTER] | [upsertNetworkOrder] | [reqId: a85cbbde-5621-4497-924b-f60b6c48eb71] | [orderSn: CSV_SAMPLE_CANCELLED] | [status: pending] | [eventTime: 1794803580000]
+[2026-11-17T05:00:28.098Z] | [LEAVE] | [upsertNetworkOrder] | [reqId: a85cbbde-5621-4497-924b-f60b6c48eb71] | [orderSn: CSV_SAMPLE_CANCELLED] | [created: true] | [status: pending]
+[2026-11-17T05:00:28.098Z] | [ENTER] | [recalculateUserWallet] | [reqId: a85cbbde-5621-4497-924b-f60b6c48eb71] | [userId: usr_admin]
+[2026-11-17T05:00:28.098Z] | [LEAVE] | [recalculateUserWallet] | [reqId: a85cbbde-5621-4497-924b-f60b6c48eb71] | [userId: usr_admin] | [balanceAvailable: 0] | [totalEarned: 0] | [hasNegativeBalance: false]
+[2026-11-17T05:00:28.098Z] | [ENTER] | [recalculateUserWallet] | [reqId: a85cbbde-5621-4497-924b-f60b6c48eb71] | [userId: csv-user]
+[2026-11-17T05:00:28.098Z] | [LEAVE] | [recalculateUserWallet] | [reqId: a85cbbde-5621-4497-924b-f60b6c48eb71] | [userId: csv-user] | [balanceAvailable: 0] | [totalEarned: 0] | [hasNegativeBalance: false]
+[2026-11-17T05:00:28.098Z] | [ENTER] | [auditLedgerIntegrity] | [reqId: a85cbbde-5621-4497-924b-f60b6c48eb71] | [autoRepair: false]
+[2026-11-17T05:00:28.098Z] | [LEAVE] | [auditLedgerIntegrity] | [reqId: a85cbbde-5621-4497-924b-f60b6c48eb71] | [ok: true] | [mismatchCount: 0] | [negativeBalanceCount: 0]
+[2026-11-17T05:00:28.098Z] | [ENTER] | [recordAuditLog] | [reqId: a85cbbde-5621-4497-924b-f60b6c48eb71] | [action: import_orders] | [targetId: csv]
+[2026-11-17T05:00:28.098Z] | [LEAVE] | [recordAuditLog] | [reqId: a85cbbde-5621-4497-924b-f60b6c48eb71] | [id: audit_1794891628098_43c15d] | [action: import_orders]
+[2026-11-17T05:00:28.099Z] | [LEAVE] | [POST /api/admin/import-orders] | [reqId: a85cbbde-5621-4497-924b-f60b6c48eb71] | [importedCount: 1] | [errorCount: 0]
+[2026-11-17T05:00:28.107Z] | [ENTER] | [POST /api/admin/import-orders] | [reqId: 39e8d34f-e161-48fa-89b4-f3a5131921d7]
+[2026-11-17T05:00:28.107Z] | [ENTER] | [upsertNetworkOrder] | [reqId: 39e8d34f-e161-48fa-89b4-f3a5131921d7] | [orderSn: CSV_SAMPLE_CANCELLED] | [status: approved] | [eventTime: 1794803640000]
+[2026-11-17T05:00:28.107Z] | [LEAVE] | [upsertNetworkOrder] | [reqId: 39e8d34f-e161-48fa-89b4-f3a5131921d7] | [orderSn: CSV_SAMPLE_CANCELLED] | [status: approved] | [userCashbackAmount: 6300]
+[2026-11-17T05:00:28.107Z] | [ENTER] | [recalculateUserWallet] | [reqId: 39e8d34f-e161-48fa-89b4-f3a5131921d7] | [userId: usr_admin]
+[2026-11-17T05:00:28.107Z] | [LEAVE] | [recalculateUserWallet] | [reqId: 39e8d34f-e161-48fa-89b4-f3a5131921d7] | [userId: usr_admin] | [balanceAvailable: 0] | [totalEarned: 0] | [hasNegativeBalance: false]
+[2026-11-17T05:00:28.107Z] | [ENTER] | [recalculateUserWallet] | [reqId: 39e8d34f-e161-48fa-89b4-f3a5131921d7] | [userId: csv-user]
+[2026-11-17T05:00:28.118Z] | [LEAVE] | [recalculateUserWallet] | [reqId: 39e8d34f-e161-48fa-89b4-f3a5131921d7] | [userId: csv-user] | [balanceAvailable: 6300] | [totalEarned: 6300] | [hasNegativeBalance: false]
+[2026-11-17T05:00:28.118Z] | [ENTER] | [auditLedgerIntegrity] | [reqId: 39e8d34f-e161-48fa-89b4-f3a5131921d7] | [autoRepair: false]
+[2026-11-17T05:00:28.118Z] | [LEAVE] | [auditLedgerIntegrity] | [reqId: 39e8d34f-e161-48fa-89b4-f3a5131921d7] | [ok: true] | [mismatchCount: 0] | [negativeBalanceCount: 0]
+[2026-11-17T05:00:28.118Z] | [ENTER] | [recordAuditLog] | [reqId: 39e8d34f-e161-48fa-89b4-f3a5131921d7] | [action: import_orders] | [targetId: csv]
+[2026-11-17T05:00:28.118Z] | [LEAVE] | [recordAuditLog] | [reqId: 39e8d34f-e161-48fa-89b4-f3a5131921d7] | [id: audit_1794891628118_c76fa7] | [action: import_orders]
+[2026-11-17T05:00:28.120Z] | [LEAVE] | [POST /api/admin/import-orders] | [reqId: 39e8d34f-e161-48fa-89b4-f3a5131921d7] | [importedCount: 1] | [errorCount: 0]
+[2026-11-17T05:00:28.126Z] | [ENTER] | [POST /api/admin/import-orders] | [reqId: e22d6575-a619-4f22-a99a-7ec918af98ed]
+[2026-11-17T05:00:28.127Z] | [ENTER] | [upsertNetworkOrder] | [reqId: e22d6575-a619-4f22-a99a-7ec918af98ed] | [orderSn: CSV_SAMPLE_CANCELLED] | [status: approved] | [eventTime: 1794803640000]
+[2026-11-17T05:00:28.127Z] | [LEAVE] | [upsertNetworkOrder] | [reqId: e22d6575-a619-4f22-a99a-7ec918af98ed] | [orderSn: CSV_SAMPLE_CANCELLED] | [status: approved] | [userCashbackAmount: 6300]
+[2026-11-17T05:00:28.127Z] | [ENTER] | [recalculateUserWallet] | [reqId: e22d6575-a619-4f22-a99a-7ec918af98ed] | [userId: usr_admin]
+[2026-11-17T05:00:28.127Z] | [LEAVE] | [recalculateUserWallet] | [reqId: e22d6575-a619-4f22-a99a-7ec918af98ed] | [userId: usr_admin] | [balanceAvailable: 0] | [totalEarned: 0] | [hasNegativeBalance: false]
+[2026-11-17T05:00:28.127Z] | [ENTER] | [recalculateUserWallet] | [reqId: e22d6575-a619-4f22-a99a-7ec918af98ed] | [userId: csv-user]
+[2026-11-17T05:00:28.127Z] | [LEAVE] | [recalculateUserWallet] | [reqId: e22d6575-a619-4f22-a99a-7ec918af98ed] | [userId: csv-user] | [balanceAvailable: 6300] | [totalEarned: 6300] | [hasNegativeBalance: false]
+[2026-11-17T05:00:28.127Z] | [ENTER] | [auditLedgerIntegrity] | [reqId: e22d6575-a619-4f22-a99a-7ec918af98ed] | [autoRepair: false]
+[2026-11-17T05:00:28.127Z] | [LEAVE] | [auditLedgerIntegrity] | [reqId: e22d6575-a619-4f22-a99a-7ec918af98ed] | [ok: true] | [mismatchCount: 0] | [negativeBalanceCount: 0]
+[2026-11-17T05:00:28.127Z] | [ENTER] | [recordAuditLog] | [reqId: e22d6575-a619-4f22-a99a-7ec918af98ed] | [action: import_orders] | [targetId: csv]
+[2026-11-17T05:00:28.127Z] | [LEAVE] | [recordAuditLog] | [reqId: e22d6575-a619-4f22-a99a-7ec918af98ed] | [id: audit_1794891628127_f4754d] | [action: import_orders]
+[2026-11-17T05:00:28.128Z] | [LEAVE] | [POST /api/admin/import-orders] | [reqId: e22d6575-a619-4f22-a99a-7ec918af98ed] | [importedCount: 1] | [errorCount: 0]
+[2026-11-17T05:00:28.135Z] | [ENTER] | [POST /api/admin/import-orders] | [reqId: 15a713b3-8d5d-4db6-96a1-bbeee0a8bb44]
+[2026-11-17T05:00:28.136Z] | [ENTER] | [upsertNetworkOrder] | [reqId: 15a713b3-8d5d-4db6-96a1-bbeee0a8bb44] | [orderSn: CSV_SAMPLE_CANCELLED] | [status: cancelled] | [eventTime: 1794803700000]
+[2026-11-17T05:00:28.136Z] | [ENTER] | [recalculateUserWallet] | [reqId: 15a713b3-8d5d-4db6-96a1-bbeee0a8bb44] | [userId: csv-user]
+[2026-11-17T05:00:28.136Z] | [LEAVE] | [recalculateUserWallet] | [reqId: 15a713b3-8d5d-4db6-96a1-bbeee0a8bb44] | [userId: csv-user] | [balanceAvailable: 0] | [totalEarned: 0] | [hasNegativeBalance: false]
+[2026-11-17T05:00:28.136Z] | [LEAVE] | [upsertNetworkOrder] | [reqId: 15a713b3-8d5d-4db6-96a1-bbeee0a8bb44] | [orderSn: CSV_SAMPLE_CANCELLED] | [status: cancelled] | [clawbackAt: 2026-11-17T05:00:28.136Z]
+[2026-11-17T05:00:28.136Z] | [ENTER] | [recalculateUserWallet] | [reqId: 15a713b3-8d5d-4db6-96a1-bbeee0a8bb44] | [userId: usr_admin]
+[2026-11-17T05:00:28.136Z] | [LEAVE] | [recalculateUserWallet] | [reqId: 15a713b3-8d5d-4db6-96a1-bbeee0a8bb44] | [userId: usr_admin] | [balanceAvailable: 0] | [totalEarned: 0] | [hasNegativeBalance: false]
+[2026-11-17T05:00:28.136Z] | [ENTER] | [recalculateUserWallet] | [reqId: 15a713b3-8d5d-4db6-96a1-bbeee0a8bb44] | [userId: csv-user]
+[2026-11-17T05:00:28.136Z] | [LEAVE] | [recalculateUserWallet] | [reqId: 15a713b3-8d5d-4db6-96a1-bbeee0a8bb44] | [userId: csv-user] | [balanceAvailable: 0] | [totalEarned: 0] | [hasNegativeBalance: false]
+[2026-11-17T05:00:28.136Z] | [ENTER] | [auditLedgerIntegrity] | [reqId: 15a713b3-8d5d-4db6-96a1-bbeee0a8bb44] | [autoRepair: false]
+[2026-11-17T05:00:28.136Z] | [LEAVE] | [auditLedgerIntegrity] | [reqId: 15a713b3-8d5d-4db6-96a1-bbeee0a8bb44] | [ok: true] | [mismatchCount: 0] | [negativeBalanceCount: 0]
+[2026-11-17T05:00:28.136Z] | [ENTER] | [recordAuditLog] | [reqId: 15a713b3-8d5d-4db6-96a1-bbeee0a8bb44] | [action: import_orders] | [targetId: csv]
+[2026-11-17T05:00:28.136Z] | [LEAVE] | [recordAuditLog] | [reqId: 15a713b3-8d5d-4db6-96a1-bbeee0a8bb44] | [id: audit_1794891628136_b66564] | [action: import_orders]
+[2026-11-17T05:00:28.137Z] | [LEAVE] | [POST /api/admin/import-orders] | [reqId: 15a713b3-8d5d-4db6-96a1-bbeee0a8bb44] | [importedCount: 1] | [errorCount: 0]
+[2026-11-17T05:00:28.141Z] | [ENTER] | [POST /api/admin/import-orders] | [reqId: 484c5e20-1467-4add-b4fd-9c1cde61cf5b]
+[2026-11-17T05:00:28.141Z] | [ENTER] | [upsertNetworkOrder] | [reqId: 484c5e20-1467-4add-b4fd-9c1cde61cf5b] | [orderSn: CSV_SAMPLE_CANCELLED] | [status: cancelled] | [eventTime: 1794803700000]
+[2026-11-17T05:00:28.141Z] | [LEAVE] | [upsertNetworkOrder] | [reqId: 484c5e20-1467-4add-b4fd-9c1cde61cf5b] | [orderSn: CSV_SAMPLE_CANCELLED] | [status: cancelled] | [userCashbackAmount: 0]
+[2026-11-17T05:00:28.141Z] | [ENTER] | [recalculateUserWallet] | [reqId: 484c5e20-1467-4add-b4fd-9c1cde61cf5b] | [userId: usr_admin]
+[2026-11-17T05:00:28.141Z] | [LEAVE] | [recalculateUserWallet] | [reqId: 484c5e20-1467-4add-b4fd-9c1cde61cf5b] | [userId: usr_admin] | [balanceAvailable: 0] | [totalEarned: 0] | [hasNegativeBalance: false]
+[2026-11-17T05:00:28.141Z] | [ENTER] | [recalculateUserWallet] | [reqId: 484c5e20-1467-4add-b4fd-9c1cde61cf5b] | [userId: csv-user]
+[2026-11-17T05:00:28.141Z] | [LEAVE] | [recalculateUserWallet] | [reqId: 484c5e20-1467-4add-b4fd-9c1cde61cf5b] | [userId: csv-user] | [balanceAvailable: 0] | [totalEarned: 0] | [hasNegativeBalance: false]
+[2026-11-17T05:00:28.141Z] | [ENTER] | [auditLedgerIntegrity] | [reqId: 484c5e20-1467-4add-b4fd-9c1cde61cf5b] | [autoRepair: false]
+[2026-11-17T05:00:28.141Z] | [LEAVE] | [auditLedgerIntegrity] | [reqId: 484c5e20-1467-4add-b4fd-9c1cde61cf5b] | [ok: true] | [mismatchCount: 0] | [negativeBalanceCount: 0]
+[2026-11-17T05:00:28.141Z] | [ENTER] | [recordAuditLog] | [reqId: 484c5e20-1467-4add-b4fd-9c1cde61cf5b] | [action: import_orders] | [targetId: csv]
+[2026-11-17T05:00:28.141Z] | [LEAVE] | [recordAuditLog] | [reqId: 484c5e20-1467-4add-b4fd-9c1cde61cf5b] | [id: audit_1794891628141_b6d90c] | [action: import_orders]
+[2026-11-17T05:00:28.142Z] | [LEAVE] | [POST /api/admin/import-orders] | [reqId: 484c5e20-1467-4add-b4fd-9c1cde61cf5b] | [importedCount: 1] | [errorCount: 0]
+[2026-11-17T05:00:28.157Z] | [ENTER] | [POST /api/admin/import-orders] | [reqId: 92ec78e2-a439-4bdb-8172-8c57adea345d]
+[2026-11-17T05:00:28.157Z] | [LEAVE] | [POST /api/admin/import-orders] | [reqId: 92ec78e2-a439-4bdb-8172-8c57adea345d] | [importedCount: 0] | [errorCount: 1]
+[2026-11-17T05:00:28.173Z] | [ENTER] | [POST /api/admin/import-orders] | [reqId: e664569c-b9ef-431d-af5f-07d4fc6a7569]
+[2026-11-17T05:00:28.173Z] | [ENTER] | [upsertNetworkOrder] | [reqId: e664569c-b9ef-431d-af5f-07d4fc6a7569] | [orderSn: CSV_SAMPLE_CANCELLED] | [status: approved] | [eventTime: 1794803760000]
+[2026-11-17T05:00:28.173Z] | [LEAVE] | [upsertNetworkOrder] | [reqId: e664569c-b9ef-431d-af5f-07d4fc6a7569] | [orderSn: CSV_SAMPLE_CANCELLED] | [status: approved] | [userCashbackAmount: 6300]
+[2026-11-17T05:00:28.173Z] | [ENTER] | [recalculateUserWallet] | [reqId: e664569c-b9ef-431d-af5f-07d4fc6a7569] | [userId: usr_admin]
+[2026-11-17T05:00:28.173Z] | [LEAVE] | [recalculateUserWallet] | [reqId: e664569c-b9ef-431d-af5f-07d4fc6a7569] | [userId: usr_admin] | [balanceAvailable: 0] | [totalEarned: 0] | [hasNegativeBalance: false]
+[2026-11-17T05:00:28.173Z] | [ENTER] | [recalculateUserWallet] | [reqId: e664569c-b9ef-431d-af5f-07d4fc6a7569] | [userId: csv-user]
+[2026-11-17T05:00:28.174Z] | [LEAVE] | [recalculateUserWallet] | [reqId: e664569c-b9ef-431d-af5f-07d4fc6a7569] | [userId: csv-user] | [balanceAvailable: 6300] | [totalEarned: 6300] | [hasNegativeBalance: false]
+[2026-11-17T05:00:28.174Z] | [ENTER] | [auditLedgerIntegrity] | [reqId: e664569c-b9ef-431d-af5f-07d4fc6a7569] | [autoRepair: false]
+[2026-11-17T05:00:28.174Z] | [LEAVE] | [auditLedgerIntegrity] | [reqId: e664569c-b9ef-431d-af5f-07d4fc6a7569] | [ok: true] | [mismatchCount: 0] | [negativeBalanceCount: 0]
+[2026-11-17T05:00:28.174Z] | [ENTER] | [recordAuditLog] | [reqId: e664569c-b9ef-431d-af5f-07d4fc6a7569] | [action: import_orders] | [targetId: csv]
+[2026-11-17T05:00:28.174Z] | [LEAVE] | [recordAuditLog] | [reqId: e664569c-b9ef-431d-af5f-07d4fc6a7569] | [id: audit_1794891628174_7d98a0] | [action: import_orders]
+[2026-11-17T05:00:28.175Z] | [LEAVE] | [POST /api/admin/import-orders] | [reqId: e664569c-b9ef-431d-af5f-07d4fc6a7569] | [importedCount: 1] | [errorCount: 0]
+[2026-11-17T05:00:28.189Z] | [ENTER] | [POST /api/admin/import-orders] | [reqId: c73c2f1a-9d59-4e72-ab53-2a79dccdd20c]
+[2026-11-17T05:00:28.189Z] | [ENTER] | [upsertNetworkOrder] | [reqId: c73c2f1a-9d59-4e72-ab53-2a79dccdd20c] | [orderSn: CSV_SAMPLE_CANCELLED] | [status: approved] | [eventTime: 1794803820000]
+[2026-11-17T05:00:28.189Z] | [LEAVE] | [upsertNetworkOrder] | [reqId: c73c2f1a-9d59-4e72-ab53-2a79dccdd20c] | [orderSn: CSV_SAMPLE_CANCELLED] | [status: approved] | [userCashbackAmount: 3150]
+[2026-11-17T05:00:28.189Z] | [ENTER] | [recalculateUserWallet] | [reqId: c73c2f1a-9d59-4e72-ab53-2a79dccdd20c] | [userId: usr_admin]
+[2026-11-17T05:00:28.189Z] | [LEAVE] | [recalculateUserWallet] | [reqId: c73c2f1a-9d59-4e72-ab53-2a79dccdd20c] | [userId: usr_admin] | [balanceAvailable: 0] | [totalEarned: 0] | [hasNegativeBalance: false]
+[2026-11-17T05:00:28.189Z] | [ENTER] | [recalculateUserWallet] | [reqId: c73c2f1a-9d59-4e72-ab53-2a79dccdd20c] | [userId: csv-user]
+[2026-11-17T05:00:28.189Z] | [LEAVE] | [recalculateUserWallet] | [reqId: c73c2f1a-9d59-4e72-ab53-2a79dccdd20c] | [userId: csv-user] | [balanceAvailable: 3150] | [totalEarned: 3150] | [hasNegativeBalance: false]
+[2026-11-17T05:00:28.189Z] | [ENTER] | [auditLedgerIntegrity] | [reqId: c73c2f1a-9d59-4e72-ab53-2a79dccdd20c] | [autoRepair: false]
+[2026-11-17T05:00:28.189Z] | [LEAVE] | [auditLedgerIntegrity] | [reqId: c73c2f1a-9d59-4e72-ab53-2a79dccdd20c] | [ok: true] | [mismatchCount: 0] | [negativeBalanceCount: 0]
+[2026-11-17T05:00:28.189Z] | [ENTER] | [recordAuditLog] | [reqId: c73c2f1a-9d59-4e72-ab53-2a79dccdd20c] | [action: import_orders] | [targetId: csv]
+[2026-11-17T05:00:28.189Z] | [LEAVE] | [recordAuditLog] | [reqId: c73c2f1a-9d59-4e72-ab53-2a79dccdd20c] | [id: audit_1794891628189_a53110] | [action: import_orders]
+[2026-11-17T05:00:28.190Z] | [LEAVE] | [POST /api/admin/import-orders] | [reqId: c73c2f1a-9d59-4e72-ab53-2a79dccdd20c] | [importedCount: 1] | [errorCount: 0]
+[2026-11-17T05:00:28.204Z] | [ENTER] | [POST /api/admin/import-orders] | [reqId: 73a57ecc-7337-4b5d-af4a-5423d5a37463]
+[2026-11-17T05:00:28.204Z] | [ENTER] | [upsertNetworkOrder] | [reqId: 73a57ecc-7337-4b5d-af4a-5423d5a37463] | [orderSn: CSV_SAMPLE_CANCELLED] | [status: approved] | [eventTime: 1794803880000]
+[2026-11-17T05:00:28.204Z] | [LEAVE] | [upsertNetworkOrder] | [reqId: 73a57ecc-7337-4b5d-af4a-5423d5a37463] | [orderSn: CSV_SAMPLE_CANCELLED] | [status: approved] | [userCashbackAmount: 0]
+[2026-11-17T05:00:28.204Z] | [ENTER] | [recalculateUserWallet] | [reqId: 73a57ecc-7337-4b5d-af4a-5423d5a37463] | [userId: usr_admin]
+[2026-11-17T05:00:28.204Z] | [LEAVE] | [recalculateUserWallet] | [reqId: 73a57ecc-7337-4b5d-af4a-5423d5a37463] | [userId: usr_admin] | [balanceAvailable: 0] | [totalEarned: 0] | [hasNegativeBalance: false]
+[2026-11-17T05:00:28.204Z] | [ENTER] | [recalculateUserWallet] | [reqId: 73a57ecc-7337-4b5d-af4a-5423d5a37463] | [userId: csv-user]
+[2026-11-17T05:00:28.204Z] | [LEAVE] | [recalculateUserWallet] | [reqId: 73a57ecc-7337-4b5d-af4a-5423d5a37463] | [userId: csv-user] | [balanceAvailable: 0] | [totalEarned: 0] | [hasNegativeBalance: false]
+[2026-11-17T05:00:28.204Z] | [ENTER] | [auditLedgerIntegrity] | [reqId: 73a57ecc-7337-4b5d-af4a-5423d5a37463] | [autoRepair: false]
+[2026-11-17T05:00:28.204Z] | [LEAVE] | [auditLedgerIntegrity] | [reqId: 73a57ecc-7337-4b5d-af4a-5423d5a37463] | [ok: true] | [mismatchCount: 0] | [negativeBalanceCount: 0]
+[2026-11-17T05:00:28.204Z] | [ENTER] | [recordAuditLog] | [reqId: 73a57ecc-7337-4b5d-af4a-5423d5a37463] | [action: import_orders] | [targetId: csv]
+[2026-11-17T05:00:28.204Z] | [LEAVE] | [recordAuditLog] | [reqId: 73a57ecc-7337-4b5d-af4a-5423d5a37463] | [id: audit_1794891628204_9427c0] | [action: import_orders]
+[2026-11-17T05:00:28.205Z] | [LEAVE] | [POST /api/admin/import-orders] | [reqId: 73a57ecc-7337-4b5d-af4a-5423d5a37463] | [importedCount: 1] | [errorCount: 0]
+[2026-11-17T05:00:28.221Z] | [ENTER] | [GET /api/user/me] | [reqId: 47256c83-b50c-4d10-8877-89d902a0f045]
+[2026-11-17T05:00:28.221Z] | [ENTER] | [recalculateUserWallet] | [reqId: 47256c83-b50c-4d10-8877-89d902a0f045] | [userId: csv-user]
+[2026-11-17T05:00:28.221Z] | [LEAVE] | [recalculateUserWallet] | [reqId: 47256c83-b50c-4d10-8877-89d902a0f045] | [userId: csv-user] | [balanceAvailable: 0] | [totalEarned: 0] | [hasNegativeBalance: false]
+[2026-11-17T05:00:28.221Z] | [ENTER] | [queryOrdersPaginated] | [reqId: 47256c83-b50c-4d10-8877-89d902a0f045] | [page: 1] | [limit: 200] | [hasQuery: false] | [status: ] | [platform: ]
+[2026-11-17T05:00:28.221Z] | [LEAVE] | [queryOrdersPaginated] | [reqId: 47256c83-b50c-4d10-8877-89d902a0f045] | [source: memory] | [total: 1] | [returned: 1]
+[2026-11-17T05:00:28.221Z] | [LEAVE] | [GET /api/user/me] | [reqId: 47256c83-b50c-4d10-8877-89d902a0f045] | [userCode: CSVUSER] | [referralCount: 0] | [referralBountyAmount: 0]
+[2026-11-17T05:00:28.235Z] | [ENTER] | [POST /api/admin/import-orders] | [reqId: 69707b4b-91e9-4b9a-9693-486cae933353]
+[2026-11-17T05:00:28.251Z] | [ENTER] | [POST /api/admin/import-orders] | [reqId: 82be0f0e-abb4-4112-9103-6f4a02655193]
+[2026-11-17T05:00:28.267Z] | [ENTER] | [POST /api/admin/import-orders] | [reqId: a34ccdb2-7873-47b6-94c1-1c03474903a1]
+PASS: HTTP import pending/approved/cancelled, repeat, stale replay, adjustment to zero, auth and durable ledger
+--> test_csv_import.js: PASSED ✔ (417ms)
+
+================================================================
+[4/25] RUNNING: tests/test_final_remediation.js
+================================================================
+[2026-11-17T05:00:28.474Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_admin]
+[2026-11-17T05:00:28.474Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_admin] | [balanceAvailable: 6300] | [totalEarned: 6300] | [hasNegativeBalance: false]
+[2026-11-17T05:00:28.474Z] | [ENTER] | [recalculateUserWallet] | [userId: second-owner]
+[2026-11-17T05:00:28.474Z] | [LEAVE] | [recalculateUserWallet] | [userId: second-owner] | [balanceAvailable: 0] | [totalEarned: 0] | [hasNegativeBalance: false]
+[2026-11-17T05:00:28.475Z] | [ENTER] | [auditLedgerIntegrity] | [autoRepair: false]
+[2026-11-17T05:00:28.475Z] | [LEAVE] | [auditLedgerIntegrity] | [ok: true] | [mismatchCount: 0] | [negativeBalanceCount: 0]
+[2026-11-17T05:00:28.475Z] | [ENTER] | [upsertNetworkOrder] | [orderSn: SAME_SN] | [status: approved]
+[2026-11-17T05:00:28.475Z] | [LEAVE] | [upsertNetworkOrder] | [orderSn: SAME_SN] | [created: true] | [status: approved]
+[2026-11-17T05:00:28.475Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_admin]
+[2026-11-17T05:00:28.487Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_admin] | [balanceAvailable: 0] | [totalEarned: 0] | [hasNegativeBalance: false]
+[2026-11-17T05:00:28.487Z] | [ENTER] | [recalculateUserWallet] | [userId: second-owner]
+[2026-11-17T05:00:28.488Z] | [LEAVE] | [recalculateUserWallet] | [userId: second-owner] | [balanceAvailable: 18900] | [totalEarned: 18900] | [hasNegativeBalance: false]
+[2026-11-17T05:00:28.488Z] | [ENTER] | [auditLedgerIntegrity] | [autoRepair: false]
+[2026-11-17T05:00:28.488Z] | [LEAVE] | [auditLedgerIntegrity] | [ok: true] | [mismatchCount: 0] | [negativeBalanceCount: 0]
+[2026-11-17T05:00:28.488Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_admin]
+[2026-11-17T05:00:28.488Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_admin] | [balanceAvailable: 0] | [totalEarned: 0] | [hasNegativeBalance: false]
+[2026-11-17T05:00:28.488Z] | [ENTER] | [recalculateUserWallet] | [userId: second-owner]
+[2026-11-17T05:00:28.488Z] | [LEAVE] | [recalculateUserWallet] | [userId: second-owner] | [balanceAvailable: 18900] | [totalEarned: 18900] | [hasNegativeBalance: false]
+[2026-11-17T05:00:28.488Z] | [ENTER] | [auditLedgerIntegrity] | [autoRepair: false]
+[2026-11-17T05:00:28.488Z] | [LEAVE] | [auditLedgerIntegrity] | [ok: true] | [mismatchCount: 0] | [negativeBalanceCount: 0]
+PASS: legacy credit migration, platform collision, owner transfer, immutable ledger and replay
+PASS: overlapping request snapshots cannot publish each other's uncommitted mutations
+[2026-11-17T05:00:28.493Z] | [ERROR] | [saveDb] | [Lỗi ghi đĩa local] | [error: fixture disk failure]
+[2026-11-17T05:00:28.493Z] | [ERROR] | [saveDb] | [Lỗi trong tác vụ lưu dữ liệu] | [error: fixture disk failure]
+PASS: local disk failure rolls cache back and later saves cannot resurrect failed changes
+PASS: durable webhook replay, event ID payload conflict and undated terminal transition blocked
+[Shopee GraphQL raw] undefined {"dataKeys":["conversionReport"]}
+[Shopee GraphQL raw] undefined {"dataKeys":["conversionReport"]}
+[Shopee GraphQL raw] undefined {"dataKeys":["conversionReport"]}
+[Shopee GraphQL raw] undefined {"dataKeys":["conversionReport"]}
+[2026-11-17T05:00:28.499Z] | [ENTER] | [fetchAccessTradeOrders] | [days: 30]
+[2026-11-17T05:00:28.499Z] | [ENTER] | [fetchAccessTradeOrders] | [days: 30]
+[2026-11-17T05:00:28.499Z] | [ENTER] | [fetchAccessTradeOrders] | [days: 30]
+PASS: provider pagination reads subsequent pages and fails closed on repeated pages/missing metadata
+[2026-11-17T05:00:28.532Z] | [ENTER] | [GET /api/user/me]
+[2026-11-17T05:00:28.532Z] | [ENTER] | [recalculateUserWallet] | [userId: second-owner]
+[2026-11-17T05:00:28.532Z] | [LEAVE] | [recalculateUserWallet] | [userId: second-owner] | [balanceAvailable: 18935] | [totalEarned: 18900] | [hasNegativeBalance: false]
+[2026-11-17T05:00:28.533Z] | [ENTER] | [queryOrdersPaginated] | [page: 1] | [limit: 200] | [hasQuery: false] | [status: ] | [platform: ]
+[2026-11-17T05:00:28.533Z] | [LEAVE] | [queryOrdersPaginated] | [source: memory] | [total: 2] | [returned: 2]
+[2026-11-17T05:00:28.533Z] | [LEAVE] | [GET /api/user/me] | [userCode: SECOND] | [referralCount: 0] | [referralBountyAmount: 0]
+[2026-11-17T05:00:28.542Z] | [ENTER] | [GET /api/user/me]
+[2026-11-17T05:00:28.542Z] | [ENTER] | [recalculateUserWallet] | [userId: second-owner]
+[2026-11-17T05:00:28.543Z] | [LEAVE] | [recalculateUserWallet] | [userId: second-owner] | [balanceAvailable: 18935] | [totalEarned: 18900] | [hasNegativeBalance: false]
+[2026-11-17T05:00:28.543Z] | [ENTER] | [queryOrdersPaginated] | [page: 1] | [limit: 200] | [hasQuery: false] | [status: ] | [platform: ]
+[2026-11-17T05:00:28.543Z] | [LEAVE] | [queryOrdersPaginated] | [source: memory] | [total: 2] | [returned: 2]
+[2026-11-17T05:00:28.543Z] | [LEAVE] | [GET /api/user/me] | [userCode: SECOND] | [referralCount: 0] | [referralBountyAmount: 0]
+PASS: wallet history API returns newest entries first and pagination exposes all entries without duplicates
+--> test_final_remediation.js: PASSED ✔ (304ms)
+
+================================================================
+[5/25] RUNNING: tests/test_security_regressions.js
+================================================================
+[2026-11-17T05:00:28.661Z] | [WARN] | [rateLimitMiddleware] | [Rate limit exceeded] | [ip: 127.0.0.1] | [keyPrefix: regression-spoof]
+[2026-11-17T05:00:28.662Z] | [WARN] | [rateLimitMiddleware] | [Rate limit exceeded] | [ip: 127.0.0.1] | [keyPrefix: regression-spoof]
+[2026-11-17T05:00:28.664Z] | [WARN] | [rateLimitMiddleware] | [Rate limit exceeded] | [ip: 127.0.0.1] | [keyPrefix: account-quota-test]
+[2026-11-17T05:00:28.721Z] | [ENTER] | [executeAtomicWithdrawal] | [userId: usr_admin] | [amount: 50000] | [idempotencyKey: security-fixture-key]
+[2026-11-17T05:00:28.722Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_admin]
+[2026-11-17T05:00:28.722Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_admin] | [balanceAvailable: 200000] | [totalEarned: 0] | [hasNegativeBalance: false]
+[2026-11-17T05:00:28.722Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_admin]
+[2026-11-17T05:00:28.722Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_admin] | [balanceAvailable: 150000] | [totalEarned: 0] | [hasNegativeBalance: false]
+[2026-11-17T05:00:28.723Z] | [LEAVE] | [executeAtomicWithdrawal] | [wdId: wd_1794891628722_67039e53] | [amount: 50000] | [remainingBalance: 150000]
+[2026-11-17T05:00:28.724Z] | [ENTER] | [executeAtomicWithdrawal] | [userId: usr_admin] | [amount: 50000] | [idempotencyKey: security-fixture-key]
+[2026-11-17T05:00:28.724Z] | [LEAVE] | [executeAtomicWithdrawal] | [wdId: wd_1794891628722_67039e53] | [amount: 50000] | [idempotentReplay: true]
+[2026-11-17T05:00:28.724Z] | [ENTER] | [executeAtomicWithdrawal] | [userId: usr_admin] | [amount: 60000] | [idempotencyKey: security-fixture-key]
+[2026-11-17T05:00:28.724Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_admin]
+[2026-11-17T05:00:28.724Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_admin] | [balanceAvailable: 200000] | [totalEarned: 0] | [hasNegativeBalance: false]
+[2026-11-17T05:00:28.724Z] | [ENTER] | [recordAuditLog] | [action: archive_withdrawal] | [targetId: wd_1794891628722_67039e53]
+[2026-11-17T05:00:28.724Z] | [LEAVE] | [recordAuditLog] | [id: audit_1794891628724_1a47e8] | [action: archive_withdrawal]
+[2026-11-17T05:00:28.725Z] | [ENTER] | [executeAtomicWithdrawal] | [userId: usr_admin] | [amount: 50000] | [idempotencyKey: security-fixture-key]
+[2026-11-17T05:00:28.725Z] | [LEAVE] | [executeAtomicWithdrawal] | [wdId: wd_1794891628722_67039e53] | [amount: 50000] | [idempotentReplay: true]
+[2026-11-17T05:00:28.727Z] | [ENTER] | [queryWithdrawalsPaginated] | [page: 1] | [limit: 50] | [hasQuery: false] | [status: ]
+[2026-11-17T05:00:28.727Z] | [LEAVE] | [queryWithdrawalsPaginated] | [total: 0] | [returned: 0]
+PASS: spoofed IP, legacy forged token, bootstrap credentials, durable replay and conflicting payload
+--> test_security_regressions.js: PASSED ✔ (149ms)
+
+================================================================
+[6/25] RUNNING: tests/clicks-ttl.test.js
+================================================================
+[2026-11-17T05:00:28.785Z] | [INFO] | [cleanExpiredClicks] | [Pruned expired or overflow clicks] | [before: 2] | [after: 1] | [pruned: 1]
+[2026-11-17T05:00:28.786Z] | [INFO] | [cleanExpiredClicks] | [Pruned expired or overflow clicks] | [before: 3] | [after: 2] | [pruned: 1]
+[2026-11-17T05:00:28.787Z] | [INFO] | [cleanExpiredClicks] | [Pruned expired or overflow clicks] | [before: 5] | [after: 1] | [pruned: 4]
+[2026-11-17T05:00:28.806Z] | [INFO] | [cleanExpiredClicks] | [Pruned expired or overflow clicks] | [before: 3] | [after: 2] | [pruned: 1]
+▶ Click TTL and Retention
+  ✔ retains newly added clicks and removes clicks older than 30 days (1.2422ms)
+  ✔ preserves clicks within 30-day boundary and drops beyond boundary (0.6731ms)
+  ✔ filters out clicks with invalid, corrupt, or missing createdAt (0.1976ms)
+  ✔ handles null, undefined, or non-array inputs gracefully (0.6068ms)
+  ✔ preserves all unexpired attribution records beyond the legacy count cap (17.9482ms)
+  ✔ addClickRecord prepends new click and purges expired records (0.3643ms)
+  ✔ preserves guest clicks with affiliateUrl for /go/:clickId redirect support (0.1092ms)
+✔ Click TTL and Retention (21.9137ms)
+ℹ tests 7
+ℹ suites 1
+ℹ pass 7
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 25.2853
+--> clicks-ttl.test.js: PASSED ✔ (80ms)
+
+================================================================
+[7/25] RUNNING: tests/referral_sync.test.js
+================================================================
+[2026-11-17T05:00:28.962Z] | [ENTER] | [runReferralSyncSuite]
+=== STARTING REFERRAL SYNC & VERIFICATION SUITE ===
+
+--- 1. Testing HTML Element Presence in public/index.html ---
+  PASS: All required HTML elements verified in public/index.html.
+
+--- 2. Testing public/app.js Logic Patterns ---
+  PASS: Client-side patterns and withdraw input population logic verified.
+
+--- 3. Testing Registration with Case-Insensitive refCode & Self-Referral Prevention ---
+[2026-11-17T05:00:29.022Z] | [ENTER] | [POST /api/auth/register]
+[2026-11-17T05:00:29.048Z] | [LEAVE] | [POST /api/auth/register] | [userCode: U098386]
+[2026-11-17T05:00:29.055Z] | [ENTER] | [POST /api/auth/register]
+[2026-11-17T05:00:29.079Z] | [LEAVE] | [POST /api/auth/register] | [userCode: U502423]
+  PASS: Referral code registered case-insensitively and saved to referredBy.
+
+--- 4. Testing GET /api/user/me includes referralCount and referralBountyAmount ---
+[2026-11-17T05:00:29.095Z] | [ENTER] | [GET /api/user/me]
+[2026-11-17T05:00:29.096Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_test_ref_referrer_1794891628993]
+[2026-11-17T05:00:29.096Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_test_ref_referrer_1794891628993] | [balanceAvailable: 0] | [totalEarned: 0] | [hasNegativeBalance: false]
+[2026-11-17T05:00:29.096Z] | [ENTER] | [queryOrdersPaginated] | [page: 1] | [limit: 200] | [hasQuery: false] | [status: ] | [platform: ]
+[2026-11-17T05:00:29.096Z] | [LEAVE] | [queryOrdersPaginated] | [source: memory] | [total: 0] | [returned: 0]
+[2026-11-17T05:00:29.096Z] | [LEAVE] | [GET /api/user/me] | [userCode: REF226778] | [referralCount: 1] | [referralBountyAmount: 10000]
+  PASS: /api/user/me returns correct referralCount and referralBountyAmount.
+
+--- 5. Testing GET /api/user/referrals returns complete synchronized statistics ---
+[2026-11-17T05:00:29.110Z] | [ENTER] | [GET /api/user/referrals]
+[2026-11-17T05:00:29.110Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_test_ref_referrer_1794891628993]
+[2026-11-17T05:00:29.110Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_test_ref_referrer_1794891628993] | [balanceAvailable: 0] | [totalEarned: 0] | [hasNegativeBalance: false]
+[2026-11-17T05:00:29.110Z] | [LEAVE] | [GET /api/user/referrals] | [userCode: REF226778] | [totalFriends: 1] | [completedFriends: 0] | [totalBountyEarned: 0]
+
+--- 6. Testing Referral Bounty Conversion on Approved Order ---
+[2026-11-17T05:00:29.125Z] | [ENTER] | [GET /api/user/referrals]
+[2026-11-17T05:00:29.125Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_test_ref_referrer_1794891628993]
+[2026-11-17T05:00:29.135Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_test_ref_referrer_1794891628993] | [balanceAvailable: 10000] | [totalEarned: 10000] | [hasNegativeBalance: false]
+[2026-11-17T05:00:29.135Z] | [LEAVE] | [GET /api/user/referrals] | [userCode: REF226778] | [totalFriends: 1] | [completedFriends: 1] | [totalBountyEarned: 10000]
+  PASS: Referral bounty converted upon friend order approval.
+
+=== ALL REFERRAL SYNC TESTS COMPLETED SUCCESSFULLY! ===
+[2026-11-17T05:00:29.136Z] | [LEAVE] | [runReferralSyncSuite] | [status: passed]
+--> referral_sync.test.js: PASSED ✔ (328ms)
+
+================================================================
+[8/25] RUNNING: tests/wallet-ledger.test.js
+================================================================
+=== STARTING WALLET LEDGER TEST SUITE (P0 #3) ===
+[2026-11-17T05:00:29.361Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_test_p03_487054]
+[2026-11-17T05:00:29.362Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_test_p03_487054] | [balanceAvailable: 1000000] | [totalEarned: 1000000] | [hasNegativeBalance: false]
+
+--- 1. Testing Pending Withdrawal Creation & Debit Lock ---
+[2026-11-17T05:00:29.364Z] | [ENTER] | [executeAtomicWithdrawal] | [userId: usr_test_p03_487054] | [amount: 300000]
+[2026-11-17T05:00:29.364Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_test_p03_487054]
+[2026-11-17T05:00:29.365Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_test_p03_487054] | [balanceAvailable: 1000000] | [totalEarned: 1000000] | [hasNegativeBalance: false]
+[2026-11-17T05:00:29.365Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_test_p03_487054]
+[2026-11-17T05:00:29.365Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_test_p03_487054] | [balanceAvailable: 700000] | [totalEarned: 1000000] | [hasNegativeBalance: false]
+[2026-11-17T05:00:29.367Z] | [LEAVE] | [executeAtomicWithdrawal] | [wdId: wd_1794891629365_0eb72d0a] | [amount: 300000] | [remainingBalance: 700000]
+[2026-11-17T05:00:29.367Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_test_p03_487054]
+[2026-11-17T05:00:29.367Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_test_p03_487054] | [balanceAvailable: 700000] | [totalEarned: 1000000] | [hasNegativeBalance: false]
+  PASS: Withdrawal created and available balance debited by exactly 300,000đ.
+
+--- 2. Testing Rejection Credits Exactly Once (No Double Refund) ---
+[2026-11-17T05:00:29.368Z] | [ENTER] | [refundWithdrawal] | [wdId: wd_1794891629365_0eb72d0a] | [userId: usr_test_p03_487054] | [amount: 300000]
+[2026-11-17T05:00:29.368Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_test_p03_487054]
+[2026-11-17T05:00:29.368Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_test_p03_487054] | [balanceAvailable: 1000000] | [totalEarned: 1000000] | [hasNegativeBalance: false]
+[2026-11-17T05:00:29.368Z] | [ENTER] | [recordAuditLog] | [action: update_withdrawal] | [targetId: wd_1794891629365_0eb72d0a]
+[2026-11-17T05:00:29.368Z] | [LEAVE] | [recordAuditLog] | [id: audit_1794891629368_21131d] | [action: update_withdrawal]
+[2026-11-17T05:00:29.370Z] | [LEAVE] | [refundWithdrawal] | [wdId: wd_1794891629365_0eb72d0a] | [status: rejected]
+[2026-11-17T05:00:29.370Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_test_p03_487054]
+[2026-11-17T05:00:29.370Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_test_p03_487054] | [balanceAvailable: 1000000] | [totalEarned: 1000000] | [hasNegativeBalance: false]
+  PASS: Withdrawal rejection restored balance to 1,000,000đ with exactly one refund entry.
+
+--- 3. Testing Idempotency: Repeated Reject & Recalculate Does Not Duplicate ---
+[2026-11-17T05:00:29.370Z] | [ENTER] | [refundWithdrawal] | [wdId: wd_1794891629365_0eb72d0a] | [userId: usr_test_p03_487054] | [amount: 300000]
+[2026-11-17T05:00:29.370Z] | [WARN] | [refundWithdrawal] | [Lệnh rút tiền đã bị từ chối trước đó, bảo đảm không hoàn tiền trùng lặp] | [wdId: wd_1794891629365_0eb72d0a] | [userId: usr_test_p03_487054]
+[2026-11-17T05:00:29.370Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_test_p03_487054]
+[2026-11-17T05:00:29.370Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_test_p03_487054] | [balanceAvailable: 1000000] | [totalEarned: 1000000] | [hasNegativeBalance: false]
+[2026-11-17T05:00:29.371Z] | [LEAVE] | [refundWithdrawal] | [wdId: wd_1794891629365_0eb72d0a] | [status: rejected] | [idempotent: true]
+[2026-11-17T05:00:29.371Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_test_p03_487054]
+[2026-11-17T05:00:29.371Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_test_p03_487054] | [balanceAvailable: 1000000] | [totalEarned: 1000000] | [hasNegativeBalance: false]
+[2026-11-17T05:00:29.371Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_test_p03_487054]
+[2026-11-17T05:00:29.371Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_test_p03_487054] | [balanceAvailable: 1000000] | [totalEarned: 1000000] | [hasNegativeBalance: false]
+[2026-11-17T05:00:29.371Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_test_p03_487054]
+[2026-11-17T05:00:29.371Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_test_p03_487054] | [balanceAvailable: 1000000] | [totalEarned: 1000000] | [hasNegativeBalance: false]
+[2026-11-17T05:00:29.371Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_test_p03_487054]
+[2026-11-17T05:00:29.371Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_test_p03_487054] | [balanceAvailable: 1000000] | [totalEarned: 1000000] | [hasNegativeBalance: false]
+[2026-11-17T05:00:29.371Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_test_p03_487054]
+[2026-11-17T05:00:29.371Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_test_p03_487054] | [balanceAvailable: 1000000] | [totalEarned: 1000000] | [hasNegativeBalance: false]
+[2026-11-17T05:00:29.372Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_admin]
+[2026-11-17T05:00:29.372Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_admin] | [balanceAvailable: 0] | [totalEarned: 0] | [hasNegativeBalance: false]
+[2026-11-17T05:00:29.372Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_test_p03_487054]
+[2026-11-17T05:00:29.372Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_test_p03_487054] | [balanceAvailable: 1000000] | [totalEarned: 1000000] | [hasNegativeBalance: false]
+[2026-11-17T05:00:29.372Z] | [ENTER] | [auditLedgerIntegrity] | [autoRepair: false]
+[2026-11-17T05:00:29.372Z] | [LEAVE] | [auditLedgerIntegrity] | [ok: true] | [mismatchCount: 0] | [negativeBalanceCount: 0]
+  PASS: Multiple reject calls and recalculations maintain strict idempotency.
+
+--- 4. Testing HTTP API Endpoints (/api/admin/withdrawals/update & cancel) ---
+[2026-11-17T05:00:29.381Z] | [ENTER] | [executeAtomicWithdrawal] | [userId: usr_test_p03_487054] | [amount: 200000]
+[2026-11-17T05:00:29.381Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_test_p03_487054]
+[2026-11-17T05:00:29.381Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_test_p03_487054] | [balanceAvailable: 1000000] | [totalEarned: 1000000] | [hasNegativeBalance: false]
+[2026-11-17T05:00:29.381Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_test_p03_487054]
+[2026-11-17T05:00:29.381Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_test_p03_487054] | [balanceAvailable: 800000] | [totalEarned: 1000000] | [hasNegativeBalance: false]
+[2026-11-17T05:00:29.382Z] | [LEAVE] | [executeAtomicWithdrawal] | [wdId: wd_1794891629381_b4dbfe4b] | [amount: 200000] | [remainingBalance: 800000]
+[2026-11-17T05:00:29.422Z] | [ENTER] | [POST /api/admin/withdrawals/cancel]
+[2026-11-17T05:00:29.422Z] | [ENTER] | [refundWithdrawal] | [wdId: wd_1794891629381_b4dbfe4b] | [userId: usr_test_p03_487054] | [amount: 200000]
+[2026-11-17T05:00:29.422Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_test_p03_487054]
+[2026-11-17T05:00:29.422Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_test_p03_487054] | [balanceAvailable: 1000000] | [totalEarned: 1000000] | [hasNegativeBalance: false]
+[2026-11-17T05:00:29.422Z] | [ENTER] | [recordAuditLog] | [action: update_withdrawal] | [targetId: wd_1794891629381_b4dbfe4b]
+[2026-11-17T05:00:29.422Z] | [LEAVE] | [recordAuditLog] | [id: audit_1794891629422_57fc0c] | [action: update_withdrawal]
+[2026-11-17T05:00:29.424Z] | [LEAVE] | [refundWithdrawal] | [wdId: wd_1794891629381_b4dbfe4b] | [status: rejected]
+[2026-11-17T05:00:29.424Z] | [LEAVE] | [POST /api/admin/withdrawals/cancel] | [id: wd_1794891629381_b4dbfe4b]
+[2026-11-17T05:00:29.432Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_test_p03_487054]
+[2026-11-17T05:00:29.433Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_test_p03_487054] | [balanceAvailable: 1000000] | [totalEarned: 1000000] | [hasNegativeBalance: false]
+[2026-11-17T05:00:29.436Z] | [ENTER] | [POST /api/admin/withdrawals/cancel]
+[2026-11-17T05:00:29.436Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_test_p03_487054]
+[2026-11-17T05:00:29.436Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_test_p03_487054] | [balanceAvailable: 1000000] | [totalEarned: 1000000] | [hasNegativeBalance: false]
+  PASS: HTTP cancel API correctly rejects repeated cancellations and prevents double refunds.
+
+--- 5. Testing NaN, Null & Negative Amount Guards ---
+[2026-11-17T05:00:29.437Z] | [ENTER] | [refundWithdrawal] | [wdId: wd_bad_nan] | [userId: usr_test_p03_487054] | [amount: NaN]
+[2026-11-17T05:00:29.437Z] | [ENTER] | [refundWithdrawal] | [wdId: wd_bad_null] | [userId: usr_test_p03_487054] | [amount: null]
+[2026-11-17T05:00:29.437Z] | [ENTER] | [refundWithdrawal] | [wdId: wd_bad_neg] | [userId: usr_test_p03_487054] | [amount: -50000]
+[2026-11-17T05:00:29.437Z] | [ENTER] | [refundWithdrawal] | [wdId: wd_bad_str] | [userId: usr_test_p03_487054] | [amount: abc_invalid]
+[2026-11-17T05:00:29.437Z] | [ENTER] | [refundWithdrawal] | [wdId: wd_bad_zero] | [userId: usr_test_p03_487054] | [amount: 0]
+[2026-11-17T05:00:29.437Z] | [ENTER] | [executeAtomicWithdrawal] | [userId: usr_test_p03_487054] | [amount: NaN]
+[2026-11-17T05:00:29.437Z] | [ENTER] | [executeAtomicWithdrawal] | [userId: usr_test_p03_487054] | [amount: null]
+[2026-11-17T05:00:29.437Z] | [ENTER] | [executeAtomicWithdrawal] | [userId: usr_test_p03_487054] | [amount: -100000]
+  PASS: All NaN, null, zero, negative, and invalid withdrawal attempts strictly rejected.
+
+--- 6. Testing recalculateUserWallet Resilience Against Corrupted Records ---
+[2026-11-17T05:00:29.438Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_test_p03_487054]
+[2026-11-17T05:00:29.438Z] | [WARN] | [recalculateUserWallet] | [Bỏ qua lệnh rút tiền có số tiền không hợp lệ] | [wdId: wd_test_p03_rogue_1794891629437] | [amount: NaN]
+[2026-11-17T05:00:29.438Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_test_p03_487054] | [balanceAvailable: 1000000] | [totalEarned: 1000000] | [hasNegativeBalance: false]
+  PASS: recalculateUserWallet safely handles corrupted DB records without ledger pollution.
+
+--- 7. Testing Full Ledger Audit Integrity ---
+[2026-11-17T05:00:29.438Z] | [ENTER] | [auditLedgerIntegrity] | [autoRepair: false]
+[2026-11-17T05:00:29.438Z] | [LEAVE] | [auditLedgerIntegrity] | [ok: true] | [mismatchCount: 0] | [negativeBalanceCount: 0]
+  PASS: System-wide audit confirms 100% ledger integrity.
+
+=== ALL WALLET LEDGER TESTS PASSED SUCCESSFULLY! ===
+
+--> wallet-ledger.test.js: PASSED ✔ (411ms)
+
+================================================================
+[9/25] RUNNING: tests/test_concurrency_lock.js
+================================================================
+=== STARTING CONCURRENCY & USER MUTEX VERIFICATION SUITE ===
+
+--- 1. Testing Single-User FIFO Serialization & Zero Lost Updates ---
+  PASS: 25 concurrent tasks serialized flawlessly with 0 overlaps and 0 lost updates.
+
+--- 2. Testing Independent Mutex Keys (User A vs User B Parallelism) ---
+  PASS: Mutexes are strictly partitioned per user key (Parallel execution observed: 2 concurrent users).
+
+--- 3. Testing Error Isolation & Mutex Deadlock Recovery ---
+  PASS: Thrown errors safely release the lock and do not deadlock subsequent queued operations.
+
+--- 4. Testing Concurrent Financial Mutations & Ledger Accounting ---
+[2026-11-17T05:00:30.315Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_fin_test_1794891630313]
+[2026-11-17T05:00:30.315Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_fin_test_1794891630313] | [balanceAvailable: 500000] | [totalEarned: 0] | [hasNegativeBalance: false]
+[2026-11-17T05:00:30.329Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_fin_test_1794891630313]
+[2026-11-17T05:00:30.329Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_fin_test_1794891630313] | [balanceAvailable: 550000] | [totalEarned: 0] | [hasNegativeBalance: false]
+[2026-11-17T05:00:30.345Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_fin_test_1794891630313]
+[2026-11-17T05:00:30.345Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_fin_test_1794891630313] | [balanceAvailable: 530000] | [totalEarned: 0] | [hasNegativeBalance: false]
+[2026-11-17T05:00:30.376Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_fin_test_1794891630313]
+[2026-11-17T05:00:30.376Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_fin_test_1794891630313] | [balanceAvailable: 580000] | [totalEarned: 0] | [hasNegativeBalance: false]
+[2026-11-17T05:00:30.391Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_fin_test_1794891630313]
+[2026-11-17T05:00:30.391Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_fin_test_1794891630313] | [balanceAvailable: 560000] | [totalEarned: 0] | [hasNegativeBalance: false]
+[2026-11-17T05:00:30.406Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_fin_test_1794891630313]
+[2026-11-17T05:00:30.406Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_fin_test_1794891630313] | [balanceAvailable: 610000] | [totalEarned: 0] | [hasNegativeBalance: false]
+[2026-11-17T05:00:30.421Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_fin_test_1794891630313]
+[2026-11-17T05:00:30.421Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_fin_test_1794891630313] | [balanceAvailable: 590000] | [totalEarned: 0] | [hasNegativeBalance: false]
+[2026-11-17T05:00:30.437Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_fin_test_1794891630313]
+[2026-11-17T05:00:30.437Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_fin_test_1794891630313] | [balanceAvailable: 640000] | [totalEarned: 0] | [hasNegativeBalance: false]
+[2026-11-17T05:00:30.454Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_fin_test_1794891630313]
+[2026-11-17T05:00:30.455Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_fin_test_1794891630313] | [balanceAvailable: 620000] | [totalEarned: 0] | [hasNegativeBalance: false]
+[2026-11-17T05:00:30.484Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_fin_test_1794891630313]
+[2026-11-17T05:00:30.485Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_fin_test_1794891630313] | [balanceAvailable: 670000] | [totalEarned: 0] | [hasNegativeBalance: false]
+[2026-11-17T05:00:30.501Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_fin_test_1794891630313]
+[2026-11-17T05:00:30.501Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_fin_test_1794891630313] | [balanceAvailable: 650000] | [totalEarned: 0] | [hasNegativeBalance: false]
+[2026-11-17T05:00:30.517Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_fin_test_1794891630313]
+[2026-11-17T05:00:30.517Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_fin_test_1794891630313] | [balanceAvailable: 700000] | [totalEarned: 0] | [hasNegativeBalance: false]
+[2026-11-17T05:00:30.534Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_fin_test_1794891630313]
+[2026-11-17T05:00:30.534Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_fin_test_1794891630313] | [balanceAvailable: 680000] | [totalEarned: 0] | [hasNegativeBalance: false]
+[2026-11-17T05:00:30.549Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_fin_test_1794891630313]
+[2026-11-17T05:00:30.549Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_fin_test_1794891630313] | [balanceAvailable: 730000] | [totalEarned: 0] | [hasNegativeBalance: false]
+[2026-11-17T05:00:30.565Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_fin_test_1794891630313]
+[2026-11-17T05:00:30.565Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_fin_test_1794891630313] | [balanceAvailable: 710000] | [totalEarned: 0] | [hasNegativeBalance: false]
+[2026-11-17T05:00:30.581Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_fin_test_1794891630313]
+[2026-11-17T05:00:30.581Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_fin_test_1794891630313] | [balanceAvailable: 760000] | [totalEarned: 0] | [hasNegativeBalance: false]
+[2026-11-17T05:00:30.597Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_fin_test_1794891630313]
+[2026-11-17T05:00:30.597Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_fin_test_1794891630313] | [balanceAvailable: 810000] | [totalEarned: 0] | [hasNegativeBalance: false]
+[2026-11-17T05:00:30.613Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_fin_test_1794891630313]
+[2026-11-17T05:00:30.613Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_fin_test_1794891630313] | [balanceAvailable: 790000] | [totalEarned: 0] | [hasNegativeBalance: false]
+[2026-11-17T05:00:30.645Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_fin_test_1794891630313]
+[2026-11-17T05:00:30.645Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_fin_test_1794891630313] | [balanceAvailable: 840000] | [totalEarned: 0] | [hasNegativeBalance: false]
+[2026-11-17T05:00:30.659Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_fin_test_1794891630313]
+[2026-11-17T05:00:30.660Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_fin_test_1794891630313] | [balanceAvailable: 820000] | [totalEarned: 0] | [hasNegativeBalance: false]
+[2026-11-17T05:00:30.674Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_fin_test_1794891630313]
+[2026-11-17T05:00:30.675Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_fin_test_1794891630313] | [balanceAvailable: 800000] | [totalEarned: 0] | [hasNegativeBalance: false]
+[2026-11-17T05:00:30.676Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_fin_test_1794891630313]
+[2026-11-17T05:00:30.676Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_fin_test_1794891630313] | [balanceAvailable: 800000] | [totalEarned: 0] | [hasNegativeBalance: false]
+[2026-11-17T05:00:30.676Z] | [ENTER] | [auditLedgerIntegrity] | [autoRepair: false]
+[2026-11-17T05:00:30.676Z] | [LEAVE] | [auditLedgerIntegrity] | [ok: true] | [mismatchCount: 0] | [negativeBalanceCount: 0]
+  PASS: 20 concurrent financial mutations executed with 100% ledger & wallet precision (800,000đ).
+
+--- 5. Testing Concurrent Withdrawal Double-Spend Prevention ---
+[2026-11-17T05:00:30.676Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_test_overdraft_1794891630676]
+[2026-11-17T05:00:30.676Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_test_overdraft_1794891630676] | [balanceAvailable: 100000] | [totalEarned: 0] | [hasNegativeBalance: false]
+[2026-11-17T05:00:30.677Z] | [ENTER] | [executeAtomicWithdrawal] | [userId: usr_test_overdraft_1794891630676] | [amount: 70000]
+[2026-11-17T05:00:30.677Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_test_overdraft_1794891630676]
+[2026-11-17T05:00:30.677Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_test_overdraft_1794891630676] | [balanceAvailable: 100000] | [totalEarned: 0] | [hasNegativeBalance: false]
+[2026-11-17T05:00:30.678Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_test_overdraft_1794891630676]
+[2026-11-17T05:00:30.678Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_test_overdraft_1794891630676] | [balanceAvailable: 30000] | [totalEarned: 0] | [hasNegativeBalance: false]
+[2026-11-17T05:00:30.679Z] | [LEAVE] | [executeAtomicWithdrawal] | [wdId: wd_1794891630677_b0ea8f92] | [amount: 70000] | [remainingBalance: 30000]
+[2026-11-17T05:00:30.680Z] | [ENTER] | [executeAtomicWithdrawal] | [userId: usr_test_overdraft_1794891630676] | [amount: 70000]
+[2026-11-17T05:00:30.680Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_test_overdraft_1794891630676]
+[2026-11-17T05:00:30.680Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_test_overdraft_1794891630676] | [balanceAvailable: 30000] | [totalEarned: 0] | [hasNegativeBalance: false]
+[2026-11-17T05:00:30.680Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_test_overdraft_1794891630676]
+[2026-11-17T05:00:30.680Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_test_overdraft_1794891630676] | [balanceAvailable: 30000] | [totalEarned: 0] | [hasNegativeBalance: false]
+  PASS: Double-spending successfully blocked; exactly 1 withdrawal succeeded, 1 rejected.
+
+--- 6. Testing Order Attribution & Claim Concurrency ---
+[2026-11-17T05:00:30.690Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_claim_test_1794891630680]
+[2026-11-17T05:00:30.701Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_claim_test_1794891630680] | [balanceAvailable: 31500] | [totalEarned: 31500] | [hasNegativeBalance: false]
+  PASS: Order claim & attribution executed serially under user lock.
+
+=== ALL 6 CONCURRENCY & MUTEX TEST SUITES PASSED CLEANLY! ===
+--> test_concurrency_lock.js: PASSED ✔ (1172ms)
+
+================================================================
+[10/25] RUNNING: tests/test_upsert_order.js
+================================================================
+=== STARTING UPSERT NETWORK ORDER TEST SUITE (P0 #5) ===
+
+--- 1. Testing Reverse Status Transition (approved -> pending) is Blocked ---
+[2026-11-17T05:00:30.976Z] | [ENTER] | [upsertNetworkOrder] | [orderSn: SN_TEST5_REV_768490] | [status: approved]
+[2026-11-17T05:00:30.977Z] | [LEAVE] | [upsertNetworkOrder] | [orderSn: SN_TEST5_REV_768490] | [created: true] | [status: approved]
+[2026-11-17T05:00:30.977Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_test_ord5_768490]
+[2026-11-17T05:00:30.987Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_test_ord5_768490] | [balanceAvailable: 63000] | [totalEarned: 63000] | [hasNegativeBalance: false]
+[2026-11-17T05:00:30.987Z] | [ENTER] | [upsertNetworkOrder] | [orderSn: SN_TEST5_REV_768490] | [status: pending]
+[2026-11-17T05:00:30.987Z] | [WARN] | [canTransitionOrderStatus] | [Bỏ qua chuyển đổi trạng thái không hợp lệ] | [from: approved] | [to: pending]
+[2026-11-17T05:00:30.987Z] | [WARN] | [upsertNetworkOrder] | [Bỏ qua sự kiện trạng thái không hợp lệ] | [orderSn: SN_TEST5_REV_768490] | [from: approved] | [to: pending]
+[2026-11-17T05:00:30.987Z] | [LEAVE] | [upsertNetworkOrder] | [orderSn: SN_TEST5_REV_768490] | [status: approved] | [blocked: approved_to_pending]
+[2026-11-17T05:00:30.987Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_test_ord5_768490]
+[2026-11-17T05:00:30.988Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_test_ord5_768490] | [balanceAvailable: 63000] | [totalEarned: 63000] | [hasNegativeBalance: false]
+  PASS: Approved order is strictly protected against pending downgrade and amount overwrite.
+
+--- 2. Testing Stale Event Rejection on Approved Orders ---
+[2026-11-17T05:00:30.988Z] | [ENTER] | [upsertNetworkOrder] | [orderSn: SN_TEST5_STALE_768490] | [status: approved] | [eventTime: 1794891730988]
+[2026-11-17T05:00:30.988Z] | [LEAVE] | [upsertNetworkOrder] | [orderSn: SN_TEST5_STALE_768490] | [created: true] | [status: approved]
+[2026-11-17T05:00:30.988Z] | [WARN] | [upsertNetworkOrder] | [Bỏ qua sự kiện ngoài thứ tự do eventTime cũ hơn eventTime của đơn hàng] | [orderSn: SN_TEST5_STALE_768490] | [incomingEventTime: 1794891680988] | [existingEventTime: 1794891730988]
+[2026-11-17T05:00:30.988Z] | [ENTER] | [upsertNetworkOrder] | [orderSn: SN_TEST5_STALE_768490] | [status: approved] | [eventTime: 1794891680988]
+[2026-11-17T05:00:30.988Z] | [LEAVE] | [upsertNetworkOrder] | [orderSn: SN_TEST5_STALE_768490] | [ignored: true] | [reason: older_eventTime]
+  PASS: Stale network event with older eventTime was completely ignored on approved order.
+
+--- 3. Testing Out-of-Order Network Webhook with Older eventTime ---
+[2026-11-17T05:00:30.988Z] | [ENTER] | [upsertNetworkOrder] | [orderSn: SN_TEST5_OUTOFORDER_768490] | [status: pending] | [eventTime: 1794891680988]
+[2026-11-17T05:00:30.988Z] | [LEAVE] | [upsertNetworkOrder] | [orderSn: SN_TEST5_OUTOFORDER_768490] | [created: true] | [status: pending]
+[2026-11-17T05:00:30.988Z] | [ENTER] | [upsertNetworkOrder] | [orderSn: SN_TEST5_OUTOFORDER_768490] | [status: pending] | [eventTime: 1794891660988]
+[2026-11-17T05:00:30.988Z] | [WARN] | [upsertNetworkOrder] | [Bỏ qua sự kiện ngoài thứ tự do eventTime cũ hơn eventTime của đơn hàng] | [orderSn: SN_TEST5_OUTOFORDER_768490] | [incomingEventTime: 1794891660988] | [existingEventTime: 1794891680988]
+[2026-11-17T05:00:30.988Z] | [LEAVE] | [upsertNetworkOrder] | [orderSn: SN_TEST5_OUTOFORDER_768490] | [ignored: true] | [reason: older_eventTime]
+[2026-11-17T05:00:30.988Z] | [ENTER] | [upsertNetworkOrder] | [orderSn: SN_TEST5_OUTOFORDER_768490] | [status: approved] | [eventTime: 1794891700988]
+[2026-11-17T05:00:30.988Z] | [LEAVE] | [upsertNetworkOrder] | [orderSn: SN_TEST5_OUTOFORDER_768490] | [status: approved] | [userCashbackAmount: 75600]
+  PASS: Out-of-order events rejected; newer events properly accepted and processed.
+
+--- 4. Testing Cancellation & Clawback of Approved Order ---
+[2026-11-17T05:00:30.988Z] | [ENTER] | [upsertNetworkOrder] | [orderSn: SN_TEST5_CLAW_768490] | [status: approved] | [eventTime: 1794891631988]
+[2026-11-17T05:00:30.988Z] | [LEAVE] | [upsertNetworkOrder] | [orderSn: SN_TEST5_CLAW_768490] | [created: true] | [status: approved]
+[2026-11-17T05:00:30.988Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_test_ord5_768490]
+[2026-11-17T05:00:30.988Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_test_ord5_768490] | [balanceAvailable: 359100] | [totalEarned: 359100] | [hasNegativeBalance: false]
+[2026-11-17T05:00:30.988Z] | [ENTER] | [upsertNetworkOrder] | [orderSn: SN_TEST5_CLAW_768490] | [status: cancelled] | [eventTime: 1794891632988]
+[2026-11-17T05:00:30.988Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_test_ord5_768490]
+[2026-11-17T05:00:30.988Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_test_ord5_768490] | [balanceAvailable: 264600] | [totalEarned: 264600] | [hasNegativeBalance: false]
+[2026-11-17T05:00:30.988Z] | [LEAVE] | [upsertNetworkOrder] | [orderSn: SN_TEST5_CLAW_768490] | [status: cancelled] | [clawbackAt: 2026-11-17T05:00:30.988Z]
+[2026-11-17T05:00:30.988Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_test_ord5_768490]
+[2026-11-17T05:00:30.988Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_test_ord5_768490] | [balanceAvailable: 264600] | [totalEarned: 264600] | [hasNegativeBalance: false]
+
+--- 5. Testing Clawback Idempotency on Repeated Cancellation Events ---
+[2026-11-17T05:00:30.988Z] | [ENTER] | [upsertNetworkOrder] | [orderSn: SN_TEST5_CLAW_768490] | [status: cancelled] | [eventTime: 1794891633988]
+[2026-11-17T05:00:30.989Z] | [LEAVE] | [upsertNetworkOrder] | [orderSn: SN_TEST5_CLAW_768490] | [status: cancelled] | [userCashbackAmount: 0]
+[2026-11-17T05:00:30.989Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_test_ord5_768490]
+[2026-11-17T05:00:30.989Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_test_ord5_768490] | [balanceAvailable: 264600] | [totalEarned: 264600] | [hasNegativeBalance: false]
+  PASS: Clawback is completely idempotent across multiple webhook events.
+
+--- 6. Testing Clawback With Prior Withdrawal (Negative Balance Safety) ---
+[2026-11-17T05:00:30.989Z] | [ENTER] | [upsertNetworkOrder] | [orderSn: SN_TEST5_WD_584064] | [status: approved]
+[2026-11-17T05:00:30.989Z] | [LEAVE] | [upsertNetworkOrder] | [orderSn: SN_TEST5_WD_584064] | [created: true] | [status: approved]
+[2026-11-17T05:00:30.989Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_test_ord5_wd_584064]
+[2026-11-17T05:00:30.989Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_test_ord5_wd_584064] | [balanceAvailable: 63000] | [totalEarned: 63000] | [hasNegativeBalance: false]
+[2026-11-17T05:00:30.989Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_test_ord5_wd_584064]
+[2026-11-17T05:00:30.989Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_test_ord5_wd_584064] | [balanceAvailable: 0] | [totalEarned: 63000] | [hasNegativeBalance: false]
+[2026-11-17T05:00:30.989Z] | [ENTER] | [upsertNetworkOrder] | [orderSn: SN_TEST5_WD_584064] | [status: cancelled]
+[2026-11-17T05:00:30.989Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_test_ord5_wd_584064]
+[2026-11-17T05:00:30.989Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_test_ord5_wd_584064] | [balanceAvailable: -63000] | [totalEarned: 0] | [hasNegativeBalance: true]
+[2026-11-17T05:00:30.989Z] | [LEAVE] | [upsertNetworkOrder] | [orderSn: SN_TEST5_WD_584064] | [status: cancelled] | [clawbackAt: 2026-11-17T05:00:30.989Z]
+[2026-11-17T05:00:30.989Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_test_ord5_wd_584064]
+[2026-11-17T05:00:30.989Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_test_ord5_wd_584064] | [balanceAvailable: -63000] | [totalEarned: 0] | [hasNegativeBalance: true]
+[2026-11-17T05:00:30.989Z] | [ENTER] | [auditLedgerIntegrity] | [autoRepair: false]
+[2026-11-17T05:00:30.989Z] | [LEAVE] | [auditLedgerIntegrity] | [ok: true] | [mismatchCount: 0] | [negativeBalanceCount: 1]
+  PASS: Clawback after withdrawal accurately transitions balance into negative without corruption.
+
+--- 7. Testing Cancellation of Uncredited Order (No Phantom Debit) ---
+[2026-11-17T05:00:30.989Z] | [ENTER] | [upsertNetworkOrder] | [orderSn: SN_TEST5_UNCREDITED_768490] | [status: cancelled]
+[2026-11-17T05:00:30.989Z] | [LEAVE] | [upsertNetworkOrder] | [orderSn: SN_TEST5_UNCREDITED_768490] | [status: cancelled] | [clawbackAt: 2026-11-17T05:00:30.989Z]
+  PASS: Uncredited orders do not create phantom clawback entries.
+
+=== ALL 7 UPSERT ORDER VERIFICATION SUITES PASSED CLEANLY! ===
+
+--> test_upsert_order.js: PASSED ✔ (269ms)
+
+================================================================
+[11/25] RUNNING: tests/test_webhook_security.js
+================================================================
+=== STARTING WEBHOOK SECURITY & ANTI-REPLAY TEST SUITE ===
+
+--- 1. Testing Unconfigured Token Rejection (403) ---
+[2026-11-17T05:00:31.205Z] | [ENTER] | [POST /api/webhooks/postback]
+[2026-11-17T05:00:31.205Z] | [WARN] | [verifyWebhookRequest] | [Postback token is not configured on server]
+[2026-11-17T05:00:31.205Z] | [WARN] | [POST /api/webhooks/postback] | [Authentication failed] | [error: Postback webhook not configured.] | [status: 403]
+[2026-11-17T05:00:31.215Z] | [ENTER] | [AccessTradePostback] | [method: POST]
+[2026-11-17T05:00:31.215Z] | [WARN] | [verifyWebhookRequest] | [Postback token is not configured on server]
+[2026-11-17T05:00:31.215Z] | [WARN] | [AccessTradePostback] | [Authentication failed] | [error: Postback webhook not configured.] | [status: 403]
+[2026-11-17T05:00:31.228Z] | [ENTER] | [AccessTradePostback] | [method: GET]
+[2026-11-17T05:00:31.228Z] | [WARN] | [verifyWebhookRequest] | [Postback token is not configured on server]
+[2026-11-17T05:00:31.228Z] | [WARN] | [AccessTradePostback] | [Authentication failed] | [error: Postback webhook not configured.] | [status: 403]
+  PASS: All webhook endpoints strictly reject with 403 when token is unconfigured.
+
+--- 2. Testing Query Parameter Rejection on Write Operations ---
+[2026-11-17T05:00:31.244Z] | [ENTER] | [AccessTradePostback] | [method: POST]
+[2026-11-17T05:00:31.244Z] | [WARN] | [verifyWebhookRequest] | [Token or signature in query parameters rejected for write operation] | [method: POST]
+[2026-11-17T05:00:31.244Z] | [WARN] | [AccessTradePostback] | [Authentication failed] | [error: Tokens or signatures in query parameters are not permitted for write operations.] | [status: 401]
+[2026-11-17T05:00:31.256Z] | [ENTER] | [POST /api/webhooks/postback]
+[2026-11-17T05:00:31.256Z] | [WARN] | [verifyWebhookRequest] | [Token or signature in query parameters rejected for write operation] | [method: POST]
+[2026-11-17T05:00:31.256Z] | [WARN] | [POST /api/webhooks/postback] | [Authentication failed] | [error: Tokens or signatures in query parameters are not permitted for write operations.] | [status: 401]
+[2026-11-17T05:00:31.258Z] | [ENTER] | [AccessTradePostback] | [method: GET]
+[2026-11-17T05:00:31.258Z] | [LEAVE] | [AccessTradePostback] | [testPing: true]
+  PASS: Tokens in query params rejected on write operations (POST), allowed only for GET macro pings.
+
+--- 3. Testing HTTP Header Token Authentication ---
+[2026-11-17T05:00:31.274Z] | [ENTER] | [AccessTradePostback] | [method: POST]
+[2026-11-17T05:00:31.274Z] | [LEAVE] | [AccessTradePostback] | [testPing: true]
+[2026-11-17T05:00:31.289Z] | [ENTER] | [AccessTradePostback] | [method: POST]
+[2026-11-17T05:00:31.289Z] | [LEAVE] | [AccessTradePostback] | [testPing: true]
+[2026-11-17T05:00:31.304Z] | [ENTER] | [AccessTradePostback] | [method: POST]
+[2026-11-17T05:00:31.304Z] | [WARN] | [verifyWebhookRequest] | [Invalid postback token in header]
+[2026-11-17T05:00:31.304Z] | [WARN] | [AccessTradePostback] | [Authentication failed] | [error: Invalid postback token.] | [status: 401]
+  PASS: Header token authentication (x-postback-token and Bearer) verified.
+
+--- 4. Testing Raw-Body HMAC SHA256 Verification ---
+[2026-11-17T05:00:31.321Z] | [ENTER] | [POST /api/webhooks/postback]
+[2026-11-17T05:00:31.322Z] | [ENTER] | [upsertNetworkOrder] | [orderSn: ORD_HMAC_RAW_TEST_1] | [status: approved]
+[2026-11-17T05:00:31.322Z] | [LEAVE] | [upsertNetworkOrder] | [orderSn: ORD_HMAC_RAW_TEST_1] | [created: true] | [status: approved]
+[2026-11-17T05:00:31.322Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_admin]
+[2026-11-17T05:00:31.323Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_admin] | [balanceAvailable: 0] | [totalEarned: 0] | [hasNegativeBalance: false]
+[2026-11-17T05:00:31.323Z] | [ENTER] | [auditLedgerIntegrity] | [autoRepair: false]
+[2026-11-17T05:00:31.323Z] | [LEAVE] | [auditLedgerIntegrity] | [ok: true] | [mismatchCount: 0] | [negativeBalanceCount: 0]
+[2026-11-17T05:00:31.324Z] | [LEAVE] | [POST /api/webhooks/postback] | [orderSn: ORD_HMAC_RAW_TEST_1] | [status: approved]
+[2026-11-17T05:00:31.336Z] | [ENTER] | [POST /api/webhooks/postback]
+[2026-11-17T05:00:31.353Z] | [ENTER] | [POST /api/webhooks/postback]
+[2026-11-17T05:00:31.368Z] | [ENTER] | [POST /api/webhooks/postback]
+[2026-11-17T05:00:31.368Z] | [WARN] | [verifyWebhookRequest] | [Invalid postback signature] | [providedLen: 64] | [expectedLen: 64]
+[2026-11-17T05:00:31.368Z] | [WARN] | [POST /api/webhooks/postback] | [Authentication failed] | [error: Invalid postback signature.] | [status: 401]
+[2026-11-17T05:00:31.384Z] | [ENTER] | [POST /api/webhooks/postback]
+[2026-11-17T05:00:31.384Z] | [WARN] | [verifyWebhookRequest] | [Invalid postback signature] | [providedLen: 3] | [expectedLen: 64]
+[2026-11-17T05:00:31.384Z] | [WARN] | [POST /api/webhooks/postback] | [Authentication failed] | [error: Invalid postback signature.] | [status: 401]
+  PASS: Raw-body HMAC SHA256 verified directly on incoming wire bytes.
+
+--- 5. Testing Anti-Replay Protection ---
+[2026-11-17T05:00:31.399Z] | [WARN] | [verifyWebhookRequest] | [Webhook timestamp expired (>300s)] | [ts: 1794891326384] | [now: 1794891631399] | [diffSec: 305.015]
+[2026-11-17T05:00:31.399Z] | [WARN] | [POST /api/webhooks/postback] | [Authentication failed] | [error: Webhook timestamp expired.] | [status: 401]
+[2026-11-17T05:00:31.399Z] | [ENTER] | [POST /api/webhooks/postback]
+[2026-11-17T05:00:31.415Z] | [ENTER] | [POST /api/webhooks/postback]
+[2026-11-17T05:00:31.415Z] | [WARN] | [verifyWebhookRequest] | [Webhook timestamp in the future (>60s)] | [ts: 1794891701384] | [now: 1794891631415] | [diffSec: -69.969]
+[2026-11-17T05:00:31.415Z] | [WARN] | [POST /api/webhooks/postback] | [Authentication failed] | [error: Webhook timestamp in the future.] | [status: 401]
+[2026-11-17T05:00:31.430Z] | [ENTER] | [POST /api/webhooks/postback]
+[2026-11-17T05:00:31.430Z] | [WARN] | [normalizeNetworkStatus] | [Trạng thái sàn không khớp whitelist, gán mặc định pending]
+[2026-11-17T05:00:31.430Z] | [WARN] | [normalizeNetworkStatus] | [Trạng thái sàn không khớp whitelist, gán mặc định pending]
+[2026-11-17T05:00:31.430Z] | [ENTER] | [upsertNetworkOrder] | [orderSn: ORD_VALID_TS_1] | [status: pending]
+[2026-11-17T05:00:31.430Z] | [LEAVE] | [upsertNetworkOrder] | [orderSn: ORD_VALID_TS_1] | [created: true] | [status: pending]
+[2026-11-17T05:00:31.430Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_admin]
+[2026-11-17T05:00:31.430Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_admin] | [balanceAvailable: 0] | [totalEarned: 0] | [hasNegativeBalance: false]
+[2026-11-17T05:00:31.430Z] | [ENTER] | [auditLedgerIntegrity] | [autoRepair: false]
+[2026-11-17T05:00:31.430Z] | [LEAVE] | [auditLedgerIntegrity] | [ok: true] | [mismatchCount: 0] | [negativeBalanceCount: 0]
+[2026-11-17T05:00:31.431Z] | [LEAVE] | [POST /api/webhooks/postback] | [orderSn: ORD_VALID_TS_1] | [status: pending]
+[2026-11-17T05:00:31.446Z] | [ENTER] | [POST /api/webhooks/postback]
+[2026-11-17T05:00:31.446Z] | [WARN] | [verifyWebhookRequest] | [Webhook timestamp expired (>300s)] | [ts: 1794891231384] | [now: 1794891631446] | [diffSec: 400.062]
+[2026-11-17T05:00:31.446Z] | [WARN] | [POST /api/webhooks/postback] | [Authentication failed] | [error: Webhook timestamp expired.] | [status: 401]
+[2026-11-17T05:00:31.461Z] | [ENTER] | [POST /api/webhooks/postback]
+[2026-11-17T05:00:31.461Z] | [WARN] | [verifyWebhookRequest] | [Invalid webhook timestamp format] | [rawTs: not_a_valid_timestamp]
+[2026-11-17T05:00:31.461Z] | [WARN] | [POST /api/webhooks/postback] | [Authentication failed] | [error: Invalid webhook timestamp format.] | [status: 401]
+  PASS: Replayed webhooks (>300s) and future requests (>60s) strictly rejected.
+
+--- 6. Testing AccessTrade Real-Time Postback with Header Signature ---
+[2026-11-17T05:00:31.476Z] | [ENTER] | [AccessTradePostback] | [method: POST]
+[2026-11-17T05:00:31.477Z] | [ENTER] | [upsertNetworkOrder] | [orderSn: ORD_AT_REALTIME_1794891631461] | [status: approved]
+[2026-11-17T05:00:31.477Z] | [LEAVE] | [upsertNetworkOrder] | [orderSn: ORD_AT_REALTIME_1794891631461] | [created: true] | [status: approved]
+[2026-11-17T05:00:31.477Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_admin]
+[2026-11-17T05:00:31.477Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_admin] | [balanceAvailable: 0] | [totalEarned: 0] | [hasNegativeBalance: false]
+[2026-11-17T05:00:31.477Z] | [ENTER] | [auditLedgerIntegrity] | [autoRepair: false]
+[2026-11-17T05:00:31.477Z] | [LEAVE] | [auditLedgerIntegrity] | [ok: true] | [mismatchCount: 0] | [negativeBalanceCount: 0]
+[2026-11-17T05:00:31.478Z] | [LEAVE] | [AccessTradePostback] | [orderSn: ORD_AT_REALTIME_1794891631461] | [userCode: GUEST] | [status: approved]
+  PASS: AccessTrade real-time webhook processed securely with HMAC.
+
+--- 7. Testing db.settings.postbackToken fallback ---
+[2026-11-17T05:00:31.493Z] | [ENTER] | [AccessTradePostback] | [method: POST]
+[2026-11-17T05:00:31.493Z] | [LEAVE] | [AccessTradePostback] | [testPing: true]
+  PASS: db.settings.postbackToken works correctly.
+
+=== ALL WEBHOOK SECURITY TESTS PASSED SUCCESSFULLY! ===
+
+--> test_webhook_security.js: PASSED ✔ (505ms)
+
+================================================================
+[12/25] RUNNING: tests/test_shopee_sync_schema.js
+================================================================
+=== STARTING SHOPEE AUTO SYNC SCHEMA API V2 TEST SUITE (P0 #7) ===
+
+--- 1. Testing Official Shopee Open API v2 Schema Mapping (snake_case) ---
+[2026-11-17T05:00:31.674Z] | [ENTER] | [parseShopeeReportNodes] | [count: 1]
+[2026-11-17T05:00:31.674Z] | [LEAVE] | [parseShopeeReportNodes] | [parsedCount: 1]
+  PASS: Official Shopee Open API v2 schema parsed accurately.
+
+--- 2. Testing Alternative Official Fields (order_sn, gmv, order_items) ---
+[2026-11-17T05:00:31.674Z] | [ENTER] | [parseShopeeReportNodes] | [count: 1]
+[2026-11-17T05:00:31.674Z] | [LEAVE] | [parseShopeeReportNodes] | [parsedCount: 1]
+  PASS: Alternative official fields correctly mapped.
+
+--- 3. Testing GraphQL Conversion Report Nested Orders Schema ---
+[2026-11-17T05:00:31.674Z] | [ENTER] | [parseShopeeReportNodes] | [count: 1]
+[2026-11-17T05:00:31.674Z] | [LEAVE] | [parseShopeeReportNodes] | [parsedCount: 1]
+  PASS: GraphQL conversion report schema parsed cleanly.
+
+--- 4. Testing Preservation of Order Total Commission When Items Lack Breakdown ---
+[2026-11-17T05:00:31.675Z] | [ENTER] | [parseShopeeReportNodes] | [count: 1]
+[2026-11-17T05:00:31.675Z] | [LEAVE] | [parseShopeeReportNodes] | [parsedCount: 1]
+  PASS: Order actual commission preserved; no distortion from missing item-level commissions.
+
+--- 5. Testing Zero Equal-Split Distortion Across Multiple Orders ---
+[2026-11-17T05:00:31.675Z] | [ENTER] | [parseShopeeReportNodes] | [count: 1]
+[2026-11-17T05:00:31.675Z] | [LEAVE] | [parseShopeeReportNodes] | [parsedCount: 2]
+  PASS: Zero equal-split distortion verified across multiple orders.
+
+--- 6. Testing Safe Fallback When No Order Amounts Exist (No Arbitrary Splitting) ---
+[2026-11-17T05:00:31.675Z] | [ENTER] | [parseShopeeReportNodes] | [count: 1]
+[2026-11-17T05:00:31.675Z] | [WARN] | [parseShopeeReportNodes] | [Bỏ qua chia đều tùy tiện khi không có giá trị đơn và chi tiết hoa hồng] | [orderSn: ORD_EMPTY_1] | [remainingNodeComm: 50000]
+[2026-11-17T05:00:31.675Z] | [WARN] | [parseShopeeReportNodes] | [Bỏ qua chia đều tùy tiện khi không có giá trị đơn và chi tiết hoa hồng] | [orderSn: ORD_EMPTY_2] | [remainingNodeComm: 50000]
+[2026-11-17T05:00:31.675Z] | [LEAVE] | [parseShopeeReportNodes] | [parsedCount: 2]
+  PASS: Arbitrary equal-split strictly prevented when order amounts are missing.
+
+--- 7. Testing Status Normalization ---
+  PASS: All network statuses correctly normalized according to specification.
+
+--- 8. Testing Numeric Sanitization with Number.isFinite ---
+[2026-11-17T05:00:31.675Z] | [ENTER] | [parseShopeeReportNodes] | [count: 1]
+[2026-11-17T05:00:31.675Z] | [LEAVE] | [parseShopeeReportNodes] | [parsedCount: 1]
+  PASS: Numeric sanitization strictly guarantees finite numbers.
+
+--- 9. Testing End-to-End Database Upsert Integration ---
+[2026-11-17T05:00:31.675Z] | [ENTER] | [parseShopeeReportNodes] | [count: 1]
+[2026-11-17T05:00:31.675Z] | [LEAVE] | [parseShopeeReportNodes] | [parsedCount: 1]
+[2026-11-17T05:00:31.675Z] | [ENTER] | [upsertNetworkOrder] | [orderSn: PO_E2E_1794891631675] | [status: approved]
+[2026-11-17T05:00:31.676Z] | [LEAVE] | [upsertNetworkOrder] | [orderSn: PO_E2E_1794891631675] | [created: true] | [status: approved]
+  PASS: End-to-end upsert with 70/30 post-tax split successful.
+
+=== ALL 9 SHOPEE SYNC SCHEMA TESTS PASSED CLEANLY! ===
+
+--> test_shopee_sync_schema.js: PASSED ✔ (181ms)
+
+================================================================
+[13/25] RUNNING: tests/test_p1_backend_fixes.js
+================================================================
+=== STARTING TASK 8 P1 BACKEND FIXES VERIFICATION SUITE ===
+
+--- 1. Testing Tiền Hoàn: Rates Locking & Modal Order Edit ---
+[2026-11-17T05:00:31.910Z] | [ENTER] | [upsertNetworkOrder] | [orderSn: ORD_LOCK_1794891631861] | [status: pending]
+[2026-11-17T05:00:31.910Z] | [LEAVE] | [upsertNetworkOrder] | [orderSn: ORD_LOCK_1794891631861] | [created: true] | [status: pending]
+[2026-11-17T05:00:31.910Z] | [ENTER] | [upsertNetworkOrder] | [orderSn: ORD_LOCK_1794891631861] | [status: approved]
+[2026-11-17T05:00:31.911Z] | [LEAVE] | [upsertNetworkOrder] | [orderSn: ORD_LOCK_1794891631861] | [status: approved] | [userCashbackAmount: 63000]
+[2026-11-17T05:00:31.939Z] | [ENTER] | [POST /api/admin/orders]
+[2026-11-17T05:00:31.939Z] | [ENTER] | [recordAuditLog] | [action: update_order] | [targetId: ord2:WyJzaG9wZWUiLCJPUkRfTE9DS18xNzk0ODkxNjMxODYxIl0]
+[2026-11-17T05:00:31.939Z] | [LEAVE] | [recordAuditLog] | [id: audit_1794891631939_de77a6] | [action: update_order]
+[2026-11-17T05:00:31.940Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_admin]
+[2026-11-17T05:00:31.940Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_admin] | [balanceAvailable: 0] | [totalEarned: 0] | [hasNegativeBalance: false]
+[2026-11-17T05:00:31.940Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_adm_test_1794891631861]
+[2026-11-17T05:00:31.940Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_adm_test_1794891631861] | [balanceAvailable: 0] | [totalEarned: 0] | [hasNegativeBalance: false]
+[2026-11-17T05:00:31.940Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_u_test_1794891631861]
+[2026-11-17T05:00:31.950Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_u_test_1794891631861] | [balanceAvailable: 63000] | [totalEarned: 63000] | [hasNegativeBalance: false]
+[2026-11-17T05:00:31.950Z] | [ENTER] | [auditLedgerIntegrity] | [autoRepair: false]
+[2026-11-17T05:00:31.950Z] | [LEAVE] | [auditLedgerIntegrity] | [ok: true] | [mismatchCount: 0] | [negativeBalanceCount: 0]
+[2026-11-17T05:00:31.951Z] | [LEAVE] | [POST /api/admin/orders] | [orderSn: ORD_LOCK_1794891631861] | [status: approved] | [cashback: 63000]
+[2026-11-17T05:00:31.959Z] | [ENTER] | [POST /api/admin/orders]
+[2026-11-17T05:00:31.960Z] | [ENTER] | [recordAuditLog] | [action: update_order] | [targetId: ord2:WyJzaG9wZWUiLCJPUkRfTE9DS18xNzk0ODkxNjMxODYxIl0]
+[2026-11-17T05:00:31.960Z] | [LEAVE] | [recordAuditLog] | [id: audit_1794891631960_766c38] | [action: update_order]
+[2026-11-17T05:00:31.960Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_admin]
+[2026-11-17T05:00:31.960Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_admin] | [balanceAvailable: 0] | [totalEarned: 0] | [hasNegativeBalance: false]
+[2026-11-17T05:00:31.960Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_adm_test_1794891631861]
+[2026-11-17T05:00:31.960Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_adm_test_1794891631861] | [balanceAvailable: 0] | [totalEarned: 0] | [hasNegativeBalance: false]
+[2026-11-17T05:00:31.960Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_u_test_1794891631861]
+[2026-11-17T05:00:31.960Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_u_test_1794891631861] | [balanceAvailable: 75000] | [totalEarned: 75000] | [hasNegativeBalance: false]
+[2026-11-17T05:00:31.960Z] | [ENTER] | [auditLedgerIntegrity] | [autoRepair: false]
+[2026-11-17T05:00:31.960Z] | [LEAVE] | [auditLedgerIntegrity] | [ok: true] | [mismatchCount: 0] | [negativeBalanceCount: 0]
+[2026-11-17T05:00:31.961Z] | [LEAVE] | [POST /api/admin/orders] | [orderSn: ORD_LOCK_1794891631861] | [status: approved] | [cashback: 75000]
+  PASS: Cashback rate locking and modal custom cashback handling work as required.
+
+--- 2. Testing Rút Tiền: Bank Info Protection & Idempotency ---
+[2026-11-17T05:00:31.974Z] | [ENTER] | [POST /api/user/profile]
+[2026-11-17T05:00:31.989Z] | [ENTER] | [POST /api/user/profile]
+[2026-11-17T05:00:32.019Z] | [ENTER] | [POST /api/user/profile]
+[2026-11-17T05:00:32.044Z] | [LEAVE] | [POST /api/user/profile] | [userCode: USR_1794891631861]
+[2026-11-17T05:00:32.045Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_u_test_1794891631861]
+[2026-11-17T05:00:32.045Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_u_test_1794891631861] | [balanceAvailable: 375000] | [totalEarned: 375000] | [hasNegativeBalance: false]
+[2026-11-17T05:00:32.050Z] | [ENTER] | [POST /api/user/withdraw]
+[2026-11-17T05:00:32.050Z] | [ENTER] | [executeAtomicWithdrawal] | [userId: usr_u_test_1794891631861] | [amount: 100000] | [idempotencyKey: idemp_1794891631861_abc]
+[2026-11-17T05:00:32.050Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_u_test_1794891631861]
+[2026-11-17T05:00:32.051Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_u_test_1794891631861] | [balanceAvailable: 375000] | [totalEarned: 375000] | [hasNegativeBalance: false]
+[2026-11-17T05:00:32.051Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_u_test_1794891631861]
+[2026-11-17T05:00:32.051Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_u_test_1794891631861] | [balanceAvailable: 275000] | [totalEarned: 375000] | [hasNegativeBalance: false]
+[2026-11-17T05:00:32.052Z] | [LEAVE] | [executeAtomicWithdrawal] | [wdId: wd_1794891632051_62990dfa] | [amount: 100000] | [remainingBalance: 275000]
+[2026-11-17T05:00:32.052Z] | [LEAVE] | [POST /api/user/withdraw] | [amount: 100000] | [userCode: USR_1794891631861]
+[2026-11-17T05:00:32.052Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_u_test_1794891631861]
+[2026-11-17T05:00:32.052Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_u_test_1794891631861] | [balanceAvailable: 275000] | [totalEarned: 375000] | [hasNegativeBalance: false]
+[2026-11-17T05:00:32.066Z] | [ENTER] | [POST /api/user/withdraw]
+[2026-11-17T05:00:32.066Z] | [ENTER] | [executeAtomicWithdrawal] | [userId: usr_u_test_1794891631861] | [amount: 100000] | [idempotencyKey: idemp_1794891631861_abc]
+[2026-11-17T05:00:32.066Z] | [LEAVE] | [executeAtomicWithdrawal] | [wdId: wd_1794891632051_62990dfa] | [amount: 100000] | [idempotentReplay: true]
+[2026-11-17T05:00:32.066Z] | [LEAVE] | [POST /api/user/withdraw] | [amount: 100000] | [userCode: USR_1794891631861]
+[2026-11-17T05:00:32.067Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_u_test_1794891631861]
+[2026-11-17T05:00:32.067Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_u_test_1794891631861] | [balanceAvailable: 275000] | [totalEarned: 375000] | [hasNegativeBalance: false]
+  PASS: Bank info change requires password (400 on error), and withdrawal idempotency prevents double debiting.
+
+--- 3. Testing Lộ Dữ Liệu & Bí Mật ---
+[2026-11-17T05:00:32.081Z] | [ENTER] | [GET /api/admin/settings]
+[2026-11-17T05:00:32.081Z] | [LEAVE] | [GET /api/admin/settings]
+[2026-11-17T05:00:32.097Z] | [ENTER] | [GET /api/admin/settings]
+[2026-11-17T05:00:32.097Z] | [LEAVE] | [GET /api/admin/settings]
+  PASS: sanitizeOrderForUser strips internal margins, and secrets are masked with ***.
+
+--- 4. Testing Admin API & Audit Log ---
+[2026-11-17T05:00:32.112Z] | [ENTER] | [POST /api/admin/orders]
+[2026-11-17T05:00:32.128Z] | [ENTER] | [POST /api/admin/orders]
+[2026-11-17T05:00:32.129Z] | [ENTER] | [POST /api/admin/settings]
+[2026-11-17T05:00:32.144Z] | [ENTER] | [POST /api/admin/settings]
+[2026-11-17T05:00:32.175Z] | [ENTER] | [POST /api/admin/users/action]
+[2026-11-17T05:00:32.190Z] | [ENTER] | [POST /api/admin/users/action]
+[2026-11-17T05:00:32.205Z] | [ENTER] | [POST /api/admin/users/action]
+[2026-11-17T05:00:32.222Z] | [ENTER] | [POST /api/admin/users/action]
+[2026-11-17T05:00:32.237Z] | [ENTER] | [POST /api/admin/users/action]
+[2026-11-17T05:00:32.238Z] | [ENTER] | [recordAuditLog] | [action: soft_delete] | [targetId: usr_u_test_1794891631861]
+[2026-11-17T05:00:32.238Z] | [LEAVE] | [recordAuditLog] | [id: audit_1794891632238_2f4ef3] | [action: soft_delete]
+[2026-11-17T05:00:32.239Z] | [INFO] | [admin_audit] | [Admin 0999631861 soft-deleted user USR_1794891631861 (retained for ledger audit)] | [adminId: usr_adm_test_1794891631861] | [targetUserId: usr_u_test_1794891631861]
+[2026-11-17T05:00:32.239Z] | [LEAVE] | [POST /api/admin/users/action] | [action: soft_delete] | [userId: usr_u_test_1794891631861]
+  PASS: Admin payload validation, password protection, soft-delete, and audit logs are fully verified.
+
+--- 5. Testing Đồng Bộ, Logout Revocation, Phone Normalization & Error Sanitization ---
+[2026-11-17T05:00:32.270Z] | [ENTER] | [GET /api/user/me]
+[2026-11-17T05:00:32.270Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_active_1794891631861]
+[2026-11-17T05:00:32.270Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_active_1794891631861] | [balanceAvailable: 0] | [totalEarned: 0] | [hasNegativeBalance: false]
+[2026-11-17T05:00:32.270Z] | [ENTER] | [queryOrdersPaginated] | [page: 1] | [limit: 200] | [hasQuery: false] | [status: ] | [platform: ]
+[2026-11-17T05:00:32.270Z] | [LEAVE] | [queryOrdersPaginated] | [source: memory] | [total: 0] | [returned: 0]
+[2026-11-17T05:00:32.270Z] | [LEAVE] | [GET /api/user/me] | [userCode: ACT_1794891631861] | [referralCount: 0] | [referralBountyAmount: 10000]
+[2026-11-17T05:00:32.285Z] | [ENTER] | [POST /api/auth/logout]
+[2026-11-17T05:00:32.287Z] | [LEAVE] | [POST /api/auth/logout]
+[2026-11-17T05:00:32.301Z] | [ENTER] | [GET /api/user/me]
+[2026-11-17T05:00:32.317Z] | [ERROR] | [express] | [Lỗi xử lý request chưa bắt] | [path: /api/test-trigger-500] | [method: GET] | [error: Sensitive internal database connection string: postgresql://admin:secret@host/db]
+  PASS: Phone normalization, token revocation on logout, and 500 error message sanitization verified cleanly.
+
+=== ALL TASK 8 VERIFICATION TESTS PASSED SUCCESSFULLY! ===
+
+--> test_p1_backend_fixes.js: PASSED ✔ (643ms)
+
+================================================================
+[14/25] RUNNING: tests/test_p1_frontend_fixes.js
+================================================================
+=== STARTING TASK 9 P1 FRONTEND & LEGAL FIXES VERIFICATION SUITE ===
+
+--- 1. Testing VietQR URL Builder & Safe URL Escaping ---
+  PASS: VietQR URL builder and modal DOM assignment preserve literal & delimiters.
+
+--- 2. Testing Router Synchronization (#guide vs #faq) & Admin Guard ---
+  PASS: Router cleanly handles #guide, #faq, and prevents unauthorized access to #admin.
+
+--- 3. Testing Preview Link AbortError & Timeout Isolation ---
+  PASS: Preview link cleanly isolates AbortError from timeout errors.
+
+--- 4. Testing Form Double Submission & numOr Helper ---
+  PASS: Form double submission prevented and numOr handles empty/0 values cleanly.
+
+--- 5. Testing CSV Import Validations ---
+  PASS: CSV import properly handles delimiters, file limits, chunk errors, and row validation.
+
+--- 6. Testing Withdrawal Table Actions ---
+  PASS: Paid and rejected withdrawals are protected against invalid UI cancellation.
+
+--- 7. Testing Legal Consent & Transparency Messages in index.html ---
+  PASS: Legal consent, third-party processors, formula, and timeline messages verified in HTML.
+
+=== ALL 7 P1 FRONTEND & LEGAL TEST SUITES PASSED CLEANLY! ===
+
+--> test_p1_frontend_fixes.js: PASSED ✔ (38ms)
+
+================================================================
+[15/25] RUNNING: tests/test_p2_polish.js
+================================================================
+=== 1. Testing escapeHtml(0) & basic escaping ===
+  PASS: escapeHtml(0) returns "0" (not empty string)
+  PASS: escapeHtml(12345) returns "12345"
+  PASS: escapeHtml("") returns ""
+  PASS: escapeHtml(null) returns ""
+  PASS: escapeHtml(undefined) returns ""
+  PASS: escapeHtml escapes tags and quotes correctly
+
+=== 2. Testing public/styles.css class definitions & focus-visible ===
+  PASS: CSS defines .ip-main-row
+  PASS: CSS defines .cashback-pill
+  PASS: CSS defines .cashback-badge
+  PASS: CSS defines .grid-2
+  PASS: CSS defines .footer-inner
+  PASS: CSS defines .status-approved
+  PASS: CSS defines .status-pending
+  PASS: CSS defines :focus-visible with #0068ff outline
+
+=== 3. Testing public/offline.html & public/sw.js ===
+  PASS: public/offline.html exists
+  PASS: public/offline.html contains offline message
+  PASS: public/offline.html provides reconnect/reload action
+  PASS: public/sw.js cleans up old caches during activate event
+  PASS: public/sw.js serves /offline.html on failed navigate requests
+
+=== 4. Testing URL Resolver Hardening & utils proxy ===
+  PASS: src/utils/urlResolver re-exports safeResolve
+  PASS: src/utils/urlResolver re-exports cleanShopeeUrl
+  PASS: sanitizeImageUrl is exported
+  PASS: fetchPinned is exported for DNS IP pinning
+  PASS: sanitizeImageUrl allows valid Shopee CDN image
+  PASS: sanitizeImageUrl allows valid TikTok CDN image
+  PASS: sanitizeImageUrl rejects non-CDN domain
+  PASS: sanitizeImageUrl rejects javascript: URI
+  PASS: sanitizeImageUrl rejects injection characters in URL
+[2026-11-17T05:00:32.405Z] | [ENTER] | [cleanShopeeUrl] | [rawUrl: not-a-valid-url]
+  PASS: cleanShopeeUrl throws UrlResolveError with INVALID_URL on malformed URL
+[2026-11-17T05:00:32.405Z] | [ENTER] | [cleanTikTokUrl] | [rawUrl: https://evil.com/malicious]
+  PASS: cleanTikTokUrl throws UrlResolveError with HOST_NOT_ALLOWED on untrusted host
+  PASS: urlResolver enforces 6s overall timeout deadline
+
+=== 5. Testing public/app.js referral persistence & modal focus trap ===
+  PASS: public/app.js persists referral code to localStorage under saved_ref_code
+  PASS: public/app.js closes active open modal on Escape key
+  PASS: public/app.js implements keyboard Tab / Shift+Tab focus trap in open modals
+  PASS: public/app.js sets aria-live and aria-atomic on toast messages
+  PASS: public/index.html has #toast with aria-live="polite" and aria-atomic="true"
+
+========================================
+P2 Polish Test Suite: 36 passed, 0 failed.
+========================================
+--> test_p2_polish.js: PASSED ✔ (49ms)
+
+================================================================
+[16/25] RUNNING: tests/zalo.test.js
+================================================================
+=== STARTING ZALO UTILITY & ALLOWLIST TEST SUITE ===
+
+--- 1. Testing isValidZaloGroupUrl ---
+  PASS: Valid Zalo group URLs accepted.
+  PASS: Insecure http protocol rejected.
+  PASS: Spoof domains & userinfo spoofing strictly rejected.
+  PASS: javascript: and data: schemes strictly rejected.
+  PASS: Non-string, oversized, and malformed inputs rejected.
+
+--- 2. Testing normalizeZaloTarget ---
+  PASS: normalizeZaloTarget returns trimmed target or empty string.
+
+--- 3. Testing migrateZaloSettings ---
+  PASS: Auto-migration logic operates correctly.
+
+--- 4. Testing API Endpoints (Public Config & Admin Settings) ---
+[2026-11-17T05:00:32.693Z] | [ENTER] | [GET /api/public-config]
+[2026-11-17T05:00:32.695Z] | [LEAVE] | [GET /api/public-config]
+  PASS: GET /api/public-config exposes zaloGroupUrl and zaloWidgetEnabled.
+[2026-11-17T05:00:32.703Z] | [ENTER] | [GET /api/settings]
+[2026-11-17T05:00:32.703Z] | [LEAVE] | [GET /api/settings]
+  PASS: GET /api/settings exposes identical configuration.
+[2026-11-17T05:00:32.723Z] | [ENTER] | [POST /api/admin/settings]
+[2026-11-17T05:00:32.728Z] | [ENTER] | [POST /api/admin/settings]
+[2026-11-17T05:00:32.740Z] | [ENTER] | [POST /api/admin/settings]
+[2026-11-17T05:00:32.742Z] | [ENTER] | [POST /api/admin/settings]
+[2026-11-17T05:00:32.758Z] | [ENTER] | [POST /api/admin/settings]
+  PASS: POST /api/admin/settings rejected all invalid Zalo URLs with 400.
+[2026-11-17T05:00:32.774Z] | [ENTER] | [POST /api/admin/settings]
+[2026-11-17T05:00:32.774Z] | [ENTER] | [recordAuditLog] | [action: update_settings] | [targetId: settings]
+[2026-11-17T05:00:32.774Z] | [LEAVE] | [recordAuditLog] | [id: audit_1794891632774_265ba5] | [action: update_settings]
+[2026-11-17T05:00:32.776Z] | [LEAVE] | [POST /api/admin/settings]
+[2026-11-17T05:00:32.789Z] | [ENTER] | [GET /api/public-config]
+[2026-11-17T05:00:32.789Z] | [LEAVE] | [GET /api/public-config]
+  PASS: Saved valid URL and widget status verified in GET /api/public-config.
+[2026-11-17T05:00:32.804Z] | [ENTER] | [POST /api/admin/settings]
+[2026-11-17T05:00:32.804Z] | [ENTER] | [recordAuditLog] | [action: update_settings] | [targetId: settings]
+[2026-11-17T05:00:32.804Z] | [LEAVE] | [recordAuditLog] | [id: audit_1794891632804_0f4dc6] | [action: update_settings]
+[2026-11-17T05:00:32.805Z] | [LEAVE] | [POST /api/admin/settings]
+[2026-11-17T05:00:32.820Z] | [ENTER] | [GET /api/public-config]
+[2026-11-17T05:00:32.820Z] | [LEAVE] | [GET /api/public-config]
+  PASS: Re-enabling widget verified in public config.
+
+=== ALL ZALO TEST SUITES PASSED CLEANLY! ===
+
+--> zalo.test.js: PASSED ✔ (416ms)
+
+================================================================
+[17/25] RUNNING: tests/test_zalo_frontend.js
+================================================================
+=== STARTING ZALO FRONTEND & FLOATING WIDGET TEST SUITE ===
+
+--- 1. Testing public/index.html Floating Zalo Widget Markup ---
+  PASS: HTML markup, semantic anchor, SVG logo, and accessibility attributes verified.
+
+--- 2. Testing public/styles.css Positioning, Insets, :has(), and Media Queries ---
+  PASS: CSS fixed positioning, insets, :has() banner avoidance, modal suppression, pulse ring, and media queries verified.
+
+--- 3. Testing public/app.js applyZaloWidget & applyPublicSettings Wiring ---
+  PASS: applyZaloWidget URL validation (^https://zalo.me/), toggle logic, and error resilience verified.
+
+======================================================
+ALL ZALO FRONTEND TESTS PASSED CLEANLY (100% SUCCESS)
+======================================================
+
+--> test_zalo_frontend.js: PASSED ✔ (45ms)
+
+================================================================
+[18/25] RUNNING: tests/test_zalo_admin_ui.js
+================================================================
+=== STARTING TASK 13: ZALO ADMIN UI & LIVE TOGGLE VERIFICATION SUITE ===
+
+--- 1. Testing public/index.html Admin Settings Controls ---
+  PASS: Admin HTML controls, labels, hint text, and CSKH hotline retention verified.
+
+--- 2. Testing public/app.js Logic & Code Contracts ---
+  PASS: Code contracts for loadAdminSettings, saveAdminSettings, and live refresh verified.
+
+--- 3. Running Functional Runtime Tests with Mock DOM Environment ---
+
+--- 3.1 Testing loadAdminSettings(settings) ---
+  PASS: loadAdminSettings properly sets inputs, checkboxes, and handles defaults.
+
+--- 3.2 Testing saveAdminSettings() Serialization & API Payload ---
+  PASS: saveAdminSettings accurately trims URLs and serializes boolean toggles.
+
+--- 3.3 Testing Live DOM Reflection (Floating Button without Reload) ---
+  PASS: Live DOM updates without reload successfully verified.
+
+--- 3.4 Testing Button Disabled & Text States During Save ---
+  PASS: Button loading and disabled states verified.
+
+======================================================
+ALL TASK 13 ZALO ADMIN UI TESTS PASSED CLEANLY (100%)
+======================================================
+
+--> test_zalo_admin_ui.js: PASSED ✔ (1549ms)
+
+================================================================
+[19/25] RUNNING: tests/test_zalo_safety_faq.js
+================================================================
+=== STARTING ZALO COMMUNITY SAFETY FAQ TEST SUITE ===
+
+--- 1. Testing Placement within Guide Section (#view-guide) ---
+  PASS: Zalo safety guidelines placed correctly inside #view-guide FAQ section.
+
+--- 2. Testing Semantic Markup & HTML Tags ---
+  PASS: Semantic markup (h4, faq-answer, ul, li) verified.
+
+--- 3. Testing Required Content & Anti-Fraud Warnings ---
+  PASS: Public community space context verified.
+  PASS: Admin impersonation & credential theft warning verified.
+  PASS: Exclusive website withdrawal channel verified.
+  PASS: Impostor reporting mechanism verified.
+
+--- 4. Testing HTML Tag Balance & Validity ---
+  PASS: All HTML tags within the FAQ item are properly balanced.
+
+=== ALL ZALO COMMUNITY SAFETY FAQ TESTS PASSED CLEANLY! ===
+
+--> test_zalo_safety_faq.js: PASSED ✔ (34ms)
+
+================================================================
+[20/25] RUNNING: tests/test_url_resolver.js
+================================================================
+--- 1. Testing safeDecode ---
+  PASS: safeDecode malformed percent encoding does not throw
+  PASS: safeDecode valid utf8 percent encoding
+--- 2. Testing UrlResolveError ---
+  PASS: UrlResolveError is instance of Error
+  PASS: UrlResolveError code and message
+--- 3. Testing isPrivateIp & net.BlockList ---
+  PASS: 127.0.0.1 blocked
+  PASS: 10.0.0.1 blocked
+  PASS: 169.254.169.254 blocked
+  PASS: 192.168.1.1 blocked
+  PASS: 192.0.0.1 blocked
+  PASS: 198.18.0.1 blocked
+  PASS: 224.0.0.1 blocked
+  PASS: 240.0.0.1 blocked
+  PASS: 255.255.255.255 blocked
+  PASS: ::1 blocked
+  PASS: fe80::1 blocked
+  PASS: fc00::1 blocked
+  PASS: ::ffff:127.0.0.1 blocked
+  PASS: ::ffff:7f00:1 blocked
+  PASS: 8.8.8.8 allowed
+  PASS: 1.1.1.1 allowed
+--- 4. Testing isAllowedHost ---
+  PASS: shopee.vn allowed
+  PASS: s.shopee.vn allowed
+  PASS: vn.shp.ee allowed
+  PASS: tiktok.com allowed
+  PASS: vt.tiktok.com allowed
+  PASS: evil.com blocked
+  PASS: dangling subdomain blocked
+--- 5. Testing isAllowedCdnImage ---
+  PASS: Shopee cf CDN allowed
+  PASS: susercontent CDN allowed
+  PASS: tiktokcdn allowed
+  PASS: attacker.com blocked
+  PASS: insecure http CDN blocked
+--- 6. Testing sanitizeTitle ---
+  PASS: HTML entities & Shopee suffix stripped
+  PASS: Anti-bot title dropped
+--- 7. Testing cleanShopeeUrl ---
+[2026-11-17T05:00:34.500Z] | [ENTER] | [cleanShopeeUrl] | [rawUrl: https://shopee.vn/shop/12345678]
+[2026-11-17T05:00:34.500Z] | [LEAVE] | [cleanShopeeUrl] | [cleanUrl: https://shopee.vn/shop/12345678] | [linkType: page]
+  PASS: cleanShopeeUrl /shop/ does not mistake shopId as itemId
+[2026-11-17T05:00:34.500Z] | [ENTER] | [cleanShopeeUrl] | [rawUrl: https://shopee.vn/product/111/222]
+[2026-11-17T05:00:34.500Z] | [LEAVE] | [cleanShopeeUrl] | [cleanUrl: https://shopee.vn/product/111/222] | [shopId: 111] | [itemId: 222] | [linkType: product]
+  PASS: cleanShopeeUrl /product/ extracted
+[2026-11-17T05:00:34.500Z] | [ENTER] | [cleanShopeeUrl] | [rawUrl: https://shopee.vn/%E0%A4%A-i.111.222]
+[2026-11-17T05:00:34.500Z] | [LEAVE] | [cleanShopeeUrl] | [cleanUrl: https://shopee.vn/product/111/222] | [shopId: 111] | [itemId: 222] | [linkType: product]
+  PASS: cleanShopeeUrl malformed % path handled safely
+--- 8. Testing cleanTikTokUrl ---
+[2026-11-17T05:00:34.500Z] | [ENTER] | [cleanTikTokUrl] | [rawUrl: https://www.tiktok.com/view/product/172948291029384728]
+[2026-11-17T05:00:34.500Z] | [LEAVE] | [cleanTikTokUrl] | [cleanUrl: https://www.tiktok.com/view/product/172948291029384728] | [productId: 172948291029384728] | [linkType: product]
+  PASS: TikTok product ID extracted
+  PASS: Untrusted image host rejected in cleanTikTokUrl
+  PASS: TikTok cleanUrl format standard
+--- 9. Testing extractUrlsFromText ---
+[2026-11-17T05:00:34.501Z] | [ENTER] | [extractUrlsFromText] | [textLength: 75]
+[2026-11-17T05:00:34.501Z] | [LEAVE] | [extractUrlsFromText] | [count: 2]
+  PASS: Schemeless Shopee link extracted and punctuation stripped
+  PASS: Schemeless TikTok link extracted
+--- 10. Testing safeResolve fast-path & SSRF rejection ---
+[2026-11-17T05:00:34.501Z] | [ENTER] | [safeResolve] | [inputUrl: https://shopee.vn/product/123/456]
+[2026-11-17T05:00:34.501Z] | [LEAVE] | [safeResolve] | [resolvedUrl: https://shopee.vn/product/123/456] | [hops: 0]
+  PASS: safeResolve direct product link returns fast without fetch
+[2026-11-17T05:00:34.501Z] | [ENTER] | [safeResolve] | [inputUrl: https://attacker.com/steal]
+[2026-11-17T05:00:34.501Z] | [WARN] | [safeResolve] | [Resolve failed (HOST_NOT_ALLOWED)] | [error: Tên miền không nằm trong danh sách hỗ trợ (Chỉ hỗ trợ Shopee & TikTok Shop).] | [details: {"hostname":"attacker.com"}]
+  PASS: safeResolve rejects unauthorized domain with HOST_NOT_ALLOWED
+[2026-11-17T05:00:34.501Z] | [ENTER] | [safeResolve] | [inputUrl: ftp://shopee.vn/test]
+[2026-11-17T05:00:34.501Z] | [WARN] | [safeResolve] | [Resolve failed (INSECURE_PROTOCOL)] | [error: Giao thức kết nối không an toàn (Chỉ hỗ trợ HTTPS).] | [details: {"inputUrl":"ftp://shopee.vn/test"}]
+  PASS: safeResolve rejects non-http/https protocol with INSECURE_PROTOCOL
+
+Final Results: 45 passed, 0 failed.
+--> test_url_resolver.js: PASSED ✔ (49ms)
+
+================================================================
+[21/25] RUNNING: tests/test_audit_round2.js
+================================================================
+=== STARTING AUDIT ROUND 2 VERIFICATION SUITE ===
+
+--- 1. Testing db.clicks.slice(0, 5000) ---
+  PASS: Newest clicks are preserved at the beginning of the array, oldest dropped.
+
+--- 2. Testing Withdrawal Rejection Single-Refund Guarantee ---
+[2026-11-17T05:00:34.674Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_test_wd_1794891634674]
+[2026-11-17T05:00:34.675Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_test_wd_1794891634674] | [balanceAvailable: 500000] | [totalEarned: 500000] | [hasNegativeBalance: false]
+[2026-11-17T05:00:34.675Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_test_wd_1794891634674]
+[2026-11-17T05:00:34.675Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_test_wd_1794891634674] | [balanceAvailable: 400000] | [totalEarned: 500000] | [hasNegativeBalance: false]
+[2026-11-17T05:00:34.675Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_test_wd_1794891634674]
+[2026-11-17T05:00:34.675Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_test_wd_1794891634674] | [balanceAvailable: 500000] | [totalEarned: 500000] | [hasNegativeBalance: false]
+[2026-11-17T05:00:34.675Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_test_wd_1794891634674]
+[2026-11-17T05:00:34.675Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_test_wd_1794891634674] | [balanceAvailable: 500000] | [totalEarned: 500000] | [hasNegativeBalance: false]
+  PASS: Rejection refunds balance cleanly without double-refund.
+
+--- 3. Testing upsertNetworkOrder Financial Amount & Status Preservation ---
+[2026-11-17T05:00:34.710Z] | [ENTER] | [POST /api/webhooks/postback]
+[2026-11-17T05:00:34.711Z] | [ENTER] | [upsertNetworkOrder] | [orderSn: SN_APPROVED_1794891634675] | [status: pending]
+[2026-11-17T05:00:34.711Z] | [WARN] | [canTransitionOrderStatus] | [Bỏ qua chuyển đổi trạng thái không hợp lệ] | [from: approved] | [to: pending]
+[2026-11-17T05:00:34.711Z] | [WARN] | [upsertNetworkOrder] | [Bỏ qua sự kiện trạng thái không hợp lệ] | [orderSn: SN_APPROVED_1794891634675] | [from: approved] | [to: pending]
+[2026-11-17T05:00:34.711Z] | [LEAVE] | [upsertNetworkOrder] | [orderSn: SN_APPROVED_1794891634675] | [status: approved] | [blocked: approved_to_pending]
+[2026-11-17T05:00:34.711Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_test_wd_1794891634674]
+[2026-11-17T05:00:34.721Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_test_wd_1794891634674] | [balanceAvailable: 563000] | [totalEarned: 563000] | [hasNegativeBalance: false]
+[2026-11-17T05:00:34.722Z] | [LEAVE] | [POST /api/webhooks/postback] | [orderSn: SN_APPROVED_1794891634675] | [status: approved]
+  PASS: Approved order status and financial amounts protected against pending replay.
+
+--- 4. Testing adjust_balance Infinity & NaN Rejection ---
+[2026-11-17T05:00:34.731Z] | [ENTER] | [POST /api/admin/users/action]
+[2026-11-17T05:00:34.748Z] | [ENTER] | [POST /api/admin/users/action]
+  PASS: Infinity and NaN amounts strictly rejected by adjust_balance.
+
+--- 5. Testing sanitizeOrderForUser Data Leakage Prevention ---
+[2026-11-17T05:00:34.761Z] | [ENTER] | [GET /api/user/me]
+[2026-11-17T05:00:34.761Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_test_wd_1794891634674]
+[2026-11-17T05:00:34.761Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_test_wd_1794891634674] | [balanceAvailable: 563000] | [totalEarned: 563000] | [hasNegativeBalance: false]
+[2026-11-17T05:00:34.761Z] | [ENTER] | [queryOrdersPaginated] | [page: 1] | [limit: 200] | [hasQuery: false] | [status: ] | [platform: ]
+[2026-11-17T05:00:34.761Z] | [LEAVE] | [queryOrdersPaginated] | [source: memory] | [total: 1] | [returned: 1]
+[2026-11-17T05:00:34.762Z] | [LEAVE] | [GET /api/user/me] | [userCode: U_TEST_102619] | [referralCount: 0] | [referralBountyAmount: 10000]
+  PASS: Internal business metrics completely masked from client-facing order responses.
+
+--- 6. Testing /api/admin/withdrawals/cancel Pending-Only Enforcement ---
+[2026-11-17T05:00:34.779Z] | [ENTER] | [POST /api/admin/withdrawals/cancel]
+[2026-11-17T05:00:34.795Z] | [ENTER] | [POST /api/admin/withdrawals/cancel]
+  PASS: Only pending withdrawals can be cancelled.
+
+=== ALL 6 AUDIT VERIFICATION SUITES PASSED CLEANLY! ===
+
+--> test_audit_round2.js: PASSED ✔ (300ms)
+
+================================================================
+[22/25] RUNNING: tests/test_manual_checklist_simulation.js
+================================================================
+=== STARTING MANUAL TESTING CHECKLIST SIMULATION SUITE ===
+
+--- 1. Testing Mobile 360px Viewport Behavior & Styles ---
+  PASS: Mobile 360px layout verified (circular icon, hidden label text, no collision).
+
+--- 2. Testing iPhone Safe-Area Inset Handling ---
+  PASS: iPhone safe-area insets and viewport-fit=cover verified.
+
+--- 3. Testing PWA Banner Active Elevation (bottom: 132px) ---
+  PASS: PWA banner elevation rule verified (elevates cleanly to bottom 132px).
+
+--- 4. Testing Active Modal Dialog Suppression ---
+  PASS: Found 7 modal dialogs protected by modal-backdrop rule.
+
+--- 5. Testing Admin View Active Suppression ---
+  PASS: Admin view active suppression verified (hidden in #view-admin).
+
+--- 6. Testing Prefers-Reduced-Motion Accessibility ---
+  PASS: Prefers-reduced-motion animation suppression verified.
+
+--- 7. Testing Keyboard Focus-Visible & WCAG Accessibility ---
+  PASS: Keyboard Tab focus-visible outline and accessibility verified.
+
+--- 8. Testing Real-Time Admin Settings Dynamic DOM Update ---
+  PASS: Real-time dynamic DOM updates without page reload verified.
+
+======================================================
+ALL 8 MANUAL TESTING CHECKLIST SIMULATION ITEMS PASSED (100%)
+======================================================
+
+--> test_manual_checklist_simulation.js: PASSED ✔ (36ms)
+
+================================================================
+[23/25] RUNNING: tests/test_due_diligence_fixes.js
+================================================================
+--- Running Technical Due Diligence Fixes Verification ---
+✓ Test 1 [CRIT-01]: Unshifted newest 5000 clicks retained accurately
+[2026-11-17T05:00:35.079Z] | [ENTER] | [POST /api/admin/settings]
+[2026-11-17T05:00:35.124Z] | [ENTER] | [recordAuditLog] | [action: update_settings] | [targetId: settings]
+[2026-11-17T05:00:35.124Z] | [LEAVE] | [recordAuditLog] | [id: audit_1794891635124_43905c] | [action: update_settings]
+[2026-11-17T05:00:35.125Z] | [LEAVE] | [POST /api/admin/settings]
+[2026-11-17T05:00:35.131Z] | [ENTER] | [POST /api/auth/login]
+[2026-11-17T05:00:35.166Z] | [ENTER] | [POST /api/auth/login]
+[2026-11-17T05:00:35.191Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_admin]
+[2026-11-17T05:00:35.191Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_admin] | [balanceAvailable: 0] | [totalEarned: 0] | [hasNegativeBalance: false]
+[2026-11-17T05:00:35.191Z] | [LEAVE] | [POST /api/auth/login] | [userCode: TRUNGVUONG3X] | [role: admin]
+✓ Test 2 [CRIT-02]: Admin password change persists across ensureDbLoaded and login
+[2026-11-17T05:00:35.216Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_crit05_test]
+[2026-11-17T05:00:35.216Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_crit05_test] | [balanceAvailable: 15000] | [totalEarned: 0] | [hasNegativeBalance: false]
+[2026-11-17T05:00:35.229Z] | [ENTER] | [POST /api/admin/orders/delete]
+[2026-11-17T05:00:35.229Z] | [ENTER] | [recordAuditLog] | [action: delete_order] | [targetId: ord_crit05_test]
+[2026-11-17T05:00:35.230Z] | [LEAVE] | [recordAuditLog] | [id: audit_1794891635229_7b07c7] | [action: delete_order]
+[2026-11-17T05:00:35.230Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_crit05_test]
+[2026-11-17T05:00:35.239Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_crit05_test] | [balanceAvailable: 0] | [totalEarned: 0] | [hasNegativeBalance: false]
+[2026-11-17T05:00:35.239Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_admin]
+[2026-11-17T05:00:35.239Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_admin] | [balanceAvailable: 0] | [totalEarned: 0] | [hasNegativeBalance: false]
+[2026-11-17T05:00:35.239Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_crit05_test]
+[2026-11-17T05:00:35.239Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_crit05_test] | [balanceAvailable: 0] | [totalEarned: 0] | [hasNegativeBalance: false]
+[2026-11-17T05:00:35.239Z] | [ENTER] | [auditLedgerIntegrity] | [autoRepair: false]
+[2026-11-17T05:00:35.239Z] | [LEAVE] | [auditLedgerIntegrity] | [ok: true] | [mismatchCount: 0] | [negativeBalanceCount: 0]
+[2026-11-17T05:00:35.240Z] | [LEAVE] | [POST /api/admin/orders/delete] | [orderSn: CRIT05ORDER999]
+✓ Test 3 [CRIT-05]: Deleting approved order revokes credited cashback cleanly
+[2026-11-17T05:00:35.245Z] | [ENTER] | [GET /go/:clickId] | [clickId: click_allow_isclix]
+[2026-11-17T05:00:35.245Z] | [ENTER] | [isAllowedAffiliateRedirectUrl] | [url: https://go.isclix.com/deep_link/v6/123/456]
+[2026-11-17T05:00:35.245Z] | [LEAVE] | [isAllowedAffiliateRedirectUrl] | [allowed: true] | [host: go.isclix.com]
+[2026-11-17T05:00:35.245Z] | [LEAVE] | [GET /go/:clickId] | [host: go.isclix.com]
+[2026-11-17T05:00:35.259Z] | [ENTER] | [GET /go/:clickId] | [clickId: click_allow_isgd]
+[2026-11-17T05:00:35.259Z] | [ENTER] | [isAllowedAffiliateRedirectUrl] | [url: https://is.gd/safeabc]
+[2026-11-17T05:00:35.259Z] | [LEAVE] | [isAllowedAffiliateRedirectUrl] | [allowed: true] | [host: is.gd]
+[2026-11-17T05:00:35.259Z] | [LEAVE] | [GET /go/:clickId] | [host: is.gd]
+[2026-11-17T05:00:35.260Z] | [ENTER] | [GET /go/:clickId] | [clickId: click_block_evil]
+[2026-11-17T05:00:35.260Z] | [ENTER] | [isAllowedAffiliateRedirectUrl] | [url: https://evil.example.com/phishing]
+[2026-11-17T05:00:35.260Z] | [LEAVE] | [isAllowedAffiliateRedirectUrl] | [allowed: false] | [host: evil.example.com]
+[2026-11-17T05:00:35.260Z] | [WARN] | [GET /go/:clickId] | [Chặn chuyển hướng tới tên miền không nằm trong allowlist] | [clickId: click_block_evil]
+[2026-11-17T05:00:35.260Z] | [LEAVE] | [GET /go/:clickId] | [blocked: true]
+✓ Test 4 [CRIT-06]: /go/:clickId blocks open redirects and permits allowlisted hosts
+✓ Test 5 [CRIT-07]: NODE_ENV=test completely isolates writes away from data/db.json
+✓ Test 6 [HIGH-01]: Admin orders (8 cols) and withdrawals (6 cols) tables align cleanly
+[2026-11-17T05:00:35.370Z] | [ENTER] | [POST /api/convert]
+[2026-11-17T05:00:35.370Z] | [ENTER] | [convertTextLinks] | [textLength: 40]
+[2026-11-17T05:00:35.370Z] | [ENTER] | [extractUrlsFromText] | [textLength: 40]
+[2026-11-17T05:00:35.371Z] | [LEAVE] | [extractUrlsFromText] | [count: 1]
+[2026-11-17T05:00:35.371Z] | [ENTER] | [processSingleUrl] | [originalUrl: https://shopee.vn/product/123456/7890123]
+[2026-11-17T05:00:35.371Z] | [ENTER] | [safeResolve] | [inputUrl: https://shopee.vn/product/123456/7890123]
+[2026-11-17T05:00:35.371Z] | [LEAVE] | [safeResolve] | [resolvedUrl: https://shopee.vn/product/123456/7890123] | [hops: 0]
+[2026-11-17T05:00:35.371Z] | [ENTER] | [detectPlatform] | [url: https://shopee.vn/product/123456/7890123]
+[2026-11-17T05:00:35.371Z] | [LEAVE] | [detectPlatform] | [platform: shopee]
+[2026-11-17T05:00:35.371Z] | [ENTER] | [cleanShopeeUrl] | [rawUrl: https://shopee.vn/product/123456/7890123]
+[2026-11-17T05:00:35.371Z] | [LEAVE] | [cleanShopeeUrl] | [cleanUrl: https://shopee.vn/product/123456/7890123] | [shopId: 123456] | [itemId: 7890123] | [linkType: product]
+[2026-11-17T05:00:35.372Z] | [ENTER] | [convertShopeeLink] | [cleanUrl: https://shopee.vn/product/123456/7890123] | [mode: an_redir]
+[2026-11-17T05:00:35.372Z] | [ENTER] | [buildShopeeRedirectLink] | [cleanUrl: https://shopee.vn/product/123456/7890123] | [subIdStr: 69d6a42172471d26]
+[2026-11-17T05:00:35.372Z] | [LEAVE] | [buildShopeeRedirectLink] | [status: ok]
+[2026-11-17T05:00:35.372Z] | [LEAVE] | [convertShopeeLink] | [usedMethod: Universal Redirect]
+[2026-11-17T05:00:35.372Z] | [LEAVE] | [processSingleUrl] | [platform: shopee] | [clickId: 69d6a42172471d26]
+[2026-11-17T05:00:35.372Z] | [LEAVE] | [convertTextLinks] | [total: 1] | [shopeeCount: 1] | [tiktokCount: 0] | [successCount: 1] | [errorCount: 0]
+[2026-11-17T05:00:35.372Z] | [INFO] | [POST /api/convert] | [Click recorded] | [clickId: 69d6a42172471d26] | [userCode: TRUNGVUONG3X] | [platform: shopee]
+[2026-11-17T05:00:35.374Z] | [LEAVE] | [POST /api/convert] | [total: 1]
+✓ Test 7 [HIGH-06]: /api/convert sets qrUrl = null and eliminates api.qrserver.com leakage
+
+ALL DUE DILIGENCE FIX TESTS PASSED (7/7)
+--> test_due_diligence_fixes.js: PASSED ✔ (648ms)
+
+================================================================
+[24/25] RUNNING: tests/test_phase2_phase3_due_diligence.js
+================================================================
+=== STARTING PHASE 2 & PHASE 3 DUE DILIGENCE TEST SUITE ===
+
+--- 1. Testing [MED-04] Modular Architecture & Re-exports ---
+  PASS: Modular exports and backward-compatible re-exports verified.
+
+--- 2. Testing [HIGH-04] PostgreSQL SSL Configuration ---
+  PASS: Postgres TLS SSL configuration verified.
+
+--- 3. Testing [LOW-05] AsyncLocalStorage & X-Request-Id ---
+[2026-11-17T05:00:35.704Z] | [ENTER] | [GET /api/public-config] | [reqId: cid_test_mwk84xqq_9639]
+[2026-11-17T05:00:35.706Z] | [LEAVE] | [GET /api/public-config] | [reqId: cid_test_mwk84xqq_9639]
+[2026-11-17T05:00:35.710Z] | [ENTER] | [GET /api/public-config] | [reqId: d869c666-5f17-4759-a938-33f55d651196]
+[2026-11-17T05:00:35.711Z] | [LEAVE] | [GET /api/public-config] | [reqId: d869c666-5f17-4759-a938-33f55d651196]
+  PASS: Request ID propagation and AsyncLocalStorage context verified.
+
+--- 4. Testing [MED-01] Server-Side Pagination & Search APIs ---
+[2026-11-17T05:00:35.713Z] | [ENTER] | [GET /api/admin/orders] | [reqId: 4bb06d90-47d5-4908-8b82-a77b2d549748]
+[2026-11-17T05:00:35.714Z] | [ENTER] | [queryOrdersPaginated] | [reqId: 4bb06d90-47d5-4908-8b82-a77b2d549748] | [page: 1] | [limit: 2] | [hasQuery: false] | [status: ] | [platform: ]
+[2026-11-17T05:00:35.714Z] | [LEAVE] | [queryOrdersPaginated] | [reqId: 4bb06d90-47d5-4908-8b82-a77b2d549748] | [source: memory] | [total: 5] | [returned: 2]
+[2026-11-17T05:00:35.714Z] | [LEAVE] | [GET /api/admin/orders] | [reqId: 4bb06d90-47d5-4908-8b82-a77b2d549748] | [page: 1] | [total: 5]
+[2026-11-17T05:00:35.729Z] | [ENTER] | [GET /api/admin/orders] | [reqId: fab9dea9-8678-4a1e-9e6e-d9026329f0d5]
+[2026-11-17T05:00:35.729Z] | [ENTER] | [queryOrdersPaginated] | [reqId: fab9dea9-8678-4a1e-9e6e-d9026329f0d5] | [page: 2] | [limit: 2] | [hasQuery: false] | [status: ] | [platform: ]
+[2026-11-17T05:00:35.729Z] | [LEAVE] | [queryOrdersPaginated] | [reqId: fab9dea9-8678-4a1e-9e6e-d9026329f0d5] | [source: memory] | [total: 5] | [returned: 2]
+[2026-11-17T05:00:35.729Z] | [LEAVE] | [GET /api/admin/orders] | [reqId: fab9dea9-8678-4a1e-9e6e-d9026329f0d5] | [page: 2] | [total: 5]
+[2026-11-17T05:00:35.737Z] | [ENTER] | [GET /api/admin/orders] | [reqId: 867e9ebc-9ef3-485e-8540-c6026c9c8fa0]
+[2026-11-17T05:00:35.737Z] | [ENTER] | [queryOrdersPaginated] | [reqId: 867e9ebc-9ef3-485e-8540-c6026c9c8fa0] | [page: 1] | [limit: 10] | [hasQuery: true] | [status: approved] | [platform: ]
+[2026-11-17T05:00:35.737Z] | [LEAVE] | [queryOrdersPaginated] | [reqId: 867e9ebc-9ef3-485e-8540-c6026c9c8fa0] | [source: memory] | [total: 2] | [returned: 2]
+[2026-11-17T05:00:35.737Z] | [LEAVE] | [GET /api/admin/orders] | [reqId: 867e9ebc-9ef3-485e-8540-c6026c9c8fa0] | [page: 1] | [total: 2]
+[2026-11-17T05:00:35.740Z] | [ENTER] | [GET /api/admin/users] | [reqId: ea5b3e9d-b82a-47b9-873b-ee97da0462c9]
+[2026-11-17T05:00:35.740Z] | [ENTER] | [queryUsersPaginated] | [reqId: ea5b3e9d-b82a-47b9-873b-ee97da0462c9] | [page: 1] | [limit: 2] | [hasQuery: false]
+[2026-11-17T05:00:35.740Z] | [LEAVE] | [queryUsersPaginated] | [reqId: ea5b3e9d-b82a-47b9-873b-ee97da0462c9] | [total: 5] | [returned: 2]
+[2026-11-17T05:00:35.740Z] | [LEAVE] | [GET /api/admin/users] | [reqId: ea5b3e9d-b82a-47b9-873b-ee97da0462c9] | [page: 1] | [total: 5]
+[2026-11-17T05:00:35.743Z] | [ENTER] | [GET /api/admin/users] | [reqId: 29392cab-f599-4d19-975b-5b9d1d2e8550]
+[2026-11-17T05:00:35.743Z] | [ENTER] | [queryUsersPaginated] | [reqId: 29392cab-f599-4d19-975b-5b9d1d2e8550] | [page: 1] | [limit: 50] | [hasQuery: true]
+[2026-11-17T05:00:35.743Z] | [LEAVE] | [queryUsersPaginated] | [reqId: 29392cab-f599-4d19-975b-5b9d1d2e8550] | [total: 1] | [returned: 1]
+[2026-11-17T05:00:35.743Z] | [LEAVE] | [GET /api/admin/users] | [reqId: 29392cab-f599-4d19-975b-5b9d1d2e8550] | [page: 1] | [total: 1]
+[2026-11-17T05:00:35.760Z] | [ENTER] | [GET /api/admin/withdrawals] | [reqId: 8c71498a-c029-4e56-bbbf-e8aae5640fb2]
+[2026-11-17T05:00:35.760Z] | [ENTER] | [queryWithdrawalsPaginated] | [reqId: 8c71498a-c029-4e56-bbbf-e8aae5640fb2] | [page: 1] | [limit: 2] | [hasQuery: false] | [status: pending]
+[2026-11-17T05:00:35.761Z] | [LEAVE] | [queryWithdrawalsPaginated] | [reqId: 8c71498a-c029-4e56-bbbf-e8aae5640fb2] | [total: 2] | [returned: 2]
+[2026-11-17T05:00:35.761Z] | [LEAVE] | [GET /api/admin/withdrawals] | [reqId: 8c71498a-c029-4e56-bbbf-e8aae5640fb2] | [page: 1] | [total: 2]
+[2026-11-17T05:00:35.777Z] | [ENTER] | [GET /api/user/me] | [reqId: da0f23d4-cb3d-4f3a-880e-dfcf015bd2e5]
+[2026-11-17T05:00:35.777Z] | [ENTER] | [recalculateUserWallet] | [reqId: da0f23d4-cb3d-4f3a-880e-dfcf015bd2e5] | [userId: usr_p23_u1_mwk84xqq_9639]
+[2026-11-17T05:00:35.788Z] | [LEAVE] | [recalculateUserWallet] | [reqId: da0f23d4-cb3d-4f3a-880e-dfcf015bd2e5] | [userId: usr_p23_u1_mwk84xqq_9639] | [balanceAvailable: 22000] | [totalEarned: 28000] | [hasNegativeBalance: false]
+[2026-11-17T05:00:35.788Z] | [ENTER] | [queryOrdersPaginated] | [reqId: da0f23d4-cb3d-4f3a-880e-dfcf015bd2e5] | [page: 1] | [limit: 2] | [hasQuery: true] | [status: ] | [platform: ]
+[2026-11-17T05:00:35.788Z] | [LEAVE] | [queryOrdersPaginated] | [reqId: da0f23d4-cb3d-4f3a-880e-dfcf015bd2e5] | [source: memory] | [total: 4] | [returned: 2]
+[2026-11-17T05:00:35.789Z] | [LEAVE] | [GET /api/user/me] | [reqId: da0f23d4-cb3d-4f3a-880e-dfcf015bd2e5] | [userCode: P23U1__9639] | [referralCount: 0] | [referralBountyAmount: 10000]
+  PASS: Admin & user pagination + search endpoints verified.
+
+--- 5. Testing [HIGH-07] Cookie-Auth CSRF Protection ---
+[2026-11-17T05:00:35.808Z] | [ERROR] | [express] | [Lỗi xử lý request chưa bắt] | [reqId: 5e3a676b-213d-4ba8-b0da-397594ff5a9e] | [path: /api/admin/settings] | [method: POST] | [error: Origin not allowed by CORS]
+[2026-11-17T05:00:35.824Z] | [WARN] | [csrfGuardMiddleware] | [Rejected simple-content CSRF attempt without X-Requested-With] | [reqId: 858413bc-303b-43bd-8344-0f0bd3c15a0e] | [contentType: application/x-www-form-urlencoded] | [path: /api/admin/settings]
+[2026-11-17T05:00:35.846Z] | [ENTER] | [POST /api/admin/settings] | [reqId: 886388f9-6d68-4039-8de3-dc943fe236e3]
+[2026-11-17T05:00:35.846Z] | [ENTER] | [recordAuditLog] | [reqId: 886388f9-6d68-4039-8de3-dc943fe236e3] | [action: update_settings] | [targetId: settings]
+[2026-11-17T05:00:35.846Z] | [LEAVE] | [recordAuditLog] | [reqId: 886388f9-6d68-4039-8de3-dc943fe236e3] | [id: audit_1794891635846_501e38] | [action: update_settings]
+[2026-11-17T05:00:35.847Z] | [LEAVE] | [POST /api/admin/settings] | [reqId: 886388f9-6d68-4039-8de3-dc943fe236e3]
+[2026-11-17T05:00:35.855Z] | [ENTER] | [POST /api/webhooks/postback] | [reqId: cba10da2-88b0-4949-959c-0b0b89fd770c]
+[2026-11-17T05:00:35.855Z] | [ENTER] | [upsertNetworkOrder] | [reqId: cba10da2-88b0-4949-959c-0b0b89fd770c] | [orderSn: P23_WH_MWK84XQQ_9639] | [status: pending]
+[2026-11-17T05:00:35.855Z] | [LEAVE] | [upsertNetworkOrder] | [reqId: cba10da2-88b0-4949-959c-0b0b89fd770c] | [orderSn: P23_WH_MWK84XQQ_9639] | [created: true] | [status: pending]
+[2026-11-17T05:00:35.856Z] | [ENTER] | [recalculateUserWallet] | [reqId: cba10da2-88b0-4949-959c-0b0b89fd770c] | [userId: usr_admin]
+[2026-11-17T05:00:35.856Z] | [LEAVE] | [recalculateUserWallet] | [reqId: cba10da2-88b0-4949-959c-0b0b89fd770c] | [userId: usr_admin] | [balanceAvailable: 0] | [totalEarned: 0] | [hasNegativeBalance: false]
+[2026-11-17T05:00:35.856Z] | [ENTER] | [recalculateUserWallet] | [reqId: cba10da2-88b0-4949-959c-0b0b89fd770c] | [userId: usr_p23_adm_mwk84xqq_9639]
+[2026-11-17T05:00:35.856Z] | [LEAVE] | [recalculateUserWallet] | [reqId: cba10da2-88b0-4949-959c-0b0b89fd770c] | [userId: usr_p23_adm_mwk84xqq_9639] | [balanceAvailable: 0] | [totalEarned: 0] | [hasNegativeBalance: false]
+[2026-11-17T05:00:35.856Z] | [ENTER] | [recalculateUserWallet] | [reqId: cba10da2-88b0-4949-959c-0b0b89fd770c] | [userId: usr_p23_u1_mwk84xqq_9639]
+[2026-11-17T05:00:35.856Z] | [LEAVE] | [recalculateUserWallet] | [reqId: cba10da2-88b0-4949-959c-0b0b89fd770c] | [userId: usr_p23_u1_mwk84xqq_9639] | [balanceAvailable: 22000] | [totalEarned: 28000] | [hasNegativeBalance: false]
+[2026-11-17T05:00:35.856Z] | [ENTER] | [recalculateUserWallet] | [reqId: cba10da2-88b0-4949-959c-0b0b89fd770c] | [userId: usr_p23_u2_mwk84xqq_9639]
+[2026-11-17T05:00:35.856Z] | [LEAVE] | [recalculateUserWallet] | [reqId: cba10da2-88b0-4949-959c-0b0b89fd770c] | [userId: usr_p23_u2_mwk84xqq_9639] | [balanceAvailable: 0] | [totalEarned: 0] | [hasNegativeBalance: false]
+[2026-11-17T05:00:35.856Z] | [ENTER] | [recalculateUserWallet] | [reqId: cba10da2-88b0-4949-959c-0b0b89fd770c] | [userId: usr_p23_u3_mwk84xqq_9639]
+[2026-11-17T05:00:35.856Z] | [LEAVE] | [recalculateUserWallet] | [reqId: cba10da2-88b0-4949-959c-0b0b89fd770c] | [userId: usr_p23_u3_mwk84xqq_9639] | [balanceAvailable: 0] | [totalEarned: 0] | [hasNegativeBalance: false]
+[2026-11-17T05:00:35.856Z] | [ENTER] | [auditLedgerIntegrity] | [reqId: cba10da2-88b0-4949-959c-0b0b89fd770c] | [autoRepair: false]
+[2026-11-17T05:00:35.856Z] | [LEAVE] | [auditLedgerIntegrity] | [reqId: cba10da2-88b0-4949-959c-0b0b89fd770c] | [ok: true] | [mismatchCount: 0] | [negativeBalanceCount: 0]
+[2026-11-17T05:00:35.857Z] | [LEAVE] | [POST /api/webhooks/postback] | [reqId: cba10da2-88b0-4949-959c-0b0b89fd770c] | [orderSn: P23_WH_MWK84XQQ_9639] | [status: pending]
+[2026-11-17T05:00:35.858Z] | [WARN] | [csrfGuardMiddleware] | [Rejected cross-origin cookie request] | [origin: https://phishing.example.com] | [path: /api/user/profile]
+  PASS: CSRF guard blocks cross-origin & simple-form mutations, allows valid XHR, exempts webhooks.
+
+--- 6. Testing [MED-03] Multi-Cycle Referral Bounty Reconciler ---
+[2026-11-17T05:00:35.858Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_p23_refowner_mwk84xqq_9639]
+[2026-11-17T05:00:35.858Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_p23_refowner_mwk84xqq_9639] | [balanceAvailable: 5000] | [totalEarned: 5000] | [hasNegativeBalance: false]
+[2026-11-17T05:00:35.858Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_p23_refowner_mwk84xqq_9639]
+[2026-11-17T05:00:35.858Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_p23_refowner_mwk84xqq_9639] | [balanceAvailable: 0] | [totalEarned: 0] | [hasNegativeBalance: false]
+[2026-11-17T05:00:35.858Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_p23_refowner_mwk84xqq_9639]
+[2026-11-17T05:00:35.858Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_p23_refowner_mwk84xqq_9639] | [balanceAvailable: 5000] | [totalEarned: 5000] | [hasNegativeBalance: false]
+[2026-11-17T05:00:35.858Z] | [ENTER] | [recalculateUserWallet] | [userId: usr_p23_refowner_mwk84xqq_9639]
+[2026-11-17T05:00:35.858Z] | [LEAVE] | [recalculateUserWallet] | [userId: usr_p23_refowner_mwk84xqq_9639] | [balanceAvailable: 5000] | [totalEarned: 5000] | [hasNegativeBalance: false]
+  PASS: Multi-cycle referral bounty credit -> revoke -> re-credit verified.
+
+--- 7. Testing [MED-05], [LOW-01], [LOW-02], [LOW-04] Assets, CSP/Headers & UI ---
+  PASS: Frontend CSRF header, CSPRNG password, PNG icons, Cache-Control, and Terms disclosure verified.
+
+=== ALL PHASE 2 & PHASE 3 DUE DILIGENCE TESTS PASSED ===
+--> test_phase2_phase3_due_diligence.js: PASSED ✔ (504ms)
+
+================================================================
+[25/25] RUNNING: tests/test_mobile_first_and_ux_upgrade.js
+================================================================
+=== Suite 20: Mobile-First UX, Performance & SEO Upgrade Verification ===
+ALL SUITE 20 CHECKS PASSED!
+--> test_mobile_first_and_ux_upgrade.js: PASSED ✔ (50ms)
+
+
+================================================================
+                 TEST EXECUTION SUMMARY REPORT                  
+================================================================
+ 1. manual-order-optional-id.test.js       PASS ✔              284ms
+ 2. test_runtime_config.js                 PASS ✔               37ms
+ 3. test_csv_import.js                     PASS ✔              417ms
+ 4. test_final_remediation.js              PASS ✔              304ms
+ 5. test_security_regressions.js           PASS ✔              149ms
+ 6. clicks-ttl.test.js                     PASS ✔               80ms
+ 7. referral_sync.test.js                  PASS ✔              328ms
+ 8. wallet-ledger.test.js                  PASS ✔              411ms
+ 9. test_concurrency_lock.js               PASS ✔             1172ms
+10. test_upsert_order.js                   PASS ✔              269ms
+11. test_webhook_security.js               PASS ✔              505ms
+12. test_shopee_sync_schema.js             PASS ✔              181ms
+13. test_p1_backend_fixes.js               PASS ✔              643ms
+14. test_p1_frontend_fixes.js              PASS ✔               38ms
+15. test_p2_polish.js                      PASS ✔               49ms
+16. zalo.test.js                           PASS ✔              416ms
+17. test_zalo_frontend.js                  PASS ✔               45ms
+18. test_zalo_admin_ui.js                  PASS ✔             1549ms
+19. test_zalo_safety_faq.js                PASS ✔               34ms
+20. test_url_resolver.js                   PASS ✔               49ms
+21. test_audit_round2.js                   PASS ✔              300ms
+22. test_manual_checklist_simulation.js    PASS ✔               36ms
+23. test_due_diligence_fixes.js            PASS ✔              648ms
+24. test_phase2_phase3_due_diligence.js    PASS ✔              504ms
+25. test_mobile_first_and_ux_upgrade.js    PASS ✔               50ms
+----------------------------------------------------------------
+Total Test Suites: 25
+Passed Suites:     25 / 25 (100.0%)
+Failed Suites:     0
+Total Elapsed:     8.50s
+================================================================
+
+🎉 ALL SYSTEM AUDIT & REGRESSION TESTS PASSED CLEANLY (100%)!
+

@@ -48,8 +48,8 @@ async function main() {
       res.end('<!doctype html><html><body>Ready</body></html>');
       return;
     }
-    const name = req.url.slice(1);
-    if (!['sw.js', 'offline.html', 'offline.js', 'icon.svg'].includes(name)) {
+    const name = new URL(req.url, 'http://localhost').pathname.slice(1) || 'index.html';
+    if (!['sw.js', 'offline.html', 'offline.js', 'icon.svg', 'index.html', 'styles.css', 'selectPopup.css', 'adminMobile.css', 'csvImport.js', 'app.js', 'tiktokReply.js', 'selectPopup.js', 'adminMobile.js'].includes(name)) {
       res.writeHead(404).end();
       return;
     }

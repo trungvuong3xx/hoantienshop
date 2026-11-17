@@ -63,6 +63,28 @@ if (process.env.CSV_UI_WORKER === '1') {
       assert.equal(await page.locator('#confirmModal').isVisible(), false);
       assert.equal((await state()).balance, 0); assert.deepEqual(errors, []);
       console.log('PASS: real file-input parser, confirmation/cancel, multi-item dedup, repeat import, cancellation, stale replay and invalid money');
+      // Commit the last batch, lose its response, then import the identical file again.
+      const batchRows = Array.from({ length: 501 }, (_, i) => ({ ...completed, 'ID đơn hàng': 'CSV_BATCH_' + i }));
+      let loseResponse = true;
+      await page.route('**/api/admin/import-orders', async route => {
+        const response = await route.fetch();
+        if (loseResponse && route.request().postDataJSON().rows.length === 1) {
+          loseResponse = false;
+          await route.abort('failed');
+        } else await route.fulfill({ response });
+      });
+      await upload(buildCsv(batchRows), '36');
+      const report = await page.locator('#csvImportReport').textContent();
+      assert.match(report, /Đã xác nhận nhập 500 đơn/);
+      assert.match(report, /1 đơn ở lô hiện tại chưa rõ kết quả/);
+      const committed = await state();
+      assert.equal(committed.balance, 501 * 6300);
+      assert.equal(committed.orders, 502);
+      await upload(buildCsv(batchRows), '36');
+      assert.deepEqual(await state(), committed, 'Retry must not double-credit committed batches');
+      assert.match(await page.locator('#csvImportReport').textContent(), /501\/501/);
+      assert.deepEqual(errors, []);
+      console.log('PASS: 501-order import, committed batch with lost response, visible partial result and safe manual retry');
     } finally {
       if (browser) await browser.close();
       if (child.exitCode === null) await new Promise(resolve => { child.once('exit', resolve); child.send('stop'); });

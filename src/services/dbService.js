@@ -1483,11 +1483,15 @@ async function appendClickRecords(records) {
   }
 }
 
-async function findClickById(clickId) {
+async function findClickById(clickId, { forAttribution = false } = {}) {
+  // Link expiry is not an attribution deadline: reports can arrive after settlement.
+  // Old PostgreSQL records remain authoritative; do not extend public redirect TTL.
   const cutoff = Date.now() - 30 * 86400000;
-  const cached = ensureDbLoaded().clicks.find(c => c.clickId === clickId && new Date(c.createdAt).getTime() > cutoff);
+  const cached = ensureDbLoaded().clicks.find(c => c.clickId === clickId && (forAttribution || new Date(c.createdAt).getTime() > cutoff));
   if (cached || !pgPool) return cached || null;
-  const result = await pgPool.query("SELECT * FROM clicks WHERE click_id = $1 AND created_at > NOW() - INTERVAL '30 days'", [clickId]);
+  const result = await pgPool.query(forAttribution
+    ? 'SELECT * FROM clicks WHERE click_id = $1'
+    : "SELECT * FROM clicks WHERE click_id = $1 AND created_at > NOW() - INTERVAL '30 days'", [clickId]);
   const row = result.rows[0];
   if (!row) return null;
   const click = { clickId: row.click_id, userId: row.user_id, userCode: row.user_code,

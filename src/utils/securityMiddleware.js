@@ -1,4 +1,5 @@
 const logger = require('./logger');
+const { getRedisConfig } = require('./runtimeConfig');
 
 const rateBuckets = new Map();
 
@@ -10,7 +11,8 @@ if (process.env.VERCEL || process.env.NODE_ENV === 'production') {
       'TURNSTILE_SECRET_KEY is missing in production environment!'
     );
   }
-  if (!process.env.UPSTASH_REDIS_REST_URL || !process.env.UPSTASH_REDIS_REST_TOKEN) {
+  const redis = getRedisConfig();
+  if (!redis.url || !redis.token) {
     logger.warning(
       'SecurityStartupAudit',
       'UPSTASH_REDIS_REST_URL / TOKEN not configured; distributed rate limiting is inactive.'
@@ -39,18 +41,17 @@ function createRateLimiter({
     const key = `${keyPrefix}:${keyGenerator(req)}`;
     const now = Date.now();
 
-    const hasUpstash = Boolean(
-      process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
-    );
+    const redis = getRedisConfig();
+    const hasUpstash = Boolean(redis.url && redis.token);
 
     if (hasUpstash) {
       try {
-        const upstashUrl = `${process.env.UPSTASH_REDIS_REST_URL.replace(/\/$/, '')}/pipeline`;
+        const upstashUrl = `${redis.url.replace(/\/$/, '')}/pipeline`;
         const ttlSec = Math.ceil(windowMs / 1000);
         const resp = await fetch(upstashUrl, {
           method: 'POST',
           headers: {
-            Authorization: `Bearer ${process.env.UPSTASH_REDIS_REST_TOKEN}`,
+            Authorization: `Bearer ${redis.token}`,
             'Content-Type': 'application/json'
           },
           body: JSON.stringify([

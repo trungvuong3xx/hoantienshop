@@ -10,6 +10,8 @@ const { spawnSync } = require('child_process');
 const path = require('path');
 
 const TEST_SUITES = [
+  'manual-order-optional-id.test.js',
+  'test_runtime_config.js',
   'test_csv_import.js',
   'test_final_remediation.js',
   'test_security_regressions.js',

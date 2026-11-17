@@ -1,0 +1,55 @@
+.admin-header-tools summary, .admin-more-actions summary { cursor: pointer; min-height: 44px; padding: 12px; border-radius: 10px; border: 1px solid #cbd5e1; font-size: 13px; font-weight: 600; }
+.admin-header-tools > div { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 8px; }
+.admin-more-actions, .admin-more-actions > div { display: contents; }
+.admin-more-actions > summary { display: none; }
+.admin-more-actions:not([open]) > div { content-visibility: visible; }
+.admin-adjust-row { flex-wrap: wrap; align-items: end; }
+.admin-adjust-field { flex: 1 1 150px; min-width: 0; display: grid; gap: 6px; }
+.admin-adjust-field label { font-size: 13px; font-weight: 600; }
+.admin-adjust-field input, .admin-adjust-field .app-choice-trigger { width: 100%; min-width: 0; }
+.admin-adjust-preview { font-size: 13px; color: #334155; margin: 0; }
+.admin-settings-summary { cursor: pointer; list-style: none; }
+.admin-settings-summary .admin-card-head { margin-bottom: 0; }
+.admin-settings-summary::after { content: 'Mở / Thu gọn'; display: block; font-size: 12px; color: #475569; margin: 8px 0 16px; }
+.admin-copy-bank { margin-top: 8px; }
+@media (max-width: 640px) {
+  #view-admin .admin-banner { padding: 12px; gap: 10px; margin-bottom: 10px; }
+  #view-admin .admin-banner-title-row h2 { font-size: 20px; }
+  #view-admin .admin-db-pill { border-radius: 8px; font-size: 12px; overflow-wrap: anywhere; }
+  #view-admin .admin-tabs-nav { position: sticky; top: var(--admin-header-height, 64px); z-index: 20; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 2px; padding: 4px; overflow: visible; margin-bottom: 12px; }
+  #view-admin .admin-tab-btn { min-width: 0; min-height: 48px; padding: 6px 2px; font-size: 12px; gap: 3px; justify-content: center; flex-wrap: wrap; }
+  #view-admin .admin-tab-btn > svg { display: none; }
+  #view-admin .admin-tab-badge { font-size: 10px; padding: 0 4px; min-width: 16px; max-width: 100%; overflow-wrap: anywhere; }
+  #view-admin .stats-grid-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-bottom: 12px; }
+  #view-admin .admin-kpi-card { padding: 12px !important; gap: 0 !important; }
+  #view-admin .kpi-icon-wrap { display: none; }
+  #view-admin .stat-label { font-size: 12px; }
+  #view-admin .stat-value { font-size: 18px; overflow-wrap: anywhere; }
+  #view-admin .admin-filter-bar { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; width: 100%; }
+  #view-admin .admin-filter-bar input { grid-column: 1 / -1; width: 100%; min-width: 0; }
+  #view-admin .admin-filter-bar .app-choice-trigger { min-width: 0; }
+  #view-admin .table-responsive { overflow: visible; }
+  #view-admin .admin-data-table, #view-admin .admin-data-table tbody { display: block; width: 100%; min-width: 0; }
+  #view-admin .admin-data-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  #view-admin .admin-data-table tr { display: block; border: 1px solid #dbe2ea; border-radius: 14px; padding: 12px; margin-bottom: 12px; background: white; }
+  #view-admin .admin-data-table td { display: grid; grid-template-columns: 80px minmax(0, 1fr); gap: 4px 8px; border: 0; padding: 7px 0; white-space: normal; overflow-wrap: anywhere; font-size: 14px; }
+  #view-admin .admin-data-table td::before { content: attr(data-label); color: #64748b; font-size: 12px; grid-column: 1; }
+  #view-admin .admin-data-table td > * { grid-column: 2; min-width: 0; }
+  #view-admin .admin-data-table td:last-child, #view-admin .admin-data-table td[colspan] { display: block; }
+  #view-admin .admin-data-table td:last-child::before, #view-admin .admin-data-table td[colspan]::before { display: none; }
+  #view-admin .admin-data-table td .btn { white-space: normal; }
+  #view-admin .admin-action-group { align-items: stretch; }
+  #view-admin .admin-action-group > .btn { flex: 1; }
+  #view-admin .admin-more-actions { display: block; flex: 1; }
+  #view-admin .admin-more-actions > summary { display: block; text-align: center; }
+  #view-admin .admin-more-actions:not([open]) > div { display: none; }
+  #view-admin .admin-more-actions[open] > div { display: grid; gap: 8px; margin-top: 8px; }
+  #view-admin .admin-collapse-summary { padding: 12px; }
+  #view-admin .collapse-hint { display: none; }
+  #view-admin .admin-settings-save-bar { position: sticky; bottom: calc(76px + env(safe-area-inset-bottom, 0px)); z-index: 19; padding: 12px; }
+  #view-admin .admin-settings-save-bar .btn { width: 100%; }
+  #userManageModal .admin-adjust-row { flex-direction: column; align-items: stretch; }
+  #userManageModal .admin-adjust-field { flex: auto; width: 100%; }
+  #userManageModal .close-btn, #orderEditModal .close-btn { min-width: 44px; min-height: 44px; }
+  #userManageModal input, #orderEditModal input { scroll-margin: 90px 0; }
+}

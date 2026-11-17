@@ -63,9 +63,15 @@
   <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/styles.css?v=2.3.1" />
+  <link id="webFont" media="print" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/styles.css?v=2.3.2" />
   <link rel="stylesheet" href="/selectPopup.css?v=1" />
+  <link rel="stylesheet" href="/adminMobile.css?v=1" />
+  <script src="/csvImport.js?v=2.3.2" defer></script>
+  <script src="/app.js?v=2.3.5" defer></script>
+  <script src="/tiktokReply.js?v=1" defer></script>
+  <script src="/selectPopup.js?v=1" defer></script>
+  <script src="/adminMobile.js?v=2" defer></script>
 </head>
 <body>
   <!-- Top Navigation Header -->
@@ -475,7 +481,7 @@
           <!-- Left: Withdraw Form -->
           <div class="panel withdraw-panel">
             <h3>Rút Tiền Về Tài Khoản</h3>
-            <p class="panel-sub">Hạn mức rút tối thiểu: <strong id="minWithdrawLabel">50.000đ</strong>. Miễn phí rút tiền qua Ngân hàng (VietQR) hoặc MoMo.</p>
+            <p class="panel-sub">Hạn mức rút tối thiểu: <strong id="minWithdrawLabel">50.000đ</strong>. Miễn phí rút tiền qua Ngân hàng hoặc MoMo.</p>
 
             <!-- Minimum Withdrawal Progress Bar -->
             <div class="withdraw-progress-box" id="withdrawThresholdBar">
@@ -492,7 +498,7 @@
               <div class="form-group">
                 <label for="wdMethod">Phương thức nhận tiền</label>
                 <select id="wdMethod">
-                  <option value="bank">Chuyển khoản Ngân hàng (VietQR)</option>
+                  <option value="bank">Chuyển khoản Ngân hàng</option>
                   <option value="momo">Ví điện tử MoMo</option>
                 </select>
               </div>
@@ -981,6 +987,37 @@
 
       <!-- TAB 1: ORDERS & RECONCILIATION (FULL WIDTH) -->
       <div id="admTabOrders" class="admin-tab-pane active">
+        <details class="admin-collapse-panel" id="tiktokReplyPanel">
+          <summary class="admin-collapse-summary">
+            <span class="collapse-title-group">Tạo tin nhắn hoàn tiền TikTok</span>
+            <span class="collapse-hint">Tạo mẫu để gửi Zalo</span>
+          </summary>
+          <div class="admin-collapse-body">
+            <form id="tiktokReplyForm" class="form-stack" novalidate>
+              <p class="panel-sub">Dán link affiliate bạn đã tạo và nhập hoa hồng gốc trước thuế. Khách nhận 70% phần còn lại sau khi trừ 10% thuế.</p>
+              <div class="grid-2">
+                <div class="form-group">
+                  <label for="tiktokReplyLink">Link affiliate TikTok</label>
+                  <input id="tiktokReplyLink" type="url" inputmode="url" autocomplete="off" maxlength="4000" placeholder="https://vt.tiktok.com/..." required />
+                </div>
+                <div class="form-group">
+                  <label for="tiktokReplyCommission">Hoa hồng gốc trước thuế (đ)</label>
+                  <input id="tiktokReplyCommission" type="number" inputmode="numeric" min="0" step="1" placeholder="Ví dụ: 25000" required aria-describedby="tiktokReplyCommissionHint" />
+                  <small id="tiktokReplyCommissionHint">Nhập số tiền hoa hồng, không nhập % hoặc tiền hoàn đã chia cho khách.</small>
+                </div>
+              </div>
+              <div class="admin-toolbar-actions">
+                <button type="submit" class="btn btn-success btn-sm">Tạo mẫu</button>
+                <button type="button" id="tiktokReplyCopy" class="btn btn-outline btn-sm" disabled>Sao chép tin nhắn</button>
+              </div>
+              <p id="tiktokReplyStatus" role="status" aria-live="polite"></p>
+              <div class="form-group">
+                <label for="tiktokReplyOutput">Tin nhắn gửi khách</label>
+                <textarea id="tiktokReplyOutput" rows="8" readonly placeholder="Tin nhắn sẽ xuất hiện tại đây sau khi bấm Tạo mẫu."></textarea>
+              </div>
+            </form>
+          </div>
+        </details>
         <details class="admin-collapse-panel">
           <summary class="admin-collapse-summary">
             <span class="collapse-title-group">
@@ -993,8 +1030,9 @@
             <div class="form-stack">
               <div class="four-inputs">
                 <div class="form-group">
-                  <label for="admOrdSn">Mã Đơn Hàng</label>
-                  <input type="text" id="admOrdSn" placeholder="VD: 261111ABC..." />
+                  <label for="admOrdSn">Mã Đơn Hàng (tùy chọn)</label>
+                  <input type="text" id="admOrdSn" placeholder="Để trống nếu chưa có mã đơn" aria-describedby="admOrdSnHint" />
+                  <small id="admOrdSnHint">Để trống, hệ thống sẽ tạo mã riêng cho đơn thủ công.</small>
                 </div>
                 <div class="form-group">
                   <label for="admOrdUserCode">Click_ID (Sub_id1) hoặc Mã Khách</label>
@@ -1418,15 +1456,24 @@
 
         <div class="modal-section-divider">
           <h4 style="margin: 0 0 8px 0; font-size: 14px;">2. Điều Chỉnh Số Dư Thủ Công</h4>
-          <div style="display: flex; gap: 8px; margin-bottom: 8px;">
-            <select id="manageAdjustType" style="width: 120px;">
+          <div class="admin-adjust-row">
+            <div class="admin-adjust-field">
+              <label for="manageAdjustType">Loại điều chỉnh</label>
+              <select id="manageAdjustType">
               <option value="plus">Cộng (+)</option>
               <option value="minus">Trừ (-)</option>
-            </select>
-            <input type="number" id="manageAdjustAmount" placeholder="Số tiền (VNĐ)..." style="flex: 1;" />
+              </select>
+            </div>
+            <div class="admin-adjust-field">
+              <label for="manageAdjustAmount">Số tiền (VNĐ)</label>
+              <input type="number" id="manageAdjustAmount" inputmode="numeric" placeholder="Nhập số tiền..." />
+            </div>
           </div>
-          <div style="display: flex; gap: 8px; margin-bottom: 8px;">
-            <input type="text" id="manageAdjustNote" placeholder="Lý do (thưởng sự kiện, đền bù, phạt)..." style="flex: 1;" />
+          <div class="admin-adjust-row">
+            <div class="admin-adjust-field">
+              <label for="manageAdjustNote">Lý do điều chỉnh</label>
+              <input type="text" id="manageAdjustNote" placeholder="Thưởng sự kiện, đền bù, phạt..." />
+            </div>
             <button type="button" class="btn btn-success btn-sm btn-icon-svg" id="btnAdjustUserBalance">
               <svg class="svg-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
               <span>Xác Nhận Điều Chỉnh</span>
@@ -1801,8 +1848,10 @@
   <!-- Toast -->
   <div id="toast" class="toast hidden" role="status" aria-live="polite" aria-atomic="true"></div>
 
-  <script src="/csvImport.js?v=2.3.2" defer></script>
-  <script src="/app.js?v=2.3.4" defer></script>
-  <script src="/selectPopup.js?v=1" defer></script>
+
+
+
+
+
 </body>
 </html>

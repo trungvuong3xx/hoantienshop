@@ -49,6 +49,17 @@ async function run() {
   db.users.push({ id: 'csv-user', code: 'CSVUSER', name: 'CSV fixture', phone: '0900000222', role: 'user', tokenVersion: 1, passwordHash: d.hashPassword('Fixture!123') });
   db.clicks.push({ clickId: 'CSVTRACK', userId: 'csv-user', userCode: 'CSVUSER', platform: 'shopee', affiliateUrl: 'https://shopee.vn/product/1/2', createdAt: new Date().toISOString() });
   await d.saveDb(db);
+  if (d.getPgPool()) {
+    await d.getPgPool().query("UPDATE clicks SET created_at = NOW() - INTERVAL '120 days' WHERE click_id = $1", ['CSVTRACK']);
+    await d.reloadStateFromPostgres({ strict: true });
+    assert.ok(!d.ensureDbLoaded().clicks.some(c => c.clickId === 'CSVTRACK'));
+    assert.equal(await d.findClickById('CSVTRACK'), null, 'Expired public links must stay expired');
+    assert.equal((await d.findClickById('CSVTRACK', { forAttribution: true })).userId, 'csv-user');
+    assert.equal(await d.findClickById('CSVTRACK'), null, 'Attribution cache must not revive redirects');
+    assert.equal(await d.findClickById('MISSING_TRACK', { forAttribution: true }), null);
+    await d.reloadStateFromPostgres({ strict: true });
+    console.log('PASS: 120-day attribution resolves from PostgreSQL while public redirect stays expired');
+  }
   const app = require('../server');
   const server = app.listen(0, '127.0.0.1'); await new Promise(resolve => server.once('listening', resolve));
   const base = 'http://127.0.0.1:' + server.address().port;

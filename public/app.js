@@ -356,7 +356,7 @@ function switchView(viewName, updateHistory = true, options = {}) {
   if (['wallet', 'orders', 'account'].includes(targetView) && authToken && !options.skipReload) {
     loadUserDashboard();
   }
-  if (targetView === 'admin' && authToken && currentUser?.role === 'admin') {
+  if (targetView === 'admin' && authToken && currentUser?.role === 'admin' && !options.skipReload) {
     loadAdminDashboard();
   }
 }
@@ -1475,7 +1475,7 @@ async function loadUserDashboard(prefetchedData = null) {
       refInputEl.value = `${window.location.origin}/?ref=${encodeURIComponent(currentUser.code)}`;
     }
 
-    loadUserReferrals();
+    if (document.getElementById('view-account')?.classList.contains('active')) loadUserReferrals();
 
     if (currentUser.bankName && document.getElementById('wdBankName')) {
       document.getElementById('wdBankName').value = currentUser.bankName;
@@ -2309,6 +2309,7 @@ async function loadAdminWithdrawalsPage(page = 1) {
 }
 
 async function loadAdminDashboard() {
+  const previousPages = { orders: adminOrdersPage, users: adminUsersPage, withdrawals: adminWithdrawalsPage };
   try {
     const data = await apiFetch('/api/admin/dashboard');
     const st = data.stats || {};
@@ -2392,7 +2393,8 @@ async function loadAdminDashboard() {
     setTxt('admTabWithdrawalsBadge', String(st.pendingWithdrawals ?? 0));
     setTxt('admTabUsersBadge', String(st.totalUsers ?? latestAdminUsers.length));
 
-    loadAdminSettings(s);
+    const settingsHint = document.querySelector?.('#admTabSettings .save-bar-hint');
+    if (settingsHint?.textContent !== 'Có thay đổi chưa lưu') loadAdminSettings(s);
 
     // Orders Table
     renderAdminOrdersTable(latestAdminOrders);
@@ -2402,6 +2404,16 @@ async function loadAdminDashboard() {
 
     // Users Table
     renderAdminUsersTable(latestAdminUsers);
+    // Preserve the active filters and pages after a mutation or manual refresh.
+    const hasValue = id => Boolean(document.getElementById(id)?.value?.trim());
+    await Promise.all([
+      previousPages.orders > 1 || hasValue('admOrderSearchInput') || hasValue('admOrderStatusFilter')
+        ? loadAdminOrdersPage(previousPages.orders) : Promise.resolve(),
+      previousPages.users > 1 || hasValue('admUserSearchInput')
+        ? loadAdminUsersPage(previousPages.users) : Promise.resolve(),
+      previousPages.withdrawals > 1 || hasValue('admWithdrawalSearchInput') || hasValue('admWithdrawalStatusFilter')
+        ? loadAdminWithdrawalsPage(previousPages.withdrawals) : Promise.resolve()
+    ]);
   } catch (err) {
     showToast(err.message);
   }
@@ -2561,6 +2573,8 @@ async function saveAdminSettings() {
     if (document.getElementById('admCurrentPass')) document.getElementById('admCurrentPass').value = '';
     if (document.getElementById('admNewPass')) document.getElementById('admNewPass').value = '';
     showToast('Đã lưu cấu hình hệ thống thành công!');
+    const saveHint = document.querySelector?.('#admTabSettings .save-bar-hint');
+    if (saveHint) saveHint.textContent = 'Đã lưu cấu hình';
     await initPublicConfig();
     if (typeof applyZaloWidget === 'function') {
       applyZaloWidget(publicConfig);
@@ -2588,11 +2602,6 @@ on('admSaveOrderBtn', 'click', async () => {
   const orderAmount = Number(document.getElementById('admOrdAmount')?.value || 0);
   const totalCommission = Number(document.getElementById('admOrdCommission')?.value || 0);
   const status = document.getElementById('admOrdStatus')?.value || 'pending';
-
-  if (!orderSn) {
-    showToast('Vui lòng nhập mã đơn hàng!');
-    return;
-  }
 
   const origHtml = btn ? btn.innerHTML : '';
   if (btn) {
@@ -2752,8 +2761,10 @@ if (viewAdmin) {
       const id = wdBtn.getAttribute('data-wd-id');
       const status = wdBtn.getAttribute('data-wd-action');
       const label = status === 'paid' ? 'ĐÃ CHUYỂN TIỀN' : 'TỪ CHỐI';
+      const withdrawal = latestAdminWithdrawals.find(item => item.id === id);
+      const recipient = withdrawal ? `\n${fmtVnd(withdrawal.amount)} · ${withdrawal.bankName}\n${withdrawal.bankAccount} · ${withdrawal.bankOwner}` : '';
       const confirmed = await askUserConfirm(
-        `Xác nhận đánh dấu ${label} cho yêu cầu rút tiền #${id}?`,
+        `Xác nhận đánh dấu ${label} cho yêu cầu rút tiền #${id}?${recipient}`,
         'Cập Nhật Lệnh Rút Tiền'
       );
       if (!confirmed) {
@@ -3092,6 +3103,39 @@ on('saveOrderEditBtn', 'click', async () => {
 // ================= CSV IMPORT & RECONCILIATION =================
 let isCsvImporting = false;
 
+function showCsvImportReport(message, errors = []) {
+  let panel = document.getElementById('csvImportReport');
+  if (!panel) {
+    panel = document.createElement('div');
+    panel.id = 'csvImportReport';
+    panel.className = 'panel';
+    panel.setAttribute('role', 'status');
+    panel.setAttribute('aria-live', 'polite');
+    const input = document.getElementById('admCsvInput');
+    const anchor = input?.closest('details') || input?.closest('.admin-toolbar-actions');
+    if (!anchor) return;
+    anchor.after(panel);
+  }
+  panel.replaceChildren();
+  const summary = document.createElement('p');
+  summary.textContent = message;
+  panel.append(summary);
+  if (errors.length) {
+    const details = document.createElement('details');
+    const title = document.createElement('summary');
+    title.textContent = `Xem ${errors.length} lỗi đối soát`;
+    details.append(title);
+    const list = document.createElement('ul');
+    for (const error of errors) {
+      const item = document.createElement('li');
+      item.textContent = String(error);
+      list.append(item);
+    }
+    details.append(list);
+    panel.append(details);
+  }
+}
+
 on('admCsvInput', 'change', async (e) => {
   const file = e.target.files[0];
   if (!file) return;
@@ -3104,6 +3148,12 @@ on('admCsvInput', 'change', async (e) => {
     return;
   }
 
+  let totalImported = 0;
+  let confirmedRows = 0;
+  let totalRows = 0;
+  let activeBatchSize = 0;
+  let phase = 'read';
+  const allChunkErrors = [];
   try {
     isCsvImporting = true;
     e.target.disabled = true;
@@ -3120,26 +3170,35 @@ on('admCsvInput', 'change', async (e) => {
     )}\n\nBạn có muốn tiếp tục nhập và cập nhật ví khách hàng không?`;
     const confirmed = await askUserConfirm(confirmMsg, 'Xác Nhận Nhập CSV Đối Soát');
     if (!confirmed) return;
+    totalRows = rows.length;
+    phase = 'import';
 
     // Batch requests in chunks of 500 rows to prevent payload exhaustion
     const CHUNK_SIZE = 500;
-    let totalImported = 0;
-    const allChunkErrors = [];
 
     for (let c = 0; c < rows.length; c += CHUNK_SIZE) {
       const chunk = rows.slice(c, c + CHUNK_SIZE);
       if (chunk.length === 0) continue;
+      activeBatchSize = chunk.length;
+      showCsvImportReport(`Đang xử lý lô ${Math.floor(c / CHUNK_SIZE) + 1}/${Math.ceil(rows.length / CHUNK_SIZE)}. Đã xác nhận nhập ${totalImported}/${totalRows} đơn.`, allChunkErrors);
       const res = await apiFetch('/api/admin/import-orders', {
         method: 'POST',
         body: JSON.stringify({ rows: chunk })
       });
-      if (typeof res?.importedCount === 'number') {
-        totalImported += res.importedCount;
+      if (!Number.isInteger(res?.importedCount) || res.importedCount < 0 || res.importedCount > chunk.length ||
+          !Array.isArray(res.errors) || res.importedCount + res.errors.length !== chunk.length) {
+        throw new Error('Phản hồi nhập CSV không đầy đủ; chưa thể xác nhận kết quả lô hiện tại.');
       }
+      totalImported += res.importedCount;
+      confirmedRows += chunk.length;
+      activeBatchSize = 0;
       if (Array.isArray(res?.errors) && res.errors.length > 0) {
         allChunkErrors.push(...res.errors);
       }
     }
+
+    phase = 'refresh';
+    showCsvImportReport(`Đã xử lý ${confirmedRows}/${totalRows} đơn: ${totalImported} đơn được server xác nhận nhập, ${allChunkErrors.length} lỗi đối soát.`, allChunkErrors);
 
     if (totalImported === 0) {
       const errDetail = allChunkErrors.length ? `: ${allChunkErrors[0]}` : '';
@@ -3152,7 +3211,12 @@ on('admCsvInput', 'change', async (e) => {
       await loadAdminDashboard();
     }
   } catch (err) {
-    showToast(`Lỗi đọc file CSV: ${err.message}`);
+    let message;
+    if (phase === 'read') message = `Không thể đọc hoặc kiểm tra CSV: ${err.message}`;
+    else if (phase === 'refresh') message = `Server đã xác nhận nhập ${totalImported} đơn, nhưng chưa tải lại được danh sách. Hãy tải lại trang. ${err.message}`;
+    else message = `Nhập CSV bị gián đoạn. Đã xác nhận nhập ${totalImported} đơn; ${allChunkErrors.length} lỗi đối soát; ${activeBatchSize} đơn ở lô hiện tại chưa rõ kết quả; ${Math.max(0, totalRows - confirmedRows - activeBatchSize)} đơn chưa gửi. Giữ nguyên nội dung và tên file rồi chọn lại để đối soát; không coi lô mất phản hồi là đã thất bại. ${err.message}`;
+    showCsvImportReport(message, allChunkErrors);
+    showToast(phase === 'import' ? 'Nhập CSV bị gián đoạn. Xem chi tiết trong bảng kết quả nhập.' : message);
   } finally {
     isCsvImporting = false;
     e.target.disabled = false;
@@ -3321,23 +3385,27 @@ setTimeout(() => {
 // ================= BOOTSTRAP INITIALIZATION =================
 async function initBoot() {
   syncAuthUi();
-
-  await Promise.all([
-    initPublicConfig(),
-    authToken ? loadUserDashboard() : Promise.resolve()
-  ]);
-
-  // Restore view from URL hash on load (support both guide and faq routes)
-  const initialHash = window.location.hash.replace('#', '');
-  if (
-    initialHash &&
-    (['home', 'wallet', 'admin', 'guide', 'faq', 'terms'].includes(initialHash) ||
-      ['orders', 'account'].includes(initialHash))
-  ) {
-    switchView(initialHash, false, {
-      skipReload: initialHash === 'wallet' || initialHash === 'orders' || initialHash === 'account'
-    });
+  // Font download must not block the first paint or application scripts.
+  const font = document.getElementById('webFont');
+  if (font) {
+    const enableFont = () => { font.media = 'all'; };
+    if (font.sheet) enableFont();
+    else font.addEventListener('load', enableFont, { once: true });
   }
+
+  // Show the requested screen immediately; refresh authoritative data in parallel.
+  const initialHash = window.location.hash.replace('#', '');
+  if (['home', 'wallet', 'admin', 'guide', 'faq', 'terms'].includes(initialHash) || ['orders', 'account'].includes(initialHash)) {
+    switchView(initialHash, false, { skipReload: true });
+  }
+  const userReady = authToken ? loadUserDashboard() : Promise.resolve();
+  const adminReady = userReady.then(() => {
+    if (document.getElementById('view-admin')?.classList.contains('active')) {
+      if (authToken && currentUser?.role === 'admin') return loadAdminDashboard();
+      switchView('home', false);
+    }
+  });
+  await Promise.all([initPublicConfig(), adminReady]);
 }
 
 // Global Escape key listener fallback (closes topmost modal without closing stacked base modals)

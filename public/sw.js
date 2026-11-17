@@ -1,10 +1,12 @@
 // Service Worker for LiLa PWA
-const CACHE_NAME = 'lila-pwa-v6';
+const CACHE_NAME = 'lila-pwa-v7';
 const OFFLINE_URL = '/offline.html';
+// Bump CACHE_NAME whenever shell assets change; installation is all-or-nothing.
+const SHELL_ASSETS = ["/","/styles.css?v=2.3.2","/selectPopup.css?v=1","/adminMobile.css?v=1","/csvImport.js?v=2.3.2","/app.js?v=2.3.5","/tiktokReply.js?v=1","/selectPopup.js?v=1","/adminMobile.js?v=2"];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll([OFFLINE_URL, '/offline.js', '/icon.svg']))
+    caches.open(CACHE_NAME).then((cache) => cache.addAll([OFFLINE_URL, '/offline.js', '/icon.svg', ...SHELL_ASSETS].map(url => new Request(url, { cache: 'reload' }))))
   );
   self.skipWaiting();
 });
@@ -63,6 +65,14 @@ async function navigationResponse(request) {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
   if (url.origin !== self.location.origin || event.request.method !== 'GET') return;
+  // Only public shell files are cached. API, authentication and redirect data stay live.
+  const shellKey = url.pathname === '/' || url.pathname === '/index.html'
+    ? '/' : url.pathname + url.search;
+  if (SHELL_ASSETS.includes(shellKey)) {
+    event.respondWith(caches.open(CACHE_NAME).then(async cache =>
+      (await cache.match(shellKey)) || fetch(event.request)));
+    return;
+  }
   if (event.request.mode === 'navigate' && !url.pathname.startsWith('/api/') && !url.pathname.startsWith('/go/')) {
     event.respondWith(navigationResponse(event.request));
   } else if (['/offline.js', '/icon.svg'].includes(url.pathname)) {

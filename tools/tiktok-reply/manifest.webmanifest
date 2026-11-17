@@ -1,0 +1,17 @@
+{
+  "id": "./",
+  "name": "TikTok · Soạn tin hoàn tiền",
+  "short_name": "Tin hoàn tiền",
+  "description": "Tạo tin nhắn affiliate và tính tiền hoàn TikTok để gửi Zalo.",
+  "lang": "vi",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f5f5f1",
+  "theme_color": "#20262b",
+  "icons": [
+    { "src": "./icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "./icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "./icon-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

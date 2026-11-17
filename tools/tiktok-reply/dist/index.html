@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>TikTok • Soạn tin hoàn tiền</title>
+  <link rel="manifest" href="./manifest.webmanifest">
+  <meta name="theme-color" content="#20262b">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Tin hoàn tiền">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <link rel="apple-touch-icon" href="./icon-180.png">
+  <link rel="icon" href="./icon.svg" type="image/svg+xml">
+  <script src="./pwa.js" defer></script>
+  <style>
+    * { box-sizing: border-box; }
+    :root { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #20262b; background: #f5f5f1; }
+    body { margin: 0; }
+    button, input, textarea { font: inherit; }
+    button { cursor: pointer; }
+    button:disabled { opacity: .45; cursor: not-allowed; }
+    :focus-visible { outline: 3px solid #13877d; outline-offset: 3px; }
+    .wrap { max-width: 1120px; padding: 38px 28px; margin: auto; }
+    header { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding-bottom: 28px; border-bottom: 1px solid #ddded7; }
+    .brand { display: flex; gap: 12px; align-items: center; font-weight: 700; }
+    .brand-icon { display: grid; place-items: center; width: 40px; height: 40px; background: #20262b; color: #fff; border-radius: 12px; font-size: 24px; }
+    .badge { color: #487061; background: #e6eee6; border-radius: 30px; padding: 7px 12px; font-size: 12px; white-space: nowrap; }
+    .intro { margin: 36px 0 28px; }
+    .eyebrow { color: #707970; text-transform: uppercase; font-size: 11px; letter-spacing: 2px; font-weight: 700; }
+    h1 { font-size: clamp(27px, 4vw, 39px); letter-spacing: -1.3px; margin: 10px 0 12px; }
+    .intro p { color: #656d70; line-height: 1.6; margin: 0; }
+    .layout { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items: start; }
+    .card { background: #fff; border: 1px solid #e0e3db; border-radius: 20px; padding: 26px; }
+    h2 { font-size: 18px; margin: 0 0 24px; display: flex; align-items: center; gap: 10px; }
+    .step { display: inline-grid; place-items: center; font-size: 12px; background: #f0f2ee; color: #586258; width: 26px; height: 26px; border-radius: 50%; }
+    label { display: block; font-size: 14px; font-weight: 650; margin: 22px 0 9px; }
+    input { width: 100%; padding: 14px; border: 1px solid #d9ded5; border-radius: 10px; min-height: 49px; background: #fbfcfa; color: #20262b; }
+    input[aria-invalid="true"] { border-color: #ba3838; }
+    small { display: block; margin-top: 8px; line-height: 1.5; color: #6d7578; font-size: 12px; }
+    .formula { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; padding: 13px 15px; margin: 24px 0; border-radius: 10px; background: #f3f5f0; font-size: 12px; color: #53614e; }
+    .actions { display: flex; gap: 10px; }
+    button { min-height: 48px; border-radius: 11px; font-weight: 650; padding: 12px 18px; border: 1px solid #d9ded5; background: #fff; color: #333d36; }
+    .primary { flex: 1; border-color: #20262b; color: white; background: #20262b; }
+    .primary:hover { background: #35443d; }
+    .cashback { padding: 20px; background: #eaf4ec; border-radius: 14px; margin-top: 22px; }
+    .cashback .caption { font-size: 12px; color: #44674e; }
+    .cashback strong { display: block; font-size: 34px; letter-spacing: -1px; margin-top: 7px; color: #205e39; }
+    dl { font-size: 13px; color: #657068; margin: 17px 0 0; }
+    dl div { display: flex; justify-content: space-between; gap: 12px; padding-top: 9px; }
+    dd { margin: 0; font-weight: 600; color: #37483b; }
+    .message-card { background: #fcfcfa; }
+    .message-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+    .message-heading span:last-child { color: #80877e; font-size: 12px; }
+    textarea { display: block; width: 100%; min-height: 320px; resize: vertical; padding: 20px; border: 1px solid #dfe4da; border-radius: 14px; background: #fff; font-size: 15px; line-height: 1.8; color: #2a3430; }
+    textarea::placeholder { color: #8c948b; }
+    .copy { background: #e4eee3; border-color: #d8e5d6; color: #305b38; width: 100%; margin-top: 16px; }
+    .note { color: #7a8178; font-size: 12px; line-height: 1.6; margin: 14px 0 0; }
+    .feedback { min-height: 22px; margin: 12px 0 0; font-size: 13px; line-height: 1.5; color: #316546; }
+    .feedback.error { color: #a42c2c; }
+    footer { margin-top: 25px; font-size: 12px; color: #868c81; text-align: center; }
+    .install { margin-top: 20px; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 15px 18px; border: 1px solid #d9e4d7; background: #eaf0e5; border-radius: 14px; }
+    .install p { flex: 1 1 230px; margin: 0; font-size: 13px; color: #466047; line-height: 1.6; }
+    dialog { max-width: min(440px, calc(100% - 32px)); padding: 26px; border: 1px solid #d9ded5; border-radius: 20px; color: #20262b; }
+    dialog::backdrop { background: #20262b80; }
+    dialog p { line-height: 1.7; }
+    [hidden] { display: none !important; }
+    @media (max-width: 720px) { .wrap { padding: 22px 16px; } .layout { grid-template-columns: 1fr; gap: 18px; } .card { padding: 20px; } .intro { margin-top: 26px; } header { padding-bottom: 20px; } textarea { min-height: 300px; } }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <header>
+      <div class="brand"><span class="brand-icon" aria-hidden="true">↗</span> TikTok · Hoàn tiền</div>
+      <span class="badge" id="pwaStatus" role="status">Công cụ độc lập</span>
+    </header>
+    <aside class="install" id="installPanel" hidden>
+      <p>Cài ra màn hình chính để mở nhanh như app và sử dụng khi mất mạng.</p>
+      <button type="button" id="installButton">Cài trên điện thoại</button>
+    </aside>
+    <dialog id="installGuide" aria-labelledby="installTitle">
+      <h2 id="installTitle">Cài vào màn hình chính</h2>
+      <p id="installInstructions"></p>
+      <p>Nếu đang mở trong Zalo, hãy chọn mở bằng Safari hoặc Chrome trước.</p>
+      <form method="dialog"><button>Đã hiểu</button></form>
+    </dialog>
+    <div class="intro">
+      <span class="eyebrow">Công cụ soạn tin nhắn</span>
+      <h1>Có link rồi. Soạn tin thôi.</h1>
+      <p>Nhập hoa hồng, tạo mẫu và gửi cho khách qua Zalo.</p>
+    </div>
+    <div class="layout">
+      <section class="card" aria-labelledby="inputTitle">
+        <h2 id="inputTitle"><span class="step">1</span> Thông tin affiliate</h2>
+        <form id="replyForm" novalidate>
+          <label for="affiliateLink">Link affiliate TikTok</label>
+          <input id="affiliateLink" type="url" inputmode="url" placeholder="https://vt.tiktok.com/..." maxlength="4000" autocomplete="off" required>
+          <small>Link affiliate bạn đã tạo trên TikTok hoặc nền tảng tiếp thị.</small>
+          <label for="commission">Hoa hồng gốc trước thuế (đ)</label>
+          <input id="commission" type="text" inputmode="numeric" placeholder="Ví dụ: 25000 hoặc 25.000" autocomplete="off" required aria-describedby="commissionHint">
+          <small id="commissionHint">Nhập số tiền hoa hồng trước khi chia, không nhập % hay tiền hoàn của khách.</small>
+          <div class="formula"><span>Trừ thuế: <b>10%</b></span><span>Khách: <b>70%</b> sau thuế</span><span>Bạn: <b>30%</b> sau thuế</span></div>
+          <div class="actions"><button class="primary" type="submit">Tạo tin nhắn ↗</button><button id="resetButton" type="reset">Làm mới</button></div>
+          <p id="formStatus" class="feedback" role="status" aria-live="polite"></p>
+        </form>
+        <div class="cashback" aria-live="polite">
+          <span class="caption">KHÁCH ĐƯỢC HOÀN ƯỚC TÍNH</span>
+          <strong id="cashback">—</strong>
+          <dl><div><dt>Hoa hồng gốc</dt><dd id="gross">—</dd></div><div><dt>Thuế 10%</dt><dd id="tax">—</dd></div><div><dt>Phần của bạn sau thuế</dt><dd id="adminShare">—</dd></div></dl>
+        </div>
+      </section>
+      <section class="card message-card" aria-labelledby="outputTitle">
+        <div class="message-heading"><h2 id="outputTitle"><span class="step">2</span> Tin nhắn gửi khách</h2><span>Sẵn sàng cho Zalo</span></div>
+        <textarea id="replyOutput" readonly aria-label="Nội dung tin nhắn" placeholder="Tin nhắn của bạn sẽ xuất hiện ở đây.&#10;&#10;Chỉ gồm link đặt hàng, tiền hoàn ước tính và lời nhắn cho khách."></textarea>
+        <button id="copyButton" type="button" class="copy" disabled>Sao chép tin nhắn</button>
+        <p id="copyStatus" class="feedback" role="status" aria-live="polite"></p>
+        <p class="note">Tiền thuế và phần chia của bạn chỉ hiển thị trong bảng tính bên trái, không đưa vào tin nhắn.</p>
+      </section>
+    </div>
+    <footer>Công cụ độc lập · Không cần đăng nhập · Dữ liệu chỉ ở trang này và được xóa khi tải lại</footer>
+  </main>
+  <script>
+    (() => {
+      const byId = id => document.getElementById(id);
+      const form = byId('replyForm');
+      const linkInput = byId('affiliateLink');
+      const commissionInput = byId('commission');
+      const output = byId('replyOutput');
+      const copyButton = byId('copyButton');
+      const money = value => `${value.toLocaleString('vi-VN')}đ`;
+      let revision = 0;
+
+      function clearResult() {
+        revision++;
+        output.value = '';
+        copyButton.disabled = true;
+        byId('copyStatus').textContent = '';
+        byId('formStatus').textContent = '';
+        byId('formStatus').classList.remove('error');
+        for (const id of ['gross', 'tax', 'adminShare', 'cashback']) byId(id).textContent = '—';
+        linkInput.removeAttribute('aria-invalid');
+        commissionInput.removeAttribute('aria-invalid');
+      }
+      function fail(input, message) {
+        byId('formStatus').textContent = message;
+        byId('formStatus').classList.add('error');
+        input.setAttribute('aria-invalid', 'true');
+        input.focus();
+      }
+      form.addEventListener('input', clearResult);
+      form.addEventListener('reset', () => { clearResult(); linkInput.focus(); });
+      form.addEventListener('submit', event => {
+        event.preventDefault();
+        clearResult();
+        const link = linkInput.value.trim();
+        try {
+          const url = new URL(link);
+          if (url.protocol !== 'https:' || url.username || url.password || /\s/.test(link) || link.length > 4000) throw new Error('Invalid URL');
+        } catch {
+          fail(linkInput, 'Dán một link affiliate đầy đủ, bắt đầu bằng https://.');
+          return;
+        }
+        const raw = commissionInput.value.trim();
+        // Accept whole VND amounts and consistently grouped thousands only.
+        if (!/^(?:\d+|\d{1,3}(?:\.\d{3})+|\d{1,3}(?:,\d{3})+)$/.test(raw)) {
+          fail(commissionInput, 'Nhập số đồng nguyên không âm, ví dụ 25000 hoặc 25.000.');
+          return;
+        }
+        const gross = Number(raw.replace(/[.,]/g, ''));
+        if (!Number.isSafeInteger(gross) || gross > 1000000000000) {
+          fail(commissionInput, 'Số tiền quá lớn. Vui lòng kiểm tra lại hoa hồng.');
+          return;
+        }
+        const tax = Math.round(gross * 0.1);
+        const net = gross - tax;
+        const cashback = Math.round(net * 0.7);
+        byId('gross').textContent = money(gross);
+        byId('tax').textContent = money(tax);
+        byId('adminShare').textContent = money(net - cashback);
+        byId('cashback').textContent = money(cashback);
+        output.value = [
+          '🛒 Link đặt hàng TikTok:', link, '',
+          `💰 Hoàn tiền ước tính: ${money(cashback)}`, '',
+          'Đặt hàng qua link trên để nhận hoàn tiền nhé.'
+        ].join('\n');
+        copyButton.disabled = false;
+        byId('formStatus').textContent = 'Đã tạo mẫu. Bấm Sao chép tin nhắn để gửi khách.';
+      });
+
+      copyButton.addEventListener('click', async () => {
+        const text = output.value;
+        if (!text) return;
+        const currentRevision = revision;
+        copyButton.disabled = true;
+        let copied = false;
+        try {
+          if (navigator.clipboard?.writeText) {
+            await navigator.clipboard.writeText(text);
+            copied = true;
+          }
+        } catch { /* File URLs and some mobile browsers require the selection fallback. */ }
+        if (currentRevision !== revision) return;
+        if (!copied) {
+          output.focus();
+          output.select();
+          output.setSelectionRange(0, output.value.length);
+          try { copied = document.execCommand('copy'); } catch { copied = false; }
+        }
+        copyButton.disabled = false;
+        byId('copyStatus').textContent = copied
+          ? 'Đã sao chép! Mở Zalo và dán vào cuộc trò chuyện.'
+          : 'Nội dung đã được chọn. Nhấn Ctrl+C hoặc chạm giữ và chọn Sao chép.';
+      });
+    })();
+  </script>
+</body>
+</html>

@@ -64,6 +64,23 @@ body {
   display: none !important;
 }
 
+/* Keep financial inputs usable even when optional admin enhancements fail to load. */
+#userManageModal .admin-adjust-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: end;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+#userManageModal .admin-adjust-field { display: grid; gap: 6px; min-width: 0; }
+#userManageModal .admin-adjust-field label { font-size: 13px; font-weight: 600; }
+#userManageModal .admin-adjust-field input,
+#userManageModal .admin-adjust-field select,
+#userManageModal .admin-adjust-field .app-choice-trigger { width: 100%; min-width: 0; box-sizing: border-box; }
+@media (max-width: 640px) {
+  #userManageModal .admin-adjust-row { grid-template-columns: minmax(0, 1fr); }
+}
+
 /* Navbar */
 .navbar {
   position: sticky;

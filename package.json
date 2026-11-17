@@ -9,6 +9,8 @@
     "test": "node tests/run_all_tests.js",
     "test:postgres": "node tests/postgres.integration.js",
     "lint": "eslint .",
+    "check:config": "node scripts/production-preflight.js",
+    "check:production": "node scripts/production-smoke.js",
     "test:regression": "node tests/final-audit-diagnostics.js",
     "test:browser": "node tests/withdrawal-ui.e2e.js",
     "test:csv:postgres": "node tests/csv-postgres.integration.js",
