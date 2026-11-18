@@ -10,6 +10,7 @@ const { Pool } = require('pg');
 const logger = require('../utils/logger');
 const { orderKey, orderId, migrateLegacyOrderIdentity, ledgerOrderKey, orderLedgerRef } = require('./orderIdentity');
 const { cleanExpiredClicks } = require('../utils/clickManager');
+const { encryptSettingsObject, decryptSettingsObject } = require('../utils/secretCrypto');
 
 const IS_VERCEL = Boolean(process.env.VERCEL);
 const IS_TEST_ENV = process.env.NODE_ENV === 'test';
@@ -232,6 +233,17 @@ function getJwtSecret() {
   }
   cachedJwtSecret = secret;
   return cachedJwtSecret;
+}
+
+function getSettingsEncryptionSecret() {
+  const explicit = (
+    process.env.SETTINGS_ENCRYPTION_KEY ||
+    process.env.JWT_SECRET ||
+    process.env.AUTH_SECRET ||
+    ''
+  ).trim();
+  if (explicit) return explicit;
+  return IS_PROD ? getJwtSecret() : 'dev-local-lila-settings-key-v1';
 }
 
 if (IS_PROD) {
@@ -482,7 +494,10 @@ function normalizeState(raw, initial = null) {
   const defaultInit = initial || getInitialData();
   const state = {
     webhookReceipts: Array.isArray(raw.webhookReceipts) ? raw.webhookReceipts : [],
-    settings: { ...defaultInit.settings, ...(raw.settings || {}) },
+    settings: decryptSettingsObject(
+      { ...defaultInit.settings, ...(raw.settings || {}) },
+      getSettingsEncryptionSecret()
+    ),
     users: Array.isArray(raw.users) && raw.users.length > 0 ? raw.users : defaultInit.users,
     clicks: Array.isArray(raw.clicks) ? raw.clicks : [],
     orders: Array.isArray(raw.orders) ? raw.orders : [],
@@ -610,7 +625,10 @@ async function runWithStateContext(fn, { incrementalOnly = false } = {}) {
   const base = ensureDbLoaded();
   const data = incrementalOnly
     ? { ...base, users: structuredClone(base.users), settings: structuredClone(base.settings) }
-    : structuredClone(base);
+    : {
+        ...structuredClone({ ...base, clicks: [] }),
+        clicks: Array.isArray(base.clicks) ? base.clicks.slice() : []
+      };
   const context = { data, version: stateContext.getStore()?.version ?? currentDbVersion, invalid: false, incrementalOnly };
   return stateContext.run(context, async () => {
     if (pgPool && !incrementalOnly) {
@@ -632,13 +650,17 @@ async function performSaveDb(data, expectedVersion) {
     return;
   }
 
-  // 1. Atomic local file write (synchronous inside serialized save queue to avoid dangling Windows libuv handles)
+  // 1. Atomic local file write (encrypts sensitive settings at rest before writing JSON)
   let tmpPath = null;
   try {
     const dir = path.dirname(LOCAL_DB_PATH);
     fs.mkdirSync(dir, { recursive: true });
     tmpPath = `${LOCAL_DB_PATH}.tmp.${process.pid}.${Date.now()}`;
-    fs.writeFileSync(tmpPath, JSON.stringify(data), 'utf8');
+    const diskPayload = {
+      ...data,
+      settings: encryptSettingsObject(data.settings, getSettingsEncryptionSecret())
+    };
+    fs.writeFileSync(tmpPath, JSON.stringify(diskPayload), 'utf8');
     fs.renameSync(tmpPath, LOCAL_DB_PATH);
     committedLocalState = structuredClone(data);
     tmpPath = null;
@@ -938,6 +960,14 @@ async function initPostgresIfConfigured() {
         ALTER TABLE orders ADD COLUMN IF NOT EXISTS status_source TEXT;
         ALTER TABLE orders ADD COLUMN IF NOT EXISTS event_time BIGINT DEFAULT 0;
         ALTER TABLE orders ADD COLUMN IF NOT EXISTS clawback_at TIMESTAMPTZ;
+
+        -- Phase 4 Performance Composite Indexes (Idempotent)
+        CREATE INDEX IF NOT EXISTS idx_orders_user_status_created ON orders(user_id, status, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_ledger_user_created ON ledger(user_id, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_withdrawals_user_status ON withdrawals(user_id, status, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_clicks_created_at ON clicks(created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_users_phone ON users(phone);
       `);
 
       // Relational-authoritative state synchronization from Postgres
@@ -945,26 +975,37 @@ async function initPostgresIfConfigured() {
       memoryCache = loadedState;
       pgSchemaReady = true;
 
-      // Update hoantienshop_state snapshot so it stays 100% consistent with accurate version
+      // Update hoantienshop_state snapshot (lean encrypted settings envelope)
       const stateCheck = await client.query("SELECT version FROM hoantienshop_state WHERE id = 'main'");
+      const encryptedStateEnvelope = {
+        settings: encryptSettingsObject(loadedState.settings, getSettingsEncryptionSecret())
+      };
       if (stateCheck.rows.length === 0) {
         await client.query(
           `INSERT INTO hoantienshop_state (id, payload, version, updated_at) VALUES ('main', $1, 1, NOW())`,
-          [JSON.stringify(loadedState)]
+          [JSON.stringify(encryptedStateEnvelope)]
         );
         currentDbVersion = 1;
       } else {
         currentDbVersion = Number(stateCheck.rows[0].version || 1);
       }
+      pgCommittedFingerprints = capturePgFingerprints(loadedState, currentDbVersion);
 
       await client.query('COMMIT');
 
-      // Persist authoritative state to disk cache
+      // Persist authoritative state to disk cache (with encrypted settings)
       try {
         const dir = path.dirname(LOCAL_DB_PATH);
         if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
         const tmpPath = `${LOCAL_DB_PATH}.tmp.${process.pid}.${Date.now()}`;
-        fs.writeFileSync(tmpPath, JSON.stringify(loadedState), 'utf8');
+        fs.writeFileSync(
+          tmpPath,
+          JSON.stringify({
+            ...loadedState,
+            settings: encryptedStateEnvelope.settings
+          }),
+          'utf8'
+        );
         fs.renameSync(tmpPath, LOCAL_DB_PATH);
       } catch (_) {}
 
@@ -1012,7 +1053,10 @@ async function loadAuthoritativeStateFromPostgres(client) {
   if (stateRes.rows.length > 0 && stateRes.rows[0].payload) {
     const p = stateRes.rows[0].payload;
     if (p.settings && typeof p.settings === 'object') {
-      settings = { ...settings, ...p.settings };
+      settings = decryptSettingsObject(
+        { ...settings, ...p.settings },
+        getSettingsEncryptionSecret()
+      );
     }
     if (Array.isArray(p.users)) payloadUsers = p.users;
     if (Array.isArray(p.orders)) payloadOrders = p.orders;
@@ -1117,6 +1161,36 @@ async function loadAuthoritativeStateFromPostgres(client) {
 }
 
 // ================= MULTI-ROW BATCH POSTGRES SYNC HELPERS =================
+
+let pgCommittedFingerprints = null;
+
+function capturePgFingerprints(data, version) {
+  const users = new Map();
+  for (const u of data?.users || []) {
+    if (u?.id) users.set(u.id, JSON.stringify(u));
+  }
+  const orders = new Map();
+  for (const o of data?.orders || []) {
+    if (o?.orderSn) orders.set(`${o.platform || 'shopee'}:${o.orderSn}`, JSON.stringify(o));
+  }
+  const withdrawals = new Map();
+  for (const w of data?.withdrawals || []) {
+    if (w?.id) withdrawals.set(w.id, JSON.stringify(w));
+  }
+  const ledgerRefs = new Set();
+  for (const l of data?.ledger || []) {
+    if (l?.refId) ledgerRefs.add(l.refId);
+  }
+  const clickIds = new Set();
+  for (const c of data?.clicks || []) {
+    if (c?.clickId) clickIds.add(c.clickId);
+  }
+  const auditIds = new Set();
+  for (const a of data?.auditLogs || []) {
+    if (a?.id) auditIds.add(a.id);
+  }
+  return { version, users, orders, withdrawals, ledgerRefs, clickIds, auditIds };
+}
 
 function chunkArray(items, size) {
   if (!Array.isArray(items) || items.length === 0) return [];
@@ -1248,14 +1322,19 @@ async function batchSyncUsers(client, users) {
   }
 }
 
-async function batchSyncWithdrawals(client, withdrawals) {
+async function batchSyncWithdrawals(client, withdrawals, { skipPrune = false, deletedIds = null } = {}) {
   if (!Array.isArray(withdrawals)) return;
-  const activeIds = withdrawals.map((w) => w && w.id).filter(Boolean);
-  if (activeIds.length === 0) {
-    await client.query('DELETE FROM withdrawals WHERE archived_at IS NULL');
-    return;
+  if (!skipPrune) {
+    const activeIds = withdrawals.map((w) => w && w.id).filter(Boolean);
+    if (activeIds.length === 0) {
+      await client.query('DELETE FROM withdrawals WHERE archived_at IS NULL');
+      return;
+    }
+    await client.query('DELETE FROM withdrawals WHERE archived_at IS NULL AND NOT (id = ANY($1::text[]))', [activeIds]);
+  } else if (Array.isArray(deletedIds) && deletedIds.length > 0) {
+    await client.query('DELETE FROM withdrawals WHERE archived_at IS NULL AND id = ANY($1::text[])', [deletedIds]);
   }
-  await client.query('DELETE FROM withdrawals WHERE archived_at IS NULL AND NOT (id = ANY($1::text[]))', [activeIds]);
+  if (withdrawals.length === 0) return;
 
   const chunks = chunkArray(withdrawals, 30);
   for (const chunk of chunks) {
@@ -1310,14 +1389,22 @@ async function batchSyncWithdrawals(client, withdrawals) {
   }
 }
 
-async function batchSyncOrders(client, orders) {
+async function batchSyncOrders(client, orders, { skipPrune = false, deletedOrders = null } = {}) {
   if (!Array.isArray(orders)) return;
-  const activeOrderSns = orders.map((o) => o && o.orderSn).filter(Boolean);
-  if (activeOrderSns.length === 0) {
-    await client.query('DELETE FROM orders');
-    return;
+  if (!skipPrune) {
+    const activeOrderSns = orders.map((o) => o && o.orderSn).filter(Boolean);
+    if (activeOrderSns.length === 0) {
+      await client.query('DELETE FROM orders');
+      return;
+    }
+    await client.query(`DELETE FROM orders o WHERE NOT EXISTS (SELECT 1 FROM jsonb_to_recordset($1::jsonb) AS k(platform text, sn text) WHERE k.platform=o.platform AND k.sn=o.order_sn)`, [JSON.stringify(orders.filter(o => o?.orderSn).map(o => ({ platform: o.platform || 'shopee', sn: o.orderSn })))]);
+  } else if (Array.isArray(deletedOrders) && deletedOrders.length > 0) {
+    await client.query(
+      `DELETE FROM orders o USING jsonb_to_recordset($1::jsonb) AS k(platform text, sn text) WHERE o.platform = k.platform AND o.order_sn = k.sn`,
+      [JSON.stringify(deletedOrders)]
+    );
   }
-  await client.query(`DELETE FROM orders o WHERE NOT EXISTS (SELECT 1 FROM jsonb_to_recordset($1::jsonb) AS k(platform text, sn text) WHERE k.platform=o.platform AND k.sn=o.order_sn)`, [JSON.stringify(orders.filter(o => o?.orderSn).map(o => ({ platform: o.platform || 'shopee', sn: o.orderSn })))]);
+  if (orders.length === 0) return;
 
   const chunks = chunkArray(orders, 25);
   for (const chunk of chunks) {
@@ -1844,37 +1931,94 @@ async function syncSnapshotToPostgres(data, expectedVersion = currentDbVersion) 
       err.code = 'STATE_CONFLICT';
       throw err;
     }
-    // 1. Sync ledger first so users balance recalculation subquery sees latest entries
+
+    const baseFp =
+      pgCommittedFingerprints && pgCommittedFingerprints.version === expectedVersion
+        ? pgCommittedFingerprints
+        : null;
+
+    // 1. Sync webhook receipts & delta ledger first so users balance recalculation subquery sees latest entries
     for (const receipt of data.webhookReceipts || []) {
       const inserted = await client.query(`INSERT INTO webhook_receipts (receipt_key, payload_hash) VALUES ($1,$2)
         ON CONFLICT (receipt_key) DO UPDATE SET payload_hash=webhook_receipts.payload_hash
         RETURNING payload_hash`, [receipt.key, receipt.hash]);
       if (inserted.rows[0].payload_hash !== receipt.hash) throw new Error('Webhook receipt payload conflict');
     }
-    await batchSyncLedger(client, data.ledger);
+    const ledgerToSync = baseFp
+      ? (data.ledger || []).filter((l) => l?.refId && !baseFp.ledgerRefs.has(l.refId))
+      : data.ledger;
+    await batchSyncLedger(client, ledgerToSync);
 
-    // 2. Sync users with calculated balance from authoritative ledger
-    await batchSyncUsers(client, data.users);
+    // 2. Sync dirty users with calculated balance from authoritative ledger
+    const usersToSync = baseFp
+      ? (data.users || []).filter((u) => u?.id && baseFp.users.get(u.id) !== JSON.stringify(u))
+      : data.users;
+    await batchSyncUsers(client, usersToSync);
 
-    // 3. Sync withdrawals with protected terminal statuses (paid/rejected)
-    await batchSyncWithdrawals(client, data.withdrawals);
+    // 3. Sync dirty withdrawals & targeted deletions with protected terminal statuses (paid/rejected)
+    if (baseFp) {
+      const currentWdIds = new Set((data.withdrawals || []).map((w) => w?.id).filter(Boolean));
+      const deletedWdIds = [...baseFp.withdrawals.keys()].filter((id) => !currentWdIds.has(id));
+      const changedWithdrawals = (data.withdrawals || []).filter(
+        (w) => w?.id && baseFp.withdrawals.get(w.id) !== JSON.stringify(w)
+      );
+      await batchSyncWithdrawals(client, changedWithdrawals, {
+        skipPrune: true,
+        deletedIds: deletedWdIds
+      });
+    } else {
+      await batchSyncWithdrawals(client, data.withdrawals);
+    }
 
-    // 4. Sync orders preserving custom cashback & attribution
-    await batchSyncOrders(client, data.orders);
+    // 4. Sync dirty orders & targeted deletions preserving custom cashback & attribution
+    if (baseFp) {
+      const currentOrdKeys = new Set();
+      const changedOrders = [];
+      for (const o of data.orders || []) {
+        if (!o?.orderSn) continue;
+        const k = `${o.platform || 'shopee'}:${o.orderSn}`;
+        currentOrdKeys.add(k);
+        if (baseFp.orders.get(k) !== JSON.stringify(o)) {
+          changedOrders.push(o);
+        }
+      }
+      const deletedOrders = [];
+      for (const oldKey of baseFp.orders.keys()) {
+        if (!currentOrdKeys.has(oldKey)) {
+          const sep = oldKey.indexOf(':');
+          deletedOrders.push({ platform: oldKey.slice(0, sep), sn: oldKey.slice(sep + 1) });
+        }
+      }
+      await batchSyncOrders(client, changedOrders, {
+        skipPrune: true,
+        deletedOrders
+      });
+    } else {
+      await batchSyncOrders(client, data.orders);
+    }
 
-    // 5. Sync clicks (keep latest 500)
-    await batchSyncClicks(client, data.clicks);
+    // 5. Sync new clicks only (append-only)
+    const clicksToSync = baseFp
+      ? (data.clicks || []).filter((c) => c?.clickId && !baseFp.clickIds.has(c.clickId))
+      : data.clicks;
+    await batchSyncClicks(client, clicksToSync);
 
-    // 5.5 Sync audit logs
-    await batchSyncAuditLogs(client, data.auditLogs);
+    // 5.5 Sync new audit logs only (append-only)
+    const auditsToSync = baseFp
+      ? (data.auditLogs || []).slice(0, 200).filter((a) => a?.id && !baseFp.auditIds.has(a.id))
+      : data.auditLogs;
+    await batchSyncAuditLogs(client, auditsToSync);
 
-    // 6. Optimistic Concurrency Control on hoantienshop_state
+    // 6. Optimistic Concurrency Control on hoantienshop_state (lean encrypted settings envelope instead of O(N) full DB blob)
+    const statePayloadJson = JSON.stringify({
+      settings: encryptSettingsObject(data.settings, getSettingsEncryptionSecret())
+    });
     const updateRes = await client.query(
       `UPDATE hoantienshop_state
        SET payload = $1, version = version + 1, updated_at = NOW()
        WHERE id = 'main' AND version = $2
        RETURNING version`,
-      [JSON.stringify(data), expectedVersion]
+      [statePayloadJson, expectedVersion]
     );
 
     if (updateRes.rowCount === 0) {
@@ -1884,10 +2028,11 @@ async function syncSnapshotToPostgres(data, expectedVersion = currentDbVersion) 
           `INSERT INTO hoantienshop_state (id, payload, version, updated_at)
            VALUES ('main', $1, 1, NOW())
            RETURNING version`,
-          [JSON.stringify(data)]
+          [statePayloadJson]
         );
         currentDbVersion = Number(insertRes.rows[0]?.version || 1);
         await client.query('COMMIT');
+        pgCommittedFingerprints = capturePgFingerprints(data, currentDbVersion);
         return;
       }
 
@@ -1908,6 +2053,7 @@ async function syncSnapshotToPostgres(data, expectedVersion = currentDbVersion) 
 
     await client.query('COMMIT');
     currentDbVersion = Number(updateRes.rows[0].version);
+    pgCommittedFingerprints = capturePgFingerprints(data, currentDbVersion);
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
     throw err;
@@ -1929,14 +2075,16 @@ async function reloadStateFromPostgres({ strict = false } = {}) {
       const fresh = await loadAuthoritativeStateFromPostgres(client);
       const version = await client.query("SELECT version FROM hoantienshop_state WHERE id = 'main'");
       await client.query('COMMIT');
+      const loadedVer = Number(version.rows[0]?.version || 1);
+      pgCommittedFingerprints = capturePgFingerprints(fresh, loadedVer);
       const context = stateContext.getStore();
       if (context) {
         Object.assign(context.data, fresh);
-        context.version = Number(version.rows[0]?.version || 1);
+        context.version = loadedVer;
         context.invalid = false;
         return context.data;
       }
-      currentDbVersion = Number(version.rows[0]?.version || 1);
+      currentDbVersion = loadedVer;
       if (memoryCache) {
         memoryCache.settings = fresh.settings;
         memoryCache.users = fresh.users;
@@ -2732,6 +2880,61 @@ function recalculateAllWallets({ persist = true } = {}) {
   return auditLedgerIntegrity({ autoRepair: false });
 }
 
+/**
+ * Targeted O(K) wallet recalculation for only the users (and their 1-level referrers)
+ * affected by an order sync, webhook postback, CSV import, or admin order edit/delete.
+ */
+function recalculateAffectedWallets(identifiers = [], { persist = false } = {}) {
+  logger.logEnter('recalculateAffectedWallets');
+  const db = ensureDbLoaded();
+  const rawList = Array.isArray(identifiers) ? identifiers : [...identifiers];
+  const idSet = new Set();
+  const codeSet = new Set();
+
+  for (const item of rawList) {
+    if (!item || typeof item !== 'string') continue;
+    const trimmed = item.trim();
+    const upper = trimmed.toUpperCase();
+    if (!trimmed || upper === 'GUEST' || upper === 'PENDING_VERIFY') continue;
+    idSet.add(trimmed);
+    codeSet.add(upper);
+  }
+
+  const targetUserIds = new Set();
+  const referrerCodes = new Set();
+
+  for (const u of db.users) {
+    if (!u?.id) continue;
+    if (idSet.has(u.id) || (u.code && codeSet.has(String(u.code).toUpperCase()))) {
+      targetUserIds.add(u.id);
+      if (u.referredBy) {
+        referrerCodes.add(String(u.referredBy).trim().toUpperCase());
+      }
+    }
+  }
+
+  if (referrerCodes.size > 0) {
+    for (const u of db.users) {
+      if (u?.id && u.code && referrerCodes.has(String(u.code).toUpperCase())) {
+        targetUserIds.add(u.id);
+      }
+    }
+  }
+
+  for (const uid of targetUserIds) {
+    recalculateUserWallet(uid, { persist: false });
+  }
+
+  if (persist) {
+    saveDb(db).catch((err) => {
+      logger.warning('recalculateAffectedWallets', 'Lỗi lưu dữ liệu ví mục tiêu', { error: err.message });
+    });
+  }
+
+  logger.logLeave('recalculateAffectedWallets', { count: targetUserIds.size });
+  return { recalculatedCount: targetUserIds.size, userIds: [...targetUserIds] };
+}
+
 function getCurrentDbVersion() {
   return stateContext.getStore()?.version ?? currentDbVersion;
 }
@@ -2865,6 +3068,7 @@ module.exports = {
   appendLedgerEntry,
   recalculateUserWallet,
   recalculateAllWallets,
+  recalculateAffectedWallets,
   executeAtomicWithdrawal,
   archiveWithdrawal,
   refundWithdrawal,

@@ -34,7 +34,11 @@ const TEST_SUITES = [
   'test_manual_checklist_simulation.js',
   'test_due_diligence_fixes.js',
   'test_phase2_phase3_due_diligence.js',
-  'test_mobile_first_and_ux_upgrade.js'
+  'test_mobile_first_and_ux_upgrade.js',
+  'test_phase2_cto_upgrades.js',
+  'test_phase3_mobile_ux.js',
+  'test_phase4_storage_and_security.js',
+  'test_phase5_performance_and_retention.js'
 ];
 
 async function runAllTests() {

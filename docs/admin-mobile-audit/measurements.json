@@ -254,32 +254,28 @@
         "height": 36
       },
       {
-        "text": "Tìm",
-        "height": 28
-      },
-      {
         "text": "Duyệt",
-        "height": 23
+        "height": 38
       },
       {
         "text": "Hủy",
-        "height": 23
+        "height": 38
       },
       {
         "text": "Sửa",
-        "height": 23
+        "height": 38
       },
       {
         "text": "Xóa",
-        "height": 23
+        "height": 38
       },
       {
         "text": "Trước",
-        "height": 23
+        "height": 40
       },
       {
         "text": "Sau",
-        "height": 23
+        "height": 40
       },
       {
         "text": "Tạo mẫu",
@@ -467,11 +463,11 @@
   {
     "width": 718,
     "enhancementBlocked": true,
-    "amountWidth": 231.01480102539062
+    "amountWidth": 230.32296752929688
   },
   {
     "width": 1440,
     "enhancementBlocked": true,
-    "amountWidth": 231.65838623046875
+    "amountWidth": 231.6541748046875
   }
 ]

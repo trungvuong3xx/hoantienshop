@@ -256,7 +256,30 @@ function createCsrfGuard({ allowedOrigins = [] } = {}) {
     ...(Array.isArray(allowedOrigins) ? allowedOrigins : [])
   ]);
 
+  function isOriginPermitted(candidateOrigin, req) {
+    if (!candidateOrigin || candidateOrigin === 'null') return false;
+    if (
+      originWhitelist.has(candidateOrigin) ||
+      /^https:\/\/hoantienshop(-[a-z0-9-]+)?\.vercel\.app$/i.test(candidateOrigin)
+    ) {
+      return true;
+    }
+    try {
+      const parsedOrigin = new URL(candidateOrigin);
+      const reqHost = String(req.headers['x-forwarded-host'] || req.headers.host || '')
+        .split(',')[0]
+        .trim();
+      return Boolean(reqHost && parsedOrigin.host === reqHost);
+    } catch {
+      return false;
+    }
+  }
+
   return function csrfGuardMiddleware(req, res, next) {
+    if (req._csrfVerified) {
+      return next();
+    }
+
     const method = String(req.method || 'GET').toUpperCase();
     if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
       return next();
@@ -275,20 +298,7 @@ function createCsrfGuard({ allowedOrigins = [] } = {}) {
 
     const originHeader = req.headers.origin;
     if (originHeader) {
-      let originAllowed = originWhitelist.has(originHeader) ||
-        /^https:\/\/hoantienshop(-[a-z0-9-]+)?\.vercel\.app$/i.test(originHeader);
-      if (!originAllowed) {
-        try {
-          const parsedOrigin = new URL(originHeader);
-          const reqHost = String(req.headers['x-forwarded-host'] || req.headers.host || '').split(',')[0].trim();
-          if (reqHost && parsedOrigin.host === reqHost) {
-            originAllowed = true;
-          }
-        } catch {
-          originAllowed = false;
-        }
-      }
-      if (!originAllowed) {
+      if (!isOriginPermitted(originHeader, req)) {
         logger.warning('csrfGuardMiddleware', 'Rejected cross-origin cookie request', {
           origin: originHeader,
           path: fullPath
@@ -297,17 +307,28 @@ function createCsrfGuard({ allowedOrigins = [] } = {}) {
           error: 'Yêu cầu bị từ chối do nguồn gốc (Origin) không hợp lệ (CSRF Blocked).'
         });
       }
+    } else if (req.headers.referer) {
+      let refererOrigin = '';
+      try {
+        refererOrigin = new URL(String(req.headers.referer)).origin;
+      } catch {
+        refererOrigin = '';
+      }
+      if (!isOriginPermitted(refererOrigin, req)) {
+        logger.warning('csrfGuardMiddleware', 'Rejected cross-referer cookie request', {
+          referer: req.headers.referer,
+          path: fullPath
+        });
+        return res.status(403).json({
+          error: 'Yêu cầu bị từ chối do nguồn tham chiếu (Referer) không hợp lệ (CSRF Blocked).'
+        });
+      }
     }
 
-    const contentType = String(req.headers['content-type'] || '').toLowerCase();
-    const isSimpleFormContent =
-      contentType.includes('application/x-www-form-urlencoded') ||
-      contentType.includes('multipart/form-data') ||
-      contentType.includes('text/plain');
-
-    if (isSimpleFormContent && !req.headers['x-requested-with']) {
-      logger.warning('csrfGuardMiddleware', 'Rejected simple-content CSRF attempt without X-Requested-With', {
-        contentType,
+    const hasBearerAuth = /^Bearer\s+\S+/i.test(String(req.headers.authorization || ''));
+    if (!hasBearerAuth && !req.headers['x-requested-with']) {
+      logger.warning('csrfGuardMiddleware', 'Rejected cookie mutation without X-Requested-With', {
+        contentType: String(req.headers['content-type'] || '').toLowerCase(),
         path: fullPath
       });
       return res.status(403).json({
@@ -315,8 +336,143 @@ function createCsrfGuard({ allowedOrigins = [] } = {}) {
       });
     }
 
+    req._csrfVerified = true;
     return next();
   };
+}
+
+// ================= ACCOUNT-LEVEL LOGIN BRUTE-FORCE COOLDOWN =================
+const loginFailBuckets = new Map();
+const MAX_LOGIN_FAILURES = 8;
+const LOGIN_LOCKOUT_WINDOW_MS = 15 * 60 * 1000;
+
+function normalizeLoginLockKey(identifier) {
+  return String(identifier || '')
+    .trim()
+    .toLowerCase()
+    .slice(0, 80);
+}
+
+async function checkLoginAccountLock(identifier) {
+  const normKey = normalizeLoginLockKey(identifier);
+  if (!normKey) return { locked: false, remainingSec: 0 };
+
+  const redis = getRedisConfig();
+  if (redis.url && redis.token) {
+    try {
+      const upstashUrl = `${redis.url.replace(/\/$/, '')}/pipeline`;
+      const rKey = `login-fail:${normKey}`;
+      const resp = await fetch(upstashUrl, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${redis.token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify([
+          ['GET', rKey],
+          ['TTL', rKey]
+        ]),
+        signal: AbortSignal.timeout(1500)
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        const count = Number(data?.[0]?.result || 0);
+        const ttl = Number(data?.[1]?.result || 0);
+        if (count >= MAX_LOGIN_FAILURES && ttl > 0) {
+          return { locked: true, remainingSec: ttl };
+        }
+        return { locked: false, remainingSec: 0 };
+      }
+    } catch (err) {
+      logger.warning('checkLoginAccountLock', 'Upstash check fallback to memory', { error: err.message });
+    }
+  }
+
+  const now = Date.now();
+  const bucket = loginFailBuckets.get(normKey);
+  if (!bucket || now >= bucket.resetAt) {
+    if (bucket) loginFailBuckets.delete(normKey);
+    return { locked: false, remainingSec: 0 };
+  }
+  if (bucket.count >= MAX_LOGIN_FAILURES) {
+    return { locked: true, remainingSec: Math.max(1, Math.ceil((bucket.resetAt - now) / 1000)) };
+  }
+  return { locked: false, remainingSec: 0 };
+}
+
+async function recordFailedLoginAttempt(identifier) {
+  const normKey = normalizeLoginLockKey(identifier);
+  if (!normKey) return 0;
+
+  const redis = getRedisConfig();
+  if (redis.url && redis.token) {
+    try {
+      const upstashUrl = `${redis.url.replace(/\/$/, '')}/pipeline`;
+      const rKey = `login-fail:${normKey}`;
+      const ttlSec = Math.ceil(LOGIN_LOCKOUT_WINDOW_MS / 1000);
+      const resp = await fetch(upstashUrl, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${redis.token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify([
+          ['INCR', rKey],
+          ['EXPIRE', rKey, ttlSec, 'NX']
+        ]),
+        signal: AbortSignal.timeout(1500)
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        return Number(data?.[0]?.result || 1);
+      }
+    } catch (err) {
+      logger.warning('recordFailedLoginAttempt', 'Upstash increment fallback to memory', { error: err.message });
+    }
+  }
+
+  const now = Date.now();
+  if (!loginFailBuckets.has(normKey) && loginFailBuckets.size >= 5000) {
+    for (const [k, b] of loginFailBuckets.entries()) {
+      if (now >= b.resetAt) loginFailBuckets.delete(k);
+      if (loginFailBuckets.size < 5000) break;
+    }
+    if (loginFailBuckets.size >= 5000) {
+      const oldest = loginFailBuckets.keys().next().value;
+      if (oldest !== undefined) loginFailBuckets.delete(oldest);
+    }
+  }
+
+  const bucket = loginFailBuckets.get(normKey) || { count: 0, resetAt: now + LOGIN_LOCKOUT_WINDOW_MS };
+  if (now >= bucket.resetAt) {
+    bucket.count = 0;
+    bucket.resetAt = now + LOGIN_LOCKOUT_WINDOW_MS;
+  }
+  bucket.count += 1;
+  loginFailBuckets.set(normKey, bucket);
+  return bucket.count;
+}
+
+async function clearFailedLoginAttempts(identifier) {
+  const normKey = normalizeLoginLockKey(identifier);
+  if (!normKey) return;
+  loginFailBuckets.delete(normKey);
+
+  const redis = getRedisConfig();
+  if (redis.url && redis.token) {
+    try {
+      const upstashUrl = `${redis.url.replace(/\/$/, '')}/pipeline`;
+      await fetch(upstashUrl, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${redis.token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify([['DEL', `login-fail:${normKey}`]]),
+        signal: AbortSignal.timeout(1500)
+      });
+    } catch (_) {}
+  }
 }
 
 module.exports = {
@@ -324,5 +480,9 @@ module.exports = {
   createRateLimiter,
   verifyTurnstileIfEnabled,
   buildVietQrImageUrl,
-  createCsrfGuard
+  createCsrfGuard,
+  checkLoginAccountLock,
+  recordFailedLoginAttempt,
+  clearFailedLoginAttempts,
+  MAX_LOGIN_FAILURES
 };

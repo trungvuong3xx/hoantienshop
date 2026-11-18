@@ -6,4 +6,6 @@ data/
 *.log
 tests/
 docs/
+tools/
+eslint.config.cjs
 .superpowers/

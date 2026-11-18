@@ -44,6 +44,7 @@ const assert = require('assert/strict');
           assert.equal(measured.smallTargets.length, 0, 'Buttons must be touch sized');
         }
         if(width===360) await page.screenshot({path:path.join(out,`${tab}-360.png`),fullPage:true});
+        if(width===1440 && tab==='orders') await page.locator('#admTabOrders .admin-table-panel').screenshot({path:path.join(out,'orders-desktop.png')});
       }
       for(const id of ['userManageModal','orderEditModal']) {
         await page.evaluate(id=>document.getElementById(id).classList.remove('hidden'),id);

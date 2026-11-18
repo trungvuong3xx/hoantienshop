@@ -17,6 +17,7 @@ const {
   calculateCommissionSplit,
   recalculateUserWallet,
   recalculateAllWallets,
+  recalculateAffectedWallets,
   executeAtomicWithdrawal,
   archiveWithdrawal,
   refundWithdrawal,
@@ -58,7 +59,11 @@ const {
   createRateLimiter,
   verifyTurnstileIfEnabled,
   buildVietQrImageUrl,
-  createCsrfGuard
+  createCsrfGuard,
+  checkLoginAccountLock,
+  recordFailedLoginAttempt,
+  clearFailedLoginAttempts,
+  MAX_LOGIN_FAILURES
 } = require('../utils/securityMiddleware');
 const {
   DEFAULT_ZALO_GROUP_URL,
@@ -81,6 +86,7 @@ const {
 } = require('./webhookSecurityService');
 const {
   queryOrdersPaginated,
+  countUserOrderStatuses,
   queryUsersPaginated,
   queryWithdrawalsPaginated
 } = require('../repositories/postgresRepository');
@@ -527,18 +533,24 @@ async function runShopeeAutoSync() {
   const reportNodes = await fetchShopeeConversionReport(appId, appSecret, 50);
   const parsedOrders = parseShopeeReportNodes(reportNodes);
   let syncedCount = 0;
+  const affectedUsers = new Set();
 
   for (const parsed of parsedOrders) {
     try {
       if (parsed.rawSubId) await findClickById(String(parsed.rawSubId).split('-')[0].trim(), { forAttribution: true });
-      upsertNetworkOrder(db, parsed);
+      const prev = db.orders.find((o) => sameOrder(o, parsed.orderSn, parsed.platform));
+      if (prev?.userId) affectedUsers.add(prev.userId);
+      if (prev?.userCode) affectedUsers.add(prev.userCode);
+      const syncedOrd = upsertNetworkOrder(db, parsed);
+      if (syncedOrd?.userId) affectedUsers.add(syncedOrd.userId);
+      if (syncedOrd?.userCode) affectedUsers.add(syncedOrd.userCode);
       syncedCount++;
     } catch (itemErr) {
       throw itemErr;
     }
   }
 
-  recalculateAllWallets({ persist: false });
+  recalculateAffectedWallets(affectedUsers, { persist: false });
   await saveDb(db);
   logger.logLeave('runShopeeAutoSync', { syncedCount });
   return { syncedCount, orders: parsedOrders };
@@ -570,6 +582,7 @@ async function runAccessTradeAutoSync() {
     if (row.status == null && row.order_status == null && row.approval_status == null) accessTradeAggregateStatus(row);
   }
   let syncedCount = 0;
+  const affectedUsers = new Set();
 
   for (const row of rows) {
     if (!row || typeof row !== 'object') continue;
@@ -600,7 +613,10 @@ async function runAccessTradeAutoSync() {
         `Đơn ${platform === 'tiktok' ? 'TikTok' : 'Shopee'} #${orderSn}`;
 
       if (rawSubId) await findClickById(String(rawSubId).split('-')[0].trim(), { forAttribution: true });
-      upsertNetworkOrder(db, {
+      const prev = db.orders.find((o) => sameOrder(o, orderSn, platform));
+      if (prev?.userId) affectedUsers.add(prev.userId);
+      if (prev?.userCode) affectedUsers.add(prev.userCode);
+      const syncedOrd = upsertNetworkOrder(db, {
         orderSn,
         rawSubId,
         grossCommission: grossComm,
@@ -611,13 +627,15 @@ async function runAccessTradeAutoSync() {
         eventTime: row.update_time,
         purchaseTime: row.sales_time
       });
+      if (syncedOrd?.userId) affectedUsers.add(syncedOrd.userId);
+      if (syncedOrd?.userCode) affectedUsers.add(syncedOrd.userCode);
       syncedCount++;
     } catch (rowErr) {
       throw rowErr;
     }
   }
 
-  recalculateAllWallets({ persist: false });
+  recalculateAffectedWallets(affectedUsers, { persist: false });
   await saveDb(db);
   logger.logLeave('runAccessTradeAutoSync', { syncedCount });
   return { syncedCount };
@@ -812,9 +830,9 @@ function registerCashbackRoutes(app) {
     }
   }));
 
-  // 1. Public Config (Never exposes secrets)
-  app.get('/api/public-config', (req, res) => {
-    logger.logEnter('GET /api/public-config');
+  // 1. Public Config & Settings Alias (Single shared handler, never exposes secrets)
+  function sendPublicConfigResponse(routeLabel, req, res) {
+    logger.logEnter(routeLabel);
     const db = ensureDbLoaded();
     migrateZaloSettings(db);
     const s = db.settings;
@@ -831,29 +849,11 @@ function registerCashbackRoutes(app) {
       turnstileSiteKey: process.env.TURNSTILE_SITE_KEY || s.turnstileSiteKey || '',
       hasShopeeConfigured: Boolean(s.shopeeAffiliateId || s.shopeeAppId)
     });
-    logger.logLeave('GET /api/public-config');
-  });
+    logger.logLeave(routeLabel);
+  }
 
-  app.get('/api/settings', (req, res) => {
-    logger.logEnter('GET /api/settings');
-    const db = ensureDbLoaded();
-    migrateZaloSettings(db);
-    const s = db.settings;
-    res.json({
-      siteName: s.siteName || 'LiLa',
-      cashbackPercent: Number(s.cashbackPercent || 70),
-      taxDeductPercent: Number(s.taxDeductPercent ?? 10),
-      referralBonusPercent: Number(s.referralBonusPercent ?? 5),
-      referralBountyAmount: Number(s.referralBountyAmount ?? 10000),
-      minWithdrawAmount: Number(s.minWithdrawAmount || 50000),
-      supportZalo: s.supportZalo || '',
-      zaloGroupUrl: s.zaloGroupUrl || DEFAULT_ZALO_GROUP_URL,
-      zaloWidgetEnabled: s.zaloWidgetEnabled ?? true,
-      turnstileSiteKey: process.env.TURNSTILE_SITE_KEY || s.turnstileSiteKey || '',
-      hasShopeeConfigured: Boolean(s.shopeeAffiliateId || s.shopeeAppId)
-    });
-    logger.logLeave('GET /api/settings');
-  });
+  app.get('/api/public-config', (req, res) => sendPublicConfigResponse('GET /api/public-config', req, res));
+  app.get('/api/settings', (req, res) => sendPublicConfigResponse('GET /api/settings', req, res));
 
   // 2. Auth: Register (scrypt + 1-level referral + Turnstile check)
   app.post('/api/auth/register', authLimiter, async (req, res, next) => {
@@ -963,9 +963,29 @@ function registerCashbackRoutes(app) {
           (u.code && String(u.code).toLowerCase() === cleanId)
       );
 
+      const accountLockKey = user ? `acct:${user.id}` : `id:${normId || cleanId}`;
+      const lockCheck = await checkLoginAccountLock(accountLockKey);
+      if (lockCheck.locked) {
+        logger.warning('POST /api/auth/login', 'Blocked by account-level brute-force cooldown', {
+          accountLockKey,
+          remainingSec: lockCheck.remainingSec
+        });
+        return res.status(429).json({
+          error: 'Tài khoản tạm thời bị khóa đăng nhập 15 phút do nhập sai mật khẩu quá nhiều lần. Vui lòng thử lại sau.'
+        });
+      }
+
       if (!user || user.accountLocked || user.isDeleted || !(await verifyPasswordAsync(password, user.passwordHash))) {
+        const failCount = await recordFailedLoginAttempt(accountLockKey);
+        if (failCount >= MAX_LOGIN_FAILURES) {
+          return res.status(429).json({
+            error: 'Tài khoản tạm thời bị khóa đăng nhập 15 phút do nhập sai mật khẩu quá nhiều lần. Vui lòng thử lại sau.'
+          });
+        }
         return res.status(401).json({ error: 'Thông tin đăng nhập không chính xác.' });
       }
+
+      await clearFailedLoginAttempts(accountLockKey);
 
       // Automatically upgrade legacy hash to scrypt
       if (!String(user.passwordHash).startsWith('scrypt$')) {
@@ -984,7 +1004,13 @@ function registerCashbackRoutes(app) {
     }
   });
 
-  app.post('/api/auth/logout', asyncHandler(async (req, res) => {
+  const logoutLimiter = createRateLimiter({
+    windowMs: 60000,
+    max: 20,
+    keyPrefix: 'logout',
+    failClosed: false
+  });
+  app.post('/api/auth/logout', logoutLimiter, asyncHandler(async (req, res) => {
     logger.logEnter('POST /api/auth/logout');
     const user = getAuthUser(req);
     if (user) {
@@ -1007,13 +1033,20 @@ function registerCashbackRoutes(app) {
     const db = ensureDbLoaded();
     recalculateUserWallet(user.id);
 
+    const rawOrderStatus = String(req.query.orderStatus || req.query.status || '').trim().toLowerCase();
+    const effectiveOrderStatus = rawOrderStatus === 'all' ? '' : rawOrderStatus;
     const { items: userOrders, pagination: ordersPagination } = await queryOrdersPaginated(db, {
       userId: user.id,
       userCode: user.code,
       page: req.query.orderPage || req.query.page || 1,
       limit: req.query.orderLimit || req.query.limit || 200,
       q: req.query.q || '',
-      status: req.query.orderStatus || req.query.status || ''
+      status: effectiveOrderStatus
+    });
+    const orderStatusCounts = await countUserOrderStatuses(db, {
+      userId: user.id,
+      userCode: user.code,
+      q: req.query.q || ''
     });
 
     const userWithdrawals = db.withdrawals
@@ -1040,6 +1073,7 @@ function registerCashbackRoutes(app) {
       user: sanitizeUser(user),
       orders: userOrders.map(sanitizeOrderForUser),
       ordersPagination,
+      orderStatusCounts,
       withdrawals: userWithdrawals,
       ledger: userLedger,
       ledgerPagination,
@@ -1134,7 +1168,11 @@ function registerCashbackRoutes(app) {
     windowMs: 15 * 60 * 1000,
     max: 10,
     keyPrefix: 'profile',
-    failClosed: false
+    failClosed: false,
+    keyGenerator(req) {
+      const user = getAuthUser(req);
+      return user ? `user:${user.id}` : `ip:${getClientIp(req)}`;
+    }
   });
   // 5. Update User Profile / Bank Info (Requires password verification if changing bankAccount or bankName)
   app.post('/api/user/profile', profileLimiter, asyncHandler(async (req, res) => {
@@ -1158,9 +1196,15 @@ function registerCashbackRoutes(app) {
       }
     }
 
-    if (name !== undefined) user.name = String(name).trim().slice(0, 60);
+    if (name !== undefined) {
+      const cleanName = String(name).trim().slice(0, 60);
+      if (cleanName.length < 2) {
+        return res.status(400).json({ error: 'Vui lòng nhập Họ và tên hợp lệ (tối thiểu 2 ký tự).' });
+      }
+      user.name = cleanName;
+    }
     if (newBank !== undefined) user.bankName = newBank.slice(0, 40);
-    if (newAcc !== undefined) user.bankAccount = newAcc.slice(0, 30);
+    if (newAcc !== undefined) user.bankAccount = newAcc.replace(/\s+/g, '').slice(0, 30);
     if (bankOwner !== undefined) {
       user.bankOwner = String(bankOwner).trim().toUpperCase().slice(0, 60);
     }
@@ -1171,122 +1215,72 @@ function registerCashbackRoutes(app) {
     return res.json({ user: sanitizeUser(user) });
   }));
 
-  // 6. User Submit Order Lookup / Tracking Request (Prevents unauthorized hijacking of GUEST orders)
-  app.post('/api/user/submit-order', asyncHandler(async (req, res) => {
-    logger.logEnter('POST /api/user/submit-order');
+  // 5.1. Change User Password (Verifies current password, rotates tokenVersion & refreshes session cookie)
+  const passwordChangeLimiter = createRateLimiter({
+    windowMs: 15 * 60 * 1000,
+    max: 5,
+    keyPrefix: 'pwd-change',
+    failClosed: false,
+    keyGenerator(req) {
+      const user = getAuthUser(req);
+      return user ? `user:${user.id}` : `ip:${getClientIp(req)}`;
+    }
+  });
+  app.post('/api/user/change-password', passwordChangeLimiter, asyncHandler(async (req, res) => {
+    logger.logEnter('POST /api/user/change-password');
     const user = getAuthUser(req);
-    if (!user) return res.status(401).json({ error: 'Vui lòng đăng nhập để tra cứu đơn hàng.' });
+    if (!user) return res.status(401).json({ error: 'Vui lòng đăng nhập.' });
 
-    const { orderSn, platform, productName } = req.body || {};
-    if (platform && !['shopee', 'tiktok'].includes(String(platform).toLowerCase())) return res.status(400).json({ error: 'Nền tảng không hợp lệ.' });
-    const cleanSn = String(orderSn || '')
-      .trim()
-      .toUpperCase()
-      .replace(/[^A-Z0-9_-]/g, '');
-    if (cleanSn.length < 6 || cleanSn.length > 32) {
-      return res.status(400).json({ error: 'Mã đơn hàng không hợp lệ (6-32 ký tự chữ/số).' });
+    const { currentPassword, newPassword } = req.body || {};
+    const currPwd = String(currentPassword || '');
+    const nextPwd = String(newPassword || '');
+
+    if (!currPwd || !nextPwd) {
+      return res.status(400).json({ error: 'Vui lòng nhập đầy đủ mật khẩu hiện tại và mật khẩu mới.' });
+    }
+    if (nextPwd.length < 6 || nextPwd.length > 128) {
+      return res.status(400).json({ error: 'Mật khẩu mới phải từ 6 đến 128 ký tự.' });
+    }
+    if (!(await verifyPasswordAsync(currPwd, user.passwordHash))) {
+      return res.status(400).json({ error: 'Mật khẩu hiện tại không chính xác.' });
+    }
+    if (currPwd === nextPwd) {
+      return res.status(400).json({ error: 'Mật khẩu mới phải khác mật khẩu hiện tại.' });
     }
 
-    return withUserLock(user.id, async () => {
-      const db = ensureDbLoaded();
-      const existing = db.orders.find((o) => sameOrder(o, cleanSn, platform));
-      if (existing) {
-        if (existing.userId === user.id) {
-          return res.json({
-            order: sanitizeOrderForUser(existing),
-            autoMatched: true,
-            message: 'Đơn hàng này đã có trong tài khoản của bạn.'
-          });
-        }
-        if (existing.userId && existing.userCode !== 'GUEST') {
-          return res.status(400).json({
-            error: 'Mã đơn hàng này đã được ghi nhận cho một tài khoản khác.'
-          });
-        }
+    user.passwordHash = await hashPasswordAsync(nextPwd);
+    user.tokenVersion = Number(user.tokenVersion || 1) + 1;
 
-        // Order was previously GUEST or unassigned: Check verifiable ownership attribution proof
-        const isAttributedToUser =
-          (existing.clickId &&
-            db.clicks.some(
-              (c) =>
-                c.clickId === existing.clickId &&
-                (c.userId === user.id ||
-                  (c.userCode && String(c.userCode).toUpperCase() === String(user.code).toUpperCase()))
-            )) ||
-          (existing.userCode &&
-            String(existing.userCode).toUpperCase() === String(user.code).toUpperCase());
+    const db = ensureDbLoaded();
+    await saveDb(db);
 
-        if (isAttributedToUser) {
-          // Direct click tracking attribution verified: auto-claim into wallet
-          existing.userId = user.id;
-          existing.userCode = user.code;
-          existing.updatedAt = new Date().toISOString();
-          recalculateUserWallet(user.id);
-          await saveDb(db);
-          logger.logLeave('POST /api/user/submit-order', { orderSn: cleanSn, autoClaimed: true });
-          return res.json({
-            order: sanitizeOrderForUser(existing),
-            autoMatched: true,
-            message: 'Đã khớp tự động đơn hàng từ sàn và cộng tiền hoàn vào ví của bạn!'
-          });
-        }
-
-        // No direct tracking attribution proof: queue for manual admin verification to prevent hijacking
-        existing.claimPending = true;
-        existing.claimedByUserId = user.id;
-        existing.claimedByUserCode = user.code;
-        existing.claimRequestedAt = new Date().toISOString();
-        existing.updatedAt = new Date().toISOString();
-        await saveDb(db);
-        logger.logLeave('POST /api/user/submit-order', { orderSn: cleanSn, claimPending: true });
-        return res.json({
-          order: sanitizeOrderForUser(existing),
-          claimPending: true,
-          message: 'Đã tiếp nhận yêu cầu đối soát đơn hàng. Ban quản trị sẽ xác minh quyền sở hữu và duyệt hoàn tiền trong 24h.'
-        });
-      }
-
-      // Never trust client for orderAmount or commission; set 0 until network postback/report confirms
-      // Secure attribution: Keep userId null and mark claimPending so a user cannot hijack other buyers' orders
-      const newOrd = {
-        id: orderId({ orderSn: cleanSn, platform }),
-        orderSn: cleanSn,
-        platform: String(platform || '').toLowerCase() === 'tiktok' ? 'tiktok' : 'shopee',
-        clickId: null,
-        userCode: 'PENDING_VERIFY',
-        userId: null,
-        submittedByUserId: user.id,
-        submittedByUserCode: user.code,
-        claimPending: true,
-        claimRequestedAt: new Date().toISOString(),
-        productName: String(productName || `Đơn hàng #${cleanSn}`).trim().slice(0, 100),
-        orderAmount: 0,
-        grossCommission: 0,
-        taxAmount: 0,
-        netCommission: 0,
-        totalCommission: 0,
-        cashbackRate: Number(db.settings.cashbackPercent || 70),
-        lockedCashbackRate: Number(db.settings.cashbackPercent || 70),
-        lockedTaxRate: Number(db.settings.taxDeductPercent || 10),
-        userCashbackAmount: 0,
-        adminShareAmount: 0,
-        status: 'pending',
-        hasCustomCashback: false,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
-
-      db.orders.unshift(newOrd);
-      await saveDb(db);
-      logger.logLeave('POST /api/user/submit-order', { orderSn: cleanSn, created: true, claimPending: true });
-      return res.json({
-        order: sanitizeOrderForUser(newOrd),
-        autoMatched: false,
-        claimPending: true,
-        message: 'Đã ghi nhận mã đơn hàng. Tiền hoàn sẽ tự động cập nhật khi sàn đối soát hoàn tất và xác nhận liên kết tiếp thị!'
-      });
+    const token = createToken(user);
+    setAuthCookie(res, token);
+    logger.logLeave('POST /api/user/change-password', { userCode: user.code, tokenVersion: user.tokenVersion });
+    return res.json({
+      message: 'Đổi mật khẩu thành công! Các phiên đăng nhập cũ trên thiết bị khác đã được đăng xuất.',
+      user: sanitizeUser(user)
     });
   }));
+
+  // 6. User Manual Order Submission — Retired (Orders sync automatically from Shopee/TikTok Affiliate reports)
+  const submitOrderLimiter = createRateLimiter({
+    windowMs: 15 * 60 * 1000,
+    max: 10,
+    keyPrefix: 'submit-order',
+    failClosed: false,
+    keyGenerator(req) {
+      const user = getAuthUser(req);
+      return user ? `user:${user.id}` : `ip:${getClientIp(req)}`;
+    }
+  });
+  app.post('/api/user/submit-order', submitOrderLimiter, (req, res) => {
+    logger.logEnter('POST /api/user/submit-order');
+    logger.logLeave('POST /api/user/submit-order', { status: 410, retired: true });
+    return res.status(410).json({
+      error: 'Tính năng nhập mã đơn thủ công đã ngừng hỗ trợ. Đơn hàng đặt qua liên kết hoàn tiền sẽ được hệ thống tự động đồng bộ sau 12h–24h.'
+    });
+  });
 
   // 7. User Request Withdrawal (Atomic per-user lock + Postgres FOR UPDATE transaction)
   app.post('/api/user/withdraw', withdrawLimiter, asyncHandler(async (req, res) => {
@@ -1317,9 +1311,9 @@ function registerCashbackRoutes(app) {
       });
     }
 
-    // Security check: if user already had a different bank account saved OR has no bank account saved yet,
+    // Security check: if user already had a different bank/account saved OR has no bank account saved yet,
     // require password verification to bind or alter payout coordinates
-    if (!user.bankAccount || user.bankAccount !== cleanAcc) {
+    if (!user.bankAccount || user.bankAccount !== cleanAcc || (user.bankName && user.bankName !== cleanBank)) {
       if (!currentPassword || !(await verifyPasswordAsync(currentPassword, user.passwordHash))) {
         return res.status(403).json({
           error: 'Vui lòng nhập mật khẩu đăng nhập để xác nhận thông tin nhận tiền rút.'
@@ -1802,6 +1796,8 @@ function registerCashbackRoutes(app) {
       const lockKey = matchedUserId || 'global';
 
       await withUserLock(lockKey, async () => {
+        const prevUserId = existing?.userId || null;
+        const prevUserCode = existing?.userCode || null;
         order = upsertNetworkOrder(db, {
           orderSn: cleanSn,
           rawSubId,
@@ -1814,11 +1810,10 @@ function registerCashbackRoutes(app) {
           purchaseTime: src.purchase_time || src.purchaseTime
         });
 
-        if (order?.userId) {
-          recalculateUserWallet(order.userId, { persist: false });
-        } else {
-          recalculateAllWallets({ persist: false });
-        }
+        recalculateAffectedWallets(
+          [prevUserId, prevUserCode, order?.userId, order?.userCode],
+          { persist: false }
+        );
         await saveDb(db);
       });
 
@@ -1881,6 +1876,8 @@ function registerCashbackRoutes(app) {
 
       let order;
       await withUserLock(lockKey, async () => {
+        const prevUserId = existing?.userId || null;
+        const prevUserCode = existing?.userCode || null;
         order = upsertNetworkOrder(db, {
           orderSn,
           rawSubId: clickId || sub1 || sub_id || '',
@@ -1893,11 +1890,10 @@ function registerCashbackRoutes(app) {
           purchaseTime: req.body?.purchaseTime || req.body?.purchase_time
         });
 
-        if (order?.userId) {
-          recalculateUserWallet(order.userId, { persist: false });
-        } else {
-          recalculateAllWallets({ persist: false });
-        }
+        recalculateAffectedWallets(
+          [prevUserId, prevUserCode, order?.userId, order?.userCode],
+          { persist: false }
+        );
         await saveDb(db);
       });
 
@@ -2390,6 +2386,9 @@ function registerCashbackRoutes(app) {
       }
     }
 
+    const prevOrderUserId = targetOrder?.userId || null;
+    const prevOrderUserCode = targetOrder?.userCode || null;
+
     if (targetOrder) {
       if (targetOrder.lockedCashbackRate === undefined || targetOrder.lockedCashbackRate === null) {
         targetOrder.lockedCashbackRate = targetOrder.cashbackRate ?? split.cashbackRate;
@@ -2496,7 +2495,17 @@ function registerCashbackRoutes(app) {
 
     const lockKey = targetOrder?.userId || matchedUser?.id || 'global';
     await withUserLock(lockKey, async () => {
-      recalculateAllWallets({ persist: false });
+      recalculateAffectedWallets(
+        [
+          prevOrderUserId,
+          prevOrderUserCode,
+          targetOrder?.userId,
+          targetOrder?.userCode,
+          matchedUser?.id,
+          matchedUser?.code
+        ],
+        { persist: false }
+      );
       await saveDb(db);
     });
 
@@ -2539,10 +2548,7 @@ function registerCashbackRoutes(app) {
         targetId: removed.id,
         details: { orderSn: removed.orderSn, previousStatus: removed.status, userId: removed.userId || null }
       });
-      if (removed.userId) {
-        recalculateUserWallet(removed.userId, { persist: false });
-      }
-      recalculateAllWallets({ persist: false });
+      recalculateAffectedWallets([removed.userId, removed.userCode], { persist: false });
       await saveDb(db);
       return removed;
     });
@@ -2591,6 +2597,7 @@ function registerCashbackRoutes(app) {
     const db = ensureDbLoaded();
     let importedCount = 0;
     const errors = [];
+    const affectedUsers = new Set();
 
     const preparedRows = [...uniqueRows.values()];
     for (let i = 0; i < preparedRows.length; i++) {
@@ -2619,9 +2626,11 @@ function registerCashbackRoutes(app) {
         if (existing?.status === 'cancelled' && r.status === 'approved' && !incomingTime) {
           throw new Error('Cần thời điểm xuất báo cáo để duyệt lại đơn đã hủy. Hãy giữ tên file gốc Shopee.');
         }
+        if (existing?.userId) affectedUsers.add(existing.userId);
+        if (existing?.userCode) affectedUsers.add(existing.userCode);
         const attributionId = String(r.userCode || r.sub1 || '').split('-')[0].trim();
         if (attributionId) await findClickById(attributionId, { forAttribution: true });
-        upsertNetworkOrder(db, {
+        const syncedOrd = upsertNetworkOrder(db, {
           orderSn,
           rawSubId: r.userCode || r.sub1 || '',
           grossCommission: r.totalCommission,
@@ -2631,6 +2640,8 @@ function registerCashbackRoutes(app) {
           productName: r.productName,
           eventTime: r.eventTime
         });
+        if (syncedOrd?.userId) affectedUsers.add(syncedOrd.userId);
+        if (syncedOrd?.userCode) affectedUsers.add(syncedOrd.userCode);
         importedCount++;
       } catch (err) {
         errors.push(`Đơn #${orderSn}: ${err.message}`);
@@ -2638,7 +2649,7 @@ function registerCashbackRoutes(app) {
     }
 
     if (importedCount > 0) {
-      recalculateAllWallets({ persist: false });
+      recalculateAffectedWallets(affectedUsers, { persist: false });
       recordAuditLog(db, {
         adminId: req.adminUser.id, adminName: req.adminUser.name,
         action: 'import_orders', targetId: 'csv',

@@ -1,4 +1,4 @@
-/* global copyText */
+/* global copyText, currentAdminSettings, publicConfig */
 (() => {
   const form = document.getElementById('tiktokReplyForm');
   if (!form) return;
@@ -8,6 +8,18 @@
   const status = document.getElementById('tiktokReplyStatus');
   const copyButton = document.getElementById('tiktokReplyCopy');
   const money = value => `${value.toLocaleString('vi-VN')}đ`;
+  const resolveRates = () => {
+    const rawTax = typeof currentAdminSettings !== 'undefined' && currentAdminSettings?.taxDeductPercent !== undefined
+      ? Number(currentAdminSettings.taxDeductPercent)
+      : (typeof publicConfig !== 'undefined' && publicConfig?.taxDeductPercent !== undefined ? Number(publicConfig.taxDeductPercent) : 10);
+    const rawCb = typeof currentAdminSettings !== 'undefined' && currentAdminSettings?.cashbackPercent !== undefined
+      ? Number(currentAdminSettings.cashbackPercent)
+      : (typeof publicConfig !== 'undefined' && publicConfig?.cashbackPercent !== undefined ? Number(publicConfig.cashbackPercent) : 70);
+    return {
+      taxRate: Number.isFinite(rawTax) && rawTax >= 0 && rawTax <= 50 ? rawTax : 10,
+      cbRate: Number.isFinite(rawCb) && rawCb >= 1 && rawCb <= 100 ? rawCb : 70
+    };
+  };
 
   // Clear stale quotes when either input changes so a previous customer's
   // link or amount cannot accidentally be copied with new inputs.
@@ -41,9 +53,10 @@
     }
 
     // Match the wallet's rounding: tax first, then customer's share of net.
-    const tax = Math.round(gross * 10 / 100);
-    const net = gross - tax;
-    const cashback = Math.round(net * 70 / 100);
+    const { taxRate, cbRate } = resolveRates();
+    const tax = Math.round(gross * taxRate / 100);
+    const net = Math.max(0, gross - tax);
+    const cashback = Math.round(net * cbRate / 100);
     output.value = [
       '🛒 Link đặt hàng TikTok:',
       link,
@@ -53,7 +66,7 @@
       'Đặt hàng qua link trên rồi nhắn mình để ghi nhận hoàn tiền nhé.',
       'Tiền hoàn chính thức được xác nhận sau khi sàn đối soát.'
     ].join('\n');
-    status.textContent = `Hoa hồng: ${money(gross)} · Thuế 10%: ${money(tax)} · Phần của bạn: ${money(net - cashback)} · Khách nhận: ${money(cashback)}`;
+    status.textContent = `Hoa hồng: ${money(gross)} · Thuế ${taxRate}%: ${money(tax)} · Phần của bạn: ${money(net - cashback)} · Khách nhận: ${money(cashback)}`;
     copyButton.disabled = false;
   });
 

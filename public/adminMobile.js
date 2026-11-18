@@ -26,7 +26,13 @@
   ordersPane.querySelectorAll(':scope > details').forEach(e => ordersPane.append(e));
   const labels = { pending: 'Chờ xử lý', approved: 'Đã duyệt', cancelled: 'Đã hủy', paid: 'Đã chuyển', rejected: 'Từ chối' };
   const mobile = window.matchMedia('(max-width: 640px)');
-  mobile.addEventListener('change', () => root.querySelectorAll('.admin-more-actions').forEach(e => { e.open = !mobile.matches; }));
+  const arrangeActions = more => {
+    const group = more.parentElement;
+    const secondary = [...group.querySelectorAll('button')].filter(e => !e.matches('[data-ord-action="approve"], [data-wd-action="paid"]'));
+    secondary.forEach(button => (mobile.matches ? more.lastElementChild : group).append(button));
+    more.open = false;
+  };
+  mobile.addEventListener('change', () => root.querySelectorAll('.admin-more-actions').forEach(arrangeActions));
   root.querySelectorAll('.admin-data-table').forEach(table => {
     const headings = [...table.querySelectorAll('th')].map(e => e.textContent.trim());
     const body = table.tBodies[0];
@@ -49,6 +55,7 @@
             more.innerHTML = '<summary>Thao tác khác</summary><div></div>';
             secondary.forEach(e => more.lastElementChild.append(e));
             group.append(more);
+            arrangeActions(more);
           }
         }
         if (body.id === 'admWithdrawalsTableBody' && row.cells.length === 6) {

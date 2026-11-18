@@ -40,7 +40,7 @@ function runTests() {
   assert.ok(html.includes('id="userOrdersNextBtn"'), '[BIZ-01] #userOrdersNextBtn exists in index.html');
 
   assert.ok(
-    appJs.includes('function renderUserOrdersTable(orders)') &&
+    appJs.includes('function renderUserOrdersTable(orders') &&
       appJs.includes('async function loadUserOrdersPage(') &&
       appJs.includes('/api/user/me?'),
     '[BIZ-01] renderUserOrdersTable & loadUserOrdersPage implemented calling /api/user/me pagination'
@@ -63,8 +63,11 @@ function runTests() {
     '[UX-01] Custom WebView-friendly confirm modal (#confirmActionModal + askUserConfirm) implemented'
   );
   assert.ok(
-    appJs.includes("btn.textContent = 'Lưu đơn'") && !appJs.includes("btn.textContent = 'Gửi Mã Đơn Hàng'"),
-    '[BIZ-01] #submitOrderClaimBtn resets to "Lưu đơn" matching public/index.html'
+    !html.includes('id="submitOrderClaimBtn"') &&
+      !html.includes('id="toggleClaimBoxBtn"') &&
+      !html.includes('id="orderClaimCollapsible"') &&
+      !appJs.includes('/api/user/submit-order'),
+    '[BIZ-01] User-side manual order submission UI & client call cleanly removed'
   );
 
   // 3. [ADM-01] Admin Withdrawals search, status filter, pagination & API wiring
@@ -176,6 +179,41 @@ function runTests() {
   assert.ok(
     graphTypes.includes('WebApplication') && graphTypes.includes('FAQPage'),
     '[SEO-01] JSON-LD @graph declares both WebApplication and FAQPage schemas'
+  );
+
+  // 9. [PWA-SYNC & A11Y] Service Worker SHELL_ASSETS parity with index.html & Phase 1 UX/A11y guards
+  const swContent = fs.readFileSync(path.join(ROOT_DIR, 'public/sw.js'), 'utf8');
+  const shellMatch = swContent.match(/const SHELL_ASSETS = (\[[^\]]+\]);/);
+  assert.ok(shellMatch, '[PWA-SYNC] SHELL_ASSETS array declared in public/sw.js');
+  const shellAssets = JSON.parse(shellMatch[1]);
+  const htmlAssetRefs = [
+    ...Array.from(html.matchAll(/<link[^>]+rel="stylesheet"[^>]+href="(\/[^"]+)"/g), (m) => m[1]),
+    ...Array.from(html.matchAll(/<script[^>]+src="(\/[^"]+)"/g), (m) => m[1])
+  ];
+  assert.strictEqual(
+    htmlAssetRefs.length,
+    4,
+    '[PWA-SYNC] index.html loads only the 4 lean customer shell CSS & JS assets upfront (admin assets lazy-loaded)'
+  );
+  htmlAssetRefs.forEach((ref) => {
+    assert.ok(
+      shellAssets.includes(ref),
+      `[PWA-SYNC] public/sw.js SHELL_ASSETS must include exact index.html asset ${ref}`
+    );
+  });
+
+  assert.ok(
+    html.includes('href="#mainContent"') && html.includes('id="mainContent"') && css.includes('.skip-link'),
+    '[A11Y-01] Skip-to-main-content link and #mainContent landmark exist'
+  );
+  assert.ok(
+    html.includes('id="admWithdrawalStatusFilter" aria-label="Trạng thái rút tiền"'),
+    '[A11Y-02] #admWithdrawalStatusFilter carries explicit aria-label for mobile choice dialog'
+  );
+  assert.ok(
+    appJs.includes('function extractConvertibleUrlCandidate(') &&
+      !appJs.slice(appJs.indexOf("on('pasteBtn'"), appJs.indexOf('if (clearInputBtn)')).includes('fetchInstantPreview('),
+    '[PERF-02] pasteBtn avoids duplicate /api/preview call before handleGetCashbackLink() and supports schemeless short links'
   );
 
   console.log('ALL SUITE 20 CHECKS PASSED!');

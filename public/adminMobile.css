@@ -1,6 +1,6 @@
 .admin-header-tools summary, .admin-more-actions summary { cursor: pointer; min-height: 44px; padding: 12px; border-radius: 10px; border: 1px solid #cbd5e1; font-size: 13px; font-weight: 600; }
 .admin-header-tools > div { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 8px; }
-.admin-more-actions, .admin-more-actions > div { display: contents; }
+.admin-more-actions { display: none; }
 .admin-more-actions > summary { display: none; }
 .admin-more-actions:not([open]) > div { content-visibility: visible; }
 .admin-adjust-row { flex-wrap: wrap; align-items: end; }

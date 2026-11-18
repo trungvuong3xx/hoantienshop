@@ -93,12 +93,12 @@ async function callShopeeGraphql(query, appId, appSecret) {
   });
 
   const data = await response.json();
-  console.log('[Shopee GraphQL raw]', response.status, JSON.stringify({
-    errors: data.errors,
+  logger.log('callShopeeGraphql', 'Shopee GraphQL response received', {
+    httpStatus: response.status,
+    hasErrors: Boolean(data.errors && data.errors.length > 0),
     dataKeys: data.data ? Object.keys(data.data) : null,
-    nodesCount: data?.data?.productOfferV2?.nodes?.length,
-    sample: data?.data?.productOfferV2?.nodes?.[0]
-  }));
+    nodesCount: data?.data?.productOfferV2?.nodes?.length
+  });
 
   if (data.errors && data.errors.length > 0) {
     const errMsg = data.errors.map((e) => e.message).join('; ');
@@ -141,7 +141,7 @@ async function generateShopeeOpenApiLink(cleanUrl, appId, appSecret, subIdArr = 
 async function fetchShopeeProductOffer(itemId, appId, appSecret, shopId = null) {
   logger.logEnter('fetchShopeeProductOffer', { itemId, shopId: shopId || undefined });
   if (!itemId || !appId || !appSecret) {
-    console.warn('[productOfferV2] Bỏ qua: Chưa cấu hình SHOPEE_APP_ID hoặc SHOPEE_APP_SECRET!', {
+    logger.warning('fetchShopeeProductOffer', 'Bỏ qua do chưa cấu hình SHOPEE_APP_ID hoặc SHOPEE_APP_SECRET', {
       hasItemId: Boolean(itemId),
       hasAppId: Boolean(appId),
       hasAppSecret: Boolean(appSecret)
@@ -202,7 +202,6 @@ async function fetchShopeeProductOffer(itemId, appId, appSecret, shopId = null) 
         return meta;
       }
     } catch (err) {
-      console.error('[productOfferV2 Error]', err.message);
       logger.warning('fetchShopeeProductOffer', 'GraphQL query failed', {
         itemId,
         error: err.message
@@ -258,7 +257,6 @@ async function fetchAddlivetagProductData({ platform, itemId, url, apiKey }) {
     clearTimeout(timeout);
 
     if (!res.ok) {
-      console.warn(`[AddLiveTag API] HTTP ${res.status} from ${endpoint}`);
       logger.warning('fetchAddlivetagProductData', 'HTTP Error', { status: res.status });
       return null;
     }
@@ -301,7 +299,6 @@ async function fetchAddlivetagProductData({ platform, itemId, url, apiKey }) {
     });
     return result;
   } catch (err) {
-    console.error('[AddLiveTag API Error]', err.message);
     logger.warning('fetchAddlivetagProductData', 'Request failed', { error: err.message });
     return null;
   }

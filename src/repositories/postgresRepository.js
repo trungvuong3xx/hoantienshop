@@ -55,9 +55,11 @@ async function queryOrdersPaginated(db, opts = {}) {
         params.push(userId);
         conditions.push(`user_id = $${params.length}`);
       }
-      if (status && ['pending', 'approved', 'cancelled'].includes(status)) {
+      if (status === 'pending') {
+        conditions.push(`LOWER(COALESCE(status, 'pending')) NOT IN ('approved', 'cancelled')`);
+      } else if (status && ['approved', 'cancelled'].includes(status)) {
         params.push(status);
-        conditions.push(`status = $${params.length}`);
+        conditions.push(`LOWER(COALESCE(status, '')) = $${params.length}`);
       }
       if (platform && ['shopee', 'tiktok'].includes(platform)) {
         params.push(platform);
@@ -97,7 +99,12 @@ async function queryOrdersPaginated(db, opts = {}) {
         (!o.userId && userCode && o.userCode && String(o.userCode).toUpperCase() === userCode)
     );
   }
-  if (status && ['pending', 'approved', 'cancelled'].includes(status)) {
+  if (status === 'pending') {
+    filtered = filtered.filter((o) => {
+      const st = String(o.status || 'pending').toLowerCase();
+      return st !== 'approved' && st !== 'cancelled';
+    });
+  } else if (status && ['approved', 'cancelled'].includes(status)) {
     filtered = filtered.filter((o) => String(o.status || '').toLowerCase() === status);
   }
   if (platform && ['shopee', 'tiktok'].includes(platform)) {
@@ -209,9 +216,77 @@ function queryWithdrawalsPaginated(db, opts = {}) {
   return { items, pagination };
 }
 
+/**
+ * Compute aggregate order counts across statuses (all, pending, approved, cancelled) for a user,
+ * optionally scoped to a search query `q` so status filter pills stay accurate across all pages.
+ */
+async function countUserOrderStatuses(db, opts = {}) {
+  const q = String(opts.q || '').trim().toLowerCase();
+  const userId = opts.userId ? String(opts.userId) : '';
+  const userCode = opts.userCode ? String(opts.userCode).toUpperCase() : '';
+
+  logger.logEnter('countUserOrderStatuses', { hasQuery: Boolean(q) });
+
+  const pool = opts.preferSql ? getPgPool() : null;
+  if (pool && userId) {
+    try {
+      const params = [userId];
+      let whereClause = 'WHERE user_id = $1';
+      if (q) {
+        params.push(`%${q}%`);
+        const pIdx = params.length;
+        whereClause += ` AND (LOWER(order_sn) LIKE $${pIdx} OR LOWER(COALESCE(product_name, '')) LIKE $${pIdx} OR LOWER(COALESCE(user_code, '')) LIKE $${pIdx} OR LOWER(COALESCE(click_id, '')) LIKE $${pIdx})`;
+      }
+      const res = await pool.query(
+        `SELECT LOWER(COALESCE(status, 'pending')) AS norm_status, COUNT(*)::int AS cnt FROM orders ${whereClause} GROUP BY 1`,
+        params
+      );
+      const counts = { all: 0, pending: 0, approved: 0, cancelled: 0 };
+      for (const row of res.rows) {
+        const cnt = Number(row.cnt || 0);
+        counts.all += cnt;
+        if (row.norm_status === 'approved') counts.approved += cnt;
+        else if (row.norm_status === 'cancelled') counts.cancelled += cnt;
+        else counts.pending += cnt;
+      }
+      logger.logLeave('countUserOrderStatuses', { source: 'postgres', all: counts.all });
+      return counts;
+    } catch (err) {
+      logger.warning('countUserOrderStatuses', 'SQL fallback to in-memory state', { error: err.message });
+    }
+  }
+
+  const counts = { all: 0, pending: 0, approved: 0, cancelled: 0 };
+  const allOrders = Array.isArray(db?.orders) ? db.orders : [];
+  for (const o of allOrders) {
+    const belongsToUser =
+      (userId && o.userId === userId) ||
+      (!o.userId && userCode && o.userCode && String(o.userCode).toUpperCase() === userCode);
+    if (!belongsToUser) continue;
+
+    if (q) {
+      const sn = String(o.orderSn || '').toLowerCase();
+      const prod = String(o.productName || '').toLowerCase();
+      const code = String(o.userCode || '').toLowerCase();
+      const clk = String(o.clickId || '').toLowerCase();
+      if (!sn.includes(q) && !prod.includes(q) && !code.includes(q) && !clk.includes(q)) continue;
+    }
+
+    counts.all += 1;
+    const st = String(o.status || 'pending').toLowerCase();
+    if (st === 'approved') counts.approved += 1;
+    else if (st === 'cancelled') counts.cancelled += 1;
+    else counts.pending += 1;
+  }
+
+  logger.logLeave('countUserOrderStatuses', { source: 'memory', all: counts.all });
+  return counts;
+}
+
 module.exports = {
   normalizePagination,
   queryOrdersPaginated,
+  countUserOrderStatuses,
   queryUsersPaginated,
   queryWithdrawalsPaginated
 };

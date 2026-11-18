@@ -64,6 +64,24 @@ body {
   display: none !important;
 }
 
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 8px;
+  z-index: 9999;
+  background: #0f172a;
+  color: #ffffff;
+  padding: 10px 16px;
+  border-radius: 10px;
+  font-size: 13.5px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.skip-link:focus {
+  left: 12px;
+}
+
 /* Keep financial inputs usable even when optional admin enhancements fail to load. */
 #userManageModal .admin-adjust-row {
   display: grid;
@@ -1189,6 +1207,37 @@ body {
   font-size: 12.5px;
   padding: 10px 14px;
   border-radius: 10px;
+}
+
+.guest-card-note .inline-link {
+  min-height: 32px;
+  padding: 4px 6px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.guest-card-note.is-error-note {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #b91c1c;
+}
+
+.auth-linked-card-note {
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #065f46;
+  font-size: 12.5px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.is-refreshing-aff {
+  pointer-events: none !important;
+  opacity: 0.6;
+  cursor: wait;
 }
 
 .inline-link {
@@ -2578,8 +2627,13 @@ body:has(#view-admin.active) .floating-zalo {
 }
 
 @media (max-width: 768px) {
+  html {
+    scroll-padding-top: 76px;
+    scroll-padding-bottom: calc(88px + env(safe-area-inset-bottom, 0px));
+  }
+
   body {
-    padding-bottom: calc(68px + env(safe-area-inset-bottom, 0px));
+    padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px));
   }
 
   .mobile-bottom-nav {
@@ -3381,80 +3435,6 @@ body:has(#view-admin.active) .floating-zalo {
 .order-filter-pill.active .pill-count {
   background: rgba(255, 255, 255, 0.24);
   color: #ffffff;
-}
-
-.claim-accordion-card {
-  padding: 12px 14px !important;
-  margin-bottom: 14px;
-  gap: 0;
-}
-
-.claim-accordion-trigger {
-  width: 100%;
-  background: transparent;
-  border: none;
-  font-family: inherit;
-  text-align: left;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 2px 0;
-  min-height: 44px;
-  cursor: pointer;
-}
-
-.claim-trigger-left {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-}
-
-.claim-plus-badge {
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
-  background: var(--shopee-light);
-  border: 1px solid #fed7aa;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 14px;
-  flex-shrink: 0;
-}
-
-.claim-trigger-left strong {
-  display: block;
-  font-size: 13.5px;
-  color: var(--text-main);
-}
-
-.claim-trigger-left small {
-  display: block;
-  font-size: 12px;
-  color: var(--text-muted);
-  margin-top: 1px;
-}
-
-.claim-chevron {
-  font-size: 18px;
-  color: var(--text-muted);
-  transition: transform 0.2s ease;
-  flex-shrink: 0;
-}
-
-.claim-accordion-trigger[aria-expanded="true"] .claim-chevron {
-  transform: rotate(180deg);
-}
-
-.claim-collapsible-body {
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px dashed var(--border);
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
 }
 
 .orders-toolbar {
@@ -4315,8 +4295,7 @@ body:has(#view-admin.active) .floating-zalo {
   color: var(--shopee);
 }
 
-.handbook-icon,
-.claim-plus-badge {
+.handbook-icon {
   color: var(--shopee);
 }
 
@@ -4425,4 +4404,190 @@ body:has(#view-admin.active) .floating-zalo {
   background: white;
   color: #713f12;
   cursor: pointer;
+}
+
+/* Order reconciliation: a stable toolbar and evenly sized action cells. */
+#admTabOrders .admin-panel-header { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; gap: 16px; margin-bottom: 20px; }
+#admTabOrders .admin-filter-bar { display: grid; grid-template-columns: minmax(0, 1fr) 220px 88px; gap: 10px; min-width: 0; width: 100%; padding: 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; }
+#admTabOrders .admin-filter-bar input,
+#admTabOrders .admin-filter-bar select,
+#admTabOrders .admin-filter-bar .app-choice-trigger,
+#admTabOrders .admin-filter-bar .btn { width: 100%; min-width: 0; max-width: none; height: 44px; min-height: 44px; margin: 0; padding: 10px 12px; border-radius: 9px; box-sizing: border-box; }
+#admTabOrders .admin-filter-bar .btn { justify-content: center; }
+#admTabOrders .admin-pagination-btns .btn { min-height: 40px; min-width: 76px; justify-content: center; }
+@media (min-width: 641px) {
+  #admTabOrders .admin-data-table { table-layout: fixed; min-width: 1040px; }
+  #admTabOrders .admin-data-table th { padding: 12px 10px; font-size: 11px; letter-spacing: 0; }
+  #admTabOrders .admin-data-table td { padding: 16px 10px; vertical-align: middle; line-height: 1.6; overflow-wrap: anywhere; }
+  #admTabOrders .admin-data-table th:nth-child(1) { width: 90px; }
+  #admTabOrders .admin-data-table th:nth-child(2) { width: 132px; }
+  #admTabOrders .admin-data-table th:nth-child(3) { width: 92px; }
+  #admTabOrders .admin-data-table th:nth-child(5),
+  #admTabOrders .admin-data-table th:nth-child(6) { width: 106px; text-align: right; }
+  #admTabOrders .admin-data-table td:nth-child(5),
+  #admTabOrders .admin-data-table td:nth-child(6) { text-align: right; font-variant-numeric: tabular-nums; }
+  #admTabOrders .admin-data-table th:nth-child(7) { width: 124px; }
+  #admTabOrders .admin-data-table th:nth-child(8) { width: 192px; }
+  #admTabOrders .status-badge { white-space: nowrap; padding: 5px 9px; font-size: 12px; }
+  #admTabOrders .admin-action-group { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  #admTabOrders .admin-action-group .btn { width: 100%; min-width: 0; min-height: 38px; padding: 8px 6px; justify-content: center; border-radius: 8px; font-size: 12px; line-height: 20px; white-space: normal; }
+  #admTabOrders [data-ord-action="approve"], #admTabOrders [data-ord-action="unapprove"], #admTabOrders [data-ord-action="reopen"] { order: 0; }
+  #admTabOrders [data-ord-action="edit"] { order: 1; }
+  #admTabOrders [data-ord-action="cancel"] { order: 2; background: #fff7ed; color: #9a3412; border: 1px solid #fed7aa; }
+  #admTabOrders [data-ord-action="delete"] { order: 3; background: #fff1f2; color: #be123c; border: 1px solid #fecdd3; }
+}
+@media (max-width: 640px) {
+  #view-admin #admTabOrders .admin-filter-bar { grid-template-columns: minmax(0, 1fr) 76px; padding: 10px; }
+  #view-admin #admTabOrders .admin-filter-bar input { grid-column: 1 / -1; }
+  #view-admin #admTabOrders .admin-pagination-btns .btn { min-height: 44px; }
+}
+
+/* ==================== PHASE 3: MOBILE ACCOUNT SETTINGS, WEBVIEW HINT & EMPTY STATES ==================== */
+.account-settings-panel {
+  margin-top: 14px;
+  padding: 14px 16px;
+}
+
+.account-settings-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+@media (max-width: 370px) {
+  .account-settings-actions {
+    grid-template-columns: 1fr;
+  }
+}
+
+.account-action-chip {
+  min-height: 44px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: #f8fafc;
+  color: var(--text-main);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+}
+
+.account-action-chip:hover {
+  background: #f1f5f9;
+}
+
+.account-action-chip.active,
+.account-action-chip[aria-expanded="true"] {
+  background: var(--shopee-light);
+  border-color: var(--shopee);
+  color: var(--shopee);
+}
+
+.account-collapsible-panel {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px dashed var(--border);
+}
+
+.uppercase-input {
+  text-transform: uppercase;
+}
+
+.warn-label {
+  color: #d97706;
+}
+
+.webview-open-hint {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1e40af;
+  font-size: 12.5px;
+  line-height: 1.45;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.webview-open-hint .svg-icon {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.table-empty-state {
+  padding: 22px 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+}
+
+.table-empty-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: #fff7ed;
+  color: var(--shopee);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.table-empty-state strong {
+  font-size: 14px;
+  color: var(--text-main);
+}
+
+.table-empty-state p {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  max-width: 340px;
+  line-height: 1.45;
+}
+
+.table-empty-state .btn {
+  margin-top: 4px;
+  min-height: 40px;
+}
+
+/* ==================== PHASE 5: MOBILE ACTIVITY DOTS & QR FALLBACK ==================== */
+.mobile-nav-icon {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.nav-notify-dot {
+  position: absolute;
+  top: -2px;
+  right: -5px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #ef4444;
+  border: 1.5px solid #ffffff;
+  box-shadow: 0 1px 3px rgba(239, 68, 68, 0.45);
+}
+
+.qr-offline-fallback {
+  margin: 10px auto;
+  padding: 18px 14px;
+  max-width: 240px;
+  border-radius: 12px;
+  border: 1.5px dashed #fed7aa;
+  background: #fff7ed;
+  color: #9a3412;
+  font-size: 13px;
+  line-height: 1.5;
 }
