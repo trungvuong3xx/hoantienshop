@@ -2007,7 +2007,7 @@ function registerCashbackRoutes(app) {
     return res.json({
       dbStatus: getDatabaseStatus(),
       stats: {
-        totalUsers: db.users.length,
+        totalUsers: db.users.filter((u) => !u.isDeleted).length,
         totalOrders: db.orders.length,
         totalGrossCommission: Math.round(totalGrossCommission),
         totalCommission: Math.round(totalNetCommission),
