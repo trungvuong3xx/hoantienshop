@@ -435,7 +435,18 @@ function cacheUnavailableError() {
 
 function syncAdminCredentials(data) {
   if (!data || !Array.isArray(data.users)) return false;
-  const admin = data.users.find((u) => u.role === 'admin');
+  let admin = data.users.find((u) => u.role === 'admin');
+  let changed = false;
+
+  if (!admin) {
+    const initial = getInitialData();
+    const defaultAdmin = initial.users.find((u) => u.role === 'admin');
+    if (defaultAdmin) {
+      data.users.unshift(defaultAdmin);
+      admin = defaultAdmin;
+      changed = true;
+    }
+  }
   if (!admin) return false;
 
   const targetPhone = (process.env.ADMIN_PHONE || 'trungvuong3x').trim();
@@ -443,7 +454,6 @@ function syncAdminCredentials(data) {
   const targetCode = (process.env.ADMIN_CODE || 'TRUNGVUONG3X').trim().toUpperCase();
   const envAdminPassword = (process.env.ADMIN_PASSWORD || '').trim();
 
-  let changed = false;
   if (admin.phone !== targetPhone) {
     admin.phone = targetPhone;
     changed = true;
@@ -460,7 +470,7 @@ function syncAdminCredentials(data) {
     admin.passwordHash = hashPassword(envAdminPassword || crypto.randomBytes(48).toString('hex'));
     changed = true;
   } else if (
-    process.env.FORCE_SYNC_ADMIN_PASSWORD === 'true' &&
+    (process.env.FORCE_SYNC_ADMIN_PASSWORD === 'true' || process.env.RESET_ADMIN_PASSWORD === 'true') &&
     envAdminPassword &&
     !verifyPassword(envAdminPassword, admin.passwordHash)
   ) {
@@ -1073,6 +1083,12 @@ async function loadAuthoritativeStateFromPostgres(client) {
     finalUsers = payloadUsers;
   } else {
     finalUsers = initial.users;
+  }
+
+  // Ensure admin user is always present even if relational table only contained non-admin users
+  if (!finalUsers.some((u) => u.role === 'admin')) {
+    const adminUser = payloadUsers.find((u) => u.role === 'admin') || initial.users.find((u) => u.role === 'admin');
+    if (adminUser) finalUsers.unshift(adminUser);
   }
 
   const hasRelationalState = usersRes.rows.length > 0;
