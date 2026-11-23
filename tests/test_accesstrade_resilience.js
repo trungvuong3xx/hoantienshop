@@ -1,5 +1,13 @@
 const assert = require('assert');
-const { fetchAccessTradeOrders } = require('../src/services/tiktokService');
+const {
+  fetchAccessTradeOrders,
+  fetchAccessTradeOrderProducts,
+  generateTikTokAccessTradeLink,
+  convertTikTokLink,
+  parseAccessTradeMoney,
+  parseAccessTradeCommissionRate
+} = require('../src/services/tiktokService');
+const { isAllowedAffiliateRedirectUrl } = require('../src/services/urlResolver');
 const { mapOrderRow } = require('../src/services/orderMapper');
 
 async function runTests() {
@@ -138,6 +146,105 @@ async function runTests() {
     assert.strictEqual(mapped.merchant, 'tiktokshop');
     assert.strictEqual(mapped.rejectReason, 'Khách hoàn hàng');
     console.log('✓ Test 5: mapOrderRow merchant & rejectReason mapping passed');
+  }
+
+  // 6. AccessTrade money & commission rate parsers (real live formats + doc formats)
+  {
+    assert.strictEqual(parseAccessTradeMoney('8814.56800'), 8815);
+    assert.strictEqual(parseAccessTradeMoney('3.000'), 3000);
+    assert.strictEqual(parseAccessTradeMoney('136000'), 136000);
+    assert.strictEqual(parseAccessTradeCommissionRate('0.06481', 8815, 136000), 6.48);
+    assert.strictEqual(parseAccessTradeCommissionRate(1500, 3000, 20000), 15);
+    console.log('✓ Test 6: AccessTrade money & rate parsers passed');
+  }
+
+  // 7. Redirect allowlist accepts shorten.asia & blocks evil hosts
+  {
+    assert.strictEqual(isAllowedAffiliateRedirectUrl('https://shorten.asia/kVe435N8'), true);
+    assert.strictEqual(isAllowedAffiliateRedirectUrl('https://evil-tracker.example/x'), false);
+    console.log('✓ Test 7: urlResolver shorten.asia allowlist passed');
+  }
+
+  // 8. generateTikTokAccessTradeLink with real production payload structure
+  {
+    const mockFetch = async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        code: '0',
+        status: true,
+        message: 'create link affiliate success',
+        data: {
+          aff_short_url: 'https://shorten.asia/kVe435N8',
+          aff_url: 'https://go.isclix.com/deep_link/7110811489339796158/6648523843406889655?url=https%3A%2F%2Fwww.tiktok.com%2Ft%2FZSs85LWTt%2F&utm_source=CLK123&sub1=CLK123',
+          product_commission: { amount: '8814.56800', currency: 'VND', rate: '0.06481' },
+          product_id: '1733649211783283904',
+          product_image: 'https://p16-oec-sg.ibyteimg.com/img.jpeg',
+          product_name: 'Cà Phê Sấy Lạnh',
+          product_price: { currency: 'VND', maximum_amount: '407160', minimum_amount: '136000' }
+        }
+      })
+    });
+
+    const res = await generateTikTokAccessTradeLink(
+      'https://shop.tiktok.com/view/product/1733649211783283904',
+      '1733649211783283904',
+      { accesstradeApiKey: 'test_key', subId: 'CLK123', fetchFn: mockFetch }
+    );
+    assert.strictEqual(res.affiliateUrl, 'https://shorten.asia/kVe435N8');
+    assert.strictEqual(res.price, 136000);
+    assert.strictEqual(res.commission, 8815);
+    assert.strictEqual(res.commissionRate, 6.48);
+    assert.strictEqual(res.productName, 'Cà Phê Sấy Lạnh');
+    assert.strictEqual(res.hasMeta, true);
+    console.log('✓ Test 8: generateTikTokAccessTradeLink live payload parsing passed');
+  }
+
+  // 9. convertTikTokLink falls back to buildTikTokDeepLink when AT v2 fails or drops subId
+  {
+    const mockFailFetch = async () => ({
+      ok: false,
+      status: 500,
+      json: async () => ({ message: 'Server error' })
+    });
+
+    const conv = await convertTikTokLink(
+      { cleanUrl: 'https://shop.tiktok.com/view/product/1733649211783283904', productId: '1733649211783283904' },
+      {
+        tiktokMode: 'deeplink',
+        accesstradeApiKey: 'test_key',
+        subId: 'CLK999',
+        tiktokDeepLinkTemplate: 'https://go.isclix.com/deep_link/v6/7110811489339796158/6648523843406889655?sub4=oneatweb',
+        fetchFn: mockFailFetch
+      }
+    );
+    assert.strictEqual(conv.usedMethod, 'TikTok DeepLink (AccessTrade)');
+    assert.ok(conv.affiliateUrl.includes('go.isclix.com/deep_link/v6/'));
+    assert.ok(conv.affiliateUrl.includes('sub1=CLK999'));
+    console.log('✓ Test 9: convertTikTokLink fallback to DeepLink v6 passed');
+  }
+
+  // 10. fetchAccessTradeOrderProducts extracts & deduplicates reject reasons, ignores N/A
+  {
+    const mockFetch = async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        total: 3,
+        data: [
+          { _id: 'p1', product_price: 50000, product_quantity: 1, reason_rejected: 'N/A' },
+          { _id: 'p2', product_price: 80000, product_quantity: 1, reason_rejected: 'Khách hoàn hàng' },
+          { _id: 'p3', product_price: 80000, product_quantity: 1, reason_rejected: 'Khách hoàn hàng' }
+        ]
+      })
+    });
+
+    const res = await fetchAccessTradeOrderProducts('test_key', 'ORD_REJECT_1', 'tiktokshop', {
+      fetchFn: mockFetch
+    });
+    assert.strictEqual(res.products.length, 3);
+    assert.strictEqual(res.rejectReason, 'Khách hoàn hàng');
+    console.log('✓ Test 10: fetchAccessTradeOrderProducts reject reason extraction passed');
   }
 
   console.log('ALL ACCESSTRADE RESILIENCE TESTS PASSED ✔');

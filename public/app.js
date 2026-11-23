@@ -2727,6 +2727,7 @@ function renderAdminOrdersTable(orders) {
              <button type="button" class="btn btn-outline btn-xs btn-icon-svg" data-ord-action="edit" data-ord-id="${ordKey}" data-ord-sn="${ordSnEsc}" title="Chỉnh sửa">${ADMIN_SVG.edit}<span>Sửa</span></button>
              <button type="button" class="btn btn-ghost btn-xs text-danger btn-icon-svg" data-ord-action="delete" data-ord-id="${ordKey}" data-ord-sn="${ordSnEsc}" title="Xóa vĩnh viễn">${ADMIN_SVG.trash}<span>Xóa</span></button>`
           : `<button type="button" class="btn btn-outline btn-xs btn-icon-svg" data-ord-action="reopen" data-ord-id="${ordKey}" data-ord-sn="${ordSnEsc}" title="Khôi phục về trạng thái chờ duyệt">${ADMIN_SVG.refresh}<span>Khôi phục</span></button>
+             ${o.merchant || o.rejectReason ? `<button type="button" class="btn btn-outline btn-xs btn-icon-svg" data-ord-action="reject-reason" data-ord-id="${ordKey}" data-ord-sn="${ordSnEsc}" data-ord-plat="${escapeHtml(plat)}" title="Xem lý do hủy đơn từ AccessTrade"><span>Lý do</span></button>` : ''}
              <button type="button" class="btn btn-outline btn-xs btn-icon-svg" data-ord-action="edit" data-ord-id="${ordKey}" data-ord-sn="${ordSnEsc}" title="Chỉnh sửa">${ADMIN_SVG.edit}<span>Sửa</span></button>
              <button type="button" class="btn btn-ghost btn-xs text-danger btn-icon-svg" data-ord-action="delete" data-ord-id="${ordKey}" data-ord-sn="${ordSnEsc}" title="Xóa vĩnh viễn">${ADMIN_SVG.trash}<span>Xóa</span></button>`;
 
@@ -3352,6 +3353,28 @@ if (viewAdmin) {
       if (action === 'edit') {
         if (order) {
           openOrderEditModal(order);
+        }
+        return;
+      }
+
+      if (action === 'reject-reason') {
+        const plat = ordActionBtn.getAttribute('data-ord-plat') || order?.platform || 'tiktok';
+        ordActionBtn.disabled = true;
+        try {
+          const info = await apiFetch(
+            `/api/admin/orders/${encodeURIComponent(orderSn)}/accesstrade-details?platform=${encodeURIComponent(plat)}`
+          );
+          const sourceLabel = info.cached ? '(Đã lưu trong DB)' : '(Tra cứu mới từ AccessTrade)';
+          const merchantLine = info.merchant ? `Merchant: ${info.merchant}\n` : '';
+          await askUserConfirm(
+            `Đơn #${orderSn} ${sourceLabel}\n${merchantLine}Lý do hủy: ${info.rejectReason || 'Không có thông tin chi tiết.'}`,
+            'Lý Do Hủy Đơn AccessTrade',
+            { variant: 'info' }
+          );
+        } catch (err) {
+          showToast(err.message);
+        } finally {
+          ordActionBtn.disabled = false;
         }
         return;
       }

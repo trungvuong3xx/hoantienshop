@@ -69,15 +69,18 @@ async function processSingleUrl(originalUrl, config = {}) {
       const conv = await convertTikTokLink(cleanInfo, perClickConfig);
 
       let tiktokMeta = null;
-      const addlivetagKey = (config.addlivetagApiKey || process.env.ADDLIVETAG_API_KEY || DEFAULT_ADDLIVETAG_API_KEY).trim();
-      if (addlivetagKey) {
-        tiktokMeta = await fetchAddlivetagProductData({
-          platform: 'tiktok',
-          url: resolvedUrl,
-          apiKey: addlivetagKey
-        });
+      if (!conv.hasMeta) {
+        const addlivetagKey = (config.addlivetagApiKey || process.env.ADDLIVETAG_API_KEY || DEFAULT_ADDLIVETAG_API_KEY).trim();
+        if (addlivetagKey) {
+          tiktokMeta = await fetchAddlivetagProductData({
+            platform: 'tiktok',
+            url: resolvedUrl,
+            apiKey: addlivetagKey
+          });
+        }
       }
 
+      const resolvedName = conv.productName || tiktokMeta?.productName || cleanInfo.titleHint || 'Sản phẩm TikTok Shop';
       const itemResult = {
         originalUrl,
         resolvedUrl,
@@ -86,12 +89,12 @@ async function processSingleUrl(originalUrl, config = {}) {
         linkType: cleanInfo.linkType,
         productId: conv.productId,
         clickId,
-        productName: tiktokMeta?.productName || cleanInfo.titleHint || 'Sản phẩm TikTok Shop',
-        title: tiktokMeta?.productName || cleanInfo.titleHint || 'Sản phẩm TikTok Shop',
-        imageUrl: tiktokMeta?.imageUrl || cleanInfo.imageUrl || '',
-        price: tiktokMeta?.price || 0,
-        commissionRate: tiktokMeta?.commissionRate || 0,
-        commission: tiktokMeta?.commission || 0,
+        productName: resolvedName,
+        title: resolvedName,
+        imageUrl: conv.imageUrl || tiktokMeta?.imageUrl || cleanInfo.imageUrl || '',
+        price: conv.price || tiktokMeta?.price || 0,
+        commissionRate: conv.commissionRate || tiktokMeta?.commissionRate || 0,
+        commission: conv.commission || tiktokMeta?.commission || 0,
         affiliateUrl: conv.affiliateUrl,
         fullAffiliateUrl: conv.fullAffiliateUrl,
         usedMethod: conv.usedMethod,

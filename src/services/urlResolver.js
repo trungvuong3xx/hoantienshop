@@ -151,6 +151,9 @@ function normalizeHost(host) {
 
 const ALLOWED_AFFILIATE_REDIRECT_HOSTS = new Set([
   'go.isclix.com',
+  'shorten.asia',
+  'shorten.accesstrade.vn',
+  'tracking.accesstrade.vn',
   'is.gd',
   'tinyurl.com',
   's.shopee.vn',

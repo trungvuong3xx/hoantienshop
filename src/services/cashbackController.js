@@ -54,7 +54,7 @@ const {
   fetchAddlivetagProductData,
   DEFAULT_ADDLIVETAG_API_KEY
 } = require('./shopeeService');
-const { fetchAccessTradeOrders } = require('./tiktokService');
+const { fetchAccessTradeOrders, fetchAccessTradeOrderProducts } = require('./tiktokService');
 const {
   isAllowedHost,
   isAllowedAffiliateRedirectUrl,
@@ -1943,6 +1943,11 @@ function registerCashbackRoutes(app) {
           process.env.TIKTOK_DEEPLINK_TEMPLATE ||
           s.tiktokDeepLinkTemplate ||
           DEFAULT_TIKTOK_DEEPLINK,
+        accesstradeApiKey: (
+          process.env.ACCESSTRADE_API_KEY ||
+          s.accesstradeApiKey ||
+          ''
+        ).trim(),
         addlivetagApiKey: (
           s.addlivetagApiKey ||
           process.env.ADDLIVETAG_API_KEY ||
@@ -2352,6 +2357,71 @@ function registerCashbackRoutes(app) {
       total: result.pagination.total
     });
     return res.json({ orders: result.items, pagination: result.pagination });
+  }));
+
+  app.get('/api/admin/orders/:orderSn/accesstrade-details', requireAdmin, asyncHandler(async (req, res) => {
+    logger.logEnter('GET /api/admin/orders/:orderSn/accesstrade-details');
+    await reloadStateFromPostgres();
+    const db = ensureDbLoaded();
+    const cleanSn = String(req.params.orderSn || '').trim().toUpperCase();
+    const platFilter = req.query.platform ? String(req.query.platform).trim().toLowerCase() : '';
+    const order = db.orders.find(
+      (o) => String(o.orderSn || '').trim().toUpperCase() === cleanSn && (!platFilter || (o.platform || 'shopee') === platFilter)
+    );
+    if (!order) {
+      return res.status(404).json({ error: 'Không tìm thấy đơn hàng.' });
+    }
+
+    const forceRefresh = req.query.refresh === '1';
+    if (order.rejectReason && !forceRefresh) {
+      logger.logLeave('GET /api/admin/orders/:orderSn/accesstrade-details', { orderSn: cleanSn, cached: true });
+      return res.json({
+        cached: true,
+        orderSn: order.orderSn,
+        platform: order.platform,
+        merchant: order.merchant || null,
+        rejectReason: order.rejectReason,
+        products: []
+      });
+    }
+
+    const merchant = String(req.query.merchant || order.merchant || '').trim();
+    if (!merchant) {
+      return res.status(400).json({
+        error: 'Đơn hàng này chưa lưu tên merchant AccessTrade. Vui lòng chạy Đồng bộ đơn tự động để cập nhật merchant trước khi tra cứu.'
+      });
+    }
+
+    const apiKey = String(process.env.ACCESSTRADE_API_KEY || db.settings?.accesstradeApiKey || '').trim();
+    if (!apiKey) {
+      return res.status(400).json({ error: 'Chưa cấu hình AccessTrade API Key để tra cứu chi tiết đơn hàng.' });
+    }
+
+    const details = await fetchAccessTradeOrderProducts(apiKey, order.orderSn, merchant);
+    const resolvedReason =
+      details.rejectReason ||
+      (order.status === 'cancelled'
+        ? 'Đơn bị hủy/từ chối trên AccessTrade (không có lý do chi tiết).'
+        : 'Đơn hàng chưa có lý do hủy trên AccessTrade.');
+
+    order.merchant = order.merchant || merchant;
+    order.rejectReason = resolvedReason;
+    order.updatedAt = new Date().toISOString();
+    await saveDb(db);
+
+    logger.logLeave('GET /api/admin/orders/:orderSn/accesstrade-details', {
+      orderSn: cleanSn,
+      cached: false,
+      productsCount: details.products.length
+    });
+    return res.json({
+      cached: false,
+      orderSn: order.orderSn,
+      platform: order.platform,
+      merchant: order.merchant,
+      rejectReason: resolvedReason,
+      products: details.products
+    });
   }));
 
   app.get('/api/admin/users', requireAdmin, asyncHandler(async (req, res) => {
