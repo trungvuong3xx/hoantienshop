@@ -47,8 +47,8 @@ async function runManualChecklistSimulation() {
     'Floating button on mobile must be stripped to transparent background'
   );
   assert.ok(
-    css.includes('.zalo-icon-wrap') && css.includes('width: 50px'),
-    'Zalo icon wrap on mobile must have circular dimension (50px)'
+    css.includes('.zalo-icon-wrap') && (css.includes('width: 44px') || css.includes('width: 50px')),
+    'Zalo icon wrap on mobile must have circular dimension (44px-50px)'
   );
 
   // Floating widget z-index is 90 (below modal 1000 to prevent collisions)

@@ -211,9 +211,7 @@ app.get('/api/health', (req, res) => {
       uptime: Math.round(process.uptime()),
       database: {
         mode: dbStatus.mode,
-        isPersistent: dbStatus.isPersistentOnCloud,
-        usersCount: Array.isArray(db.users) ? db.users.length : 0,
-        ordersCount: Array.isArray(db.orders) ? db.orders.length : 0
+        isPersistent: dbStatus.isPersistentOnCloud
       },
       time: new Date().toISOString()
     };

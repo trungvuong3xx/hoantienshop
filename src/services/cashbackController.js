@@ -4,6 +4,7 @@ const { sameOrder, orderId, migrateLegacyOrderIdentity } = require('./orderIdent
 const crypto = require('crypto');
 const express = require('express');
 const logger = require('../utils/logger');
+const { SENSITIVE_SETTING_KEYS } = require('../utils/secretCrypto');
 const {
   ensureDbLoaded,
   runWithStateContext,
@@ -2498,10 +2499,21 @@ function registerCashbackRoutes(app) {
     const safeSettings = { ...db.settings };
     safeSettings.zaloGroupUrl = db.settings.zaloGroupUrl || DEFAULT_ZALO_GROUP_URL;
     safeSettings.zaloWidgetEnabled = db.settings.zaloWidgetEnabled ?? true;
-    safeSettings.postbackToken = shouldReveal ? (db.settings.postbackToken || postbackToken) : '***';
-    safeSettings.shopeeAppSecret = shouldReveal ? (db.settings.shopeeAppSecret || process.env.SHOPEE_APP_SECRET || '') : '***';
-    safeSettings.tiktokAppSecret = shouldReveal ? (db.settings.tiktokAppSecret || process.env.TIKTOK_APP_SECRET || '') : '***';
-    safeSettings.turnstileSecretKey = shouldReveal ? (db.settings.turnstileSecretKey || process.env.TURNSTILE_SECRET_KEY || '') : '***';
+    const secretEnvFallbacks = {
+      postbackToken,
+      shopeeAppSecret: process.env.SHOPEE_APP_SECRET || '',
+      tiktokAppSecret: process.env.TIKTOK_APP_SECRET || '',
+      turnstileSecretKey: process.env.TURNSTILE_SECRET_KEY || '',
+      accesstradeApiKey: process.env.ACCESSTRADE_API_KEY || '',
+      addlivetagApiKey: process.env.ADDLIVETAG_API_KEY || ''
+    };
+    for (const sKey of SENSITIVE_SETTING_KEYS) {
+      if (shouldReveal) {
+        safeSettings[sKey] = db.settings[sKey] || secretEnvFallbacks[sKey] || '';
+      } else {
+        safeSettings[sKey] = (db.settings[sKey] || secretEnvFallbacks[sKey]) ? '***' : '';
+      }
+    }
 
     logger.logLeave('GET /api/admin/settings');
     return res.json({ settings: safeSettings });
@@ -2594,17 +2606,8 @@ function registerCashbackRoutes(app) {
     }
 
     // Only update secret fields if not masked placeholder
-    const secretKeys = [
-      'shopeeAppSecret',
-      'tiktokAppSecret',
-      'tiktokAccessToken',
-      'accesstradeApiKey',
-      'addlivetagApiKey',
-      'turnstileSecretKey',
-      'postbackToken'
-    ];
-    for (const sKey of secretKeys) {
-      if (body[sKey] && body[sKey] !== '********' && body[sKey] !== '***' && !body[sKey].startsWith('***')) {
+    for (const sKey of SENSITIVE_SETTING_KEYS) {
+      if (body[sKey] && body[sKey] !== '********' && body[sKey] !== '***' && !String(body[sKey]).startsWith('***')) {
         db.settings[sKey] = String(body[sKey]).trim();
       }
     }

@@ -1050,6 +1050,24 @@ async function initPostgresIfConfigured() {
           IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'withdrawals_amount_positive') THEN
             ALTER TABLE withdrawals ADD CONSTRAINT withdrawals_amount_positive CHECK (amount > 0) NOT VALID;
           END IF;
+          IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_orders_user_id') THEN
+            ALTER TABLE orders ADD CONSTRAINT fk_orders_user_id FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL NOT VALID;
+          END IF;
+          IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_clicks_user_id') THEN
+            ALTER TABLE clicks ADD CONSTRAINT fk_clicks_user_id FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL NOT VALID;
+          END IF;
+          IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_ledger_user_id') THEN
+            ALTER TABLE ledger ADD CONSTRAINT fk_ledger_user_id FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE RESTRICT NOT VALID;
+          END IF;
+          IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_withdrawals_user_id') THEN
+            ALTER TABLE withdrawals ADD CONSTRAINT fk_withdrawals_user_id FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE RESTRICT NOT VALID;
+          END IF;
+          IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_notifications_user_id') THEN
+            ALTER TABLE notifications ADD CONSTRAINT fk_notifications_user_id FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE NOT VALID;
+          END IF;
+          IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_notification_reads_user_id') THEN
+            ALTER TABLE notification_reads ADD CONSTRAINT fk_notification_reads_user_id FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE NOT VALID;
+          END IF;
         END $$;
         ALTER TABLE users ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN DEFAULT FALSE;
         ALTER TABLE users ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;

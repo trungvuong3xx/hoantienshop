@@ -40,7 +40,10 @@ const TEST_SUITES = [
   'test_phase3_mobile_ux.js',
   'test_phase4_storage_and_security.js',
   'test_phase5_performance_and_retention.js',
-  'test_accesstrade_resilience.js'
+  'test_accesstrade_resilience.js',
+  'test_stage1_notifications_and_custom_rate.js',
+  'test_stage2_vip_and_leaderboard.js',
+  'test_security_audit_remediation.js'
 ];
 
 async function runAllTests() {
