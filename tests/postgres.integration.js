@@ -12,7 +12,7 @@ if (process.env.AFF_PG_WORKER === '1') {
       let result;
       if (action === 'stop') { if (server) await new Promise(r => server.close(r)); await d.getPgPool().end(); process.disconnect(); return; }
       if (action === 'seed') { const db = d.ensureDbLoaded(); d.appendLedgerEntry(db.users[0].id, 'admin_adjustment', 500000, 'integration-credit'); await d.saveDb(db); result = true; }
-      if (action === 'http') { server = require('../server').listen(0, '127.0.0.1'); await new Promise(r => server.once('listening', r)); result = { port: server.address().port, token: d.createToken(d.ensureDbLoaded().users[0]) }; }
+      if (action === 'http') { server = require('../server').listen(0, '127.0.0.1'); await new Promise(r => server.once('listening', r)); result = { port: server.address().port, token: d.createToken(d.ensureDbLoaded().users.find(u => u.role === 'admin')) }; }
       if (action === 'paid') result = await d.settleWithdrawal(input, 'paid', { id: 'integration-admin' });
       if (action === 'archive') result = await d.archiveWithdrawal(input, { id: 'integration-admin' });
       if (action === 'refund') { const db = d.ensureDbLoaded(); result = await d.refundWithdrawal(db, db.withdrawals.find(w => w.id === input)); }
@@ -32,7 +32,23 @@ if (process.env.AFF_PG_WORKER === '1') {
         result = d.ensureDbLoaded().orders.find(o => o.orderSn === input.orderSn);
       }
       if (action === 'reload') { await d.reloadStateFromPostgres(); result = true; }
+      if (action === 'preservation') {
+        await d.reloadStateFromPostgres({ strict: true });
+        const db = d.ensureDbLoaded();
+        db.orders = []; db.withdrawals = []; db.users = [];
+        await d.saveDb(db);
+        await d.reloadStateFromPostgres({ strict: true });
+        result = true;
+      }
+      if (action === 'datedUser') {
+        const db = d.ensureDbLoaded();
+        const u = { id: 'dated-user', code: 'DATED', phone: '0900000009', role: 'user', passwordHash: d.hashPassword('Fixture!123'), createdAt: '2020-01-02T00:00:00.000Z' };
+        db.users.push(u); await d.saveDb(db);
+        await d.persistUserToPostgres({ ...u, name: 'Updated', createdAt: '2021-01-01T00:00:00.000Z' });
+        await d.reloadStateFromPostgres(); result = true;
+      }
       if (action === 'save') { const db = d.ensureDbLoaded(); db.settings.siteName = input; await d.saveDb(db); result = true; }
+      if (action === 'saveDirtyOrder') { const db = d.ensureDbLoaded(); db.orders.push({ orderSn: 'must-not-survive', platform: 'shopee', status: 'pending' }); await d.saveDb(db); result = true; }
       if (action === 'withdraw') result = await d.executeAtomicWithdrawal({ userId: 'usr_admin', amount: 50000, bankName: 'MB', bankAccount: '12345678', bankOwner: 'TEST USER', minWithdraw: 50000, ...input });
       process.send({ id, result });
     } catch (e) { process.send({ id, error: e.message, code: e.code }); }
@@ -62,6 +78,21 @@ if (process.env.AFF_PG_WORKER === '1') {
         child.on('message', receive); child.send({ id, action, input });
       });
       const a = await start(); assert.equal((await call(a, 'seed')).error, undefined);
+      await check.query("INSERT INTO orders(order_sn,platform,user_code,status) VALUES('PRESERVE','shopee','GUEST','pending')");
+      for (const status of ['pending','paid','rejected']) {
+        await check.query('INSERT INTO withdrawals(id,user_id,amount,status) VALUES($1,$2,50000,$3)', ['preserve-' + status, 'usr_admin', status]);
+      }
+      assert.equal((await call(a, 'preservation')).error, undefined);
+      assert.equal(Number((await check.query("SELECT count(*) FROM orders WHERE order_sn='PRESERVE'")).rows[0].count), 1);
+      assert.equal(Number((await check.query("SELECT count(*) FROM withdrawals WHERE id LIKE 'preserve-%'")).rows[0].count), 3);
+      assert.equal(Number((await check.query("SELECT count(*) FROM users WHERE id='usr_admin'")).rows[0].count), 1);
+      assert.equal((await call(a, 'datedUser')).error, undefined);
+      assert.equal((await check.query("SELECT created_at FROM users WHERE id='dated-user'")).rows[0].created_at.toISOString(), '2020-01-02T00:00:00.000Z');
+      // Fixtures have served their purpose; remove only their non-financial rows in this disposable DB.
+      await check.query("DELETE FROM withdrawals WHERE id LIKE 'preserve-%'");
+      await check.query("DELETE FROM orders WHERE order_sn='PRESERVE'");
+      await call(a, 'reload');
+      console.log('PASS: sparse snapshots preserve users/orders/all withdrawal statuses; user creation date survives update');
       const b = await start();
       assert.equal((await call(a, 'save', 'winner')).error, undefined);
       assert.equal((await call(b, 'save', 'loser')).code, 'STATE_CONFLICT');
@@ -89,6 +120,30 @@ if (process.env.AFF_PG_WORKER === '1') {
       assert.equal((await call(a, 'clicks')).result, 6001);
       console.log('PASS: 6001 recent clicks survive PostgreSQL save and reload');
       const http = (await call(a, 'http')).result;
+      await check.query("INSERT INTO orders(order_sn,platform,user_code,status) VALUES('EXPLICIT_DELETE','shopee','GUEST','pending')");
+      await call(a, 'reload');
+      const deleteResponse = await fetch('http://127.0.0.1:' + http.port + '/api/admin/orders/delete', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + http.token },
+        body: JSON.stringify({ orderSn: 'EXPLICIT_DELETE', platform: 'shopee' })
+      });
+      assert.equal(deleteResponse.status, 200, await deleteResponse.text());
+      assert.equal(Number((await check.query("SELECT count(*) FROM orders WHERE order_sn='EXPLICIT_DELETE'")).rows[0].count), 0);
+      assert.equal(Number((await check.query("SELECT count(*) FROM audit_logs WHERE action='delete_order' AND details->>'orderSn'='EXPLICIT_DELETE'")).rows[0].count), 1);
+      console.log('PASS: explicit admin deletion persists with audit');
+      const postOrder = (route, body) => fetch('http://127.0.0.1:' + http.port + route, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + http.token }, body: JSON.stringify(body)
+      });
+      const creditedOrder = await postOrder('/api/admin/orders', {orderSn:'DELETE_CREDIT',platform:'shopee',userCode:'DATED',totalCommission:10000,status:'approved'});
+      assert.equal(creditedOrder.status,200,await creditedOrder.text());
+      const creditRows = (await check.query("SELECT id,amount FROM ledger WHERE user_id='dated-user' ORDER BY id")).rows;
+      assert.ok(creditRows.some(row => Number(row.amount)>0));
+      assert.equal((await postOrder('/api/admin/orders/delete',{orderSn:'DELETE_CREDIT',platform:'shopee'})).status,200);
+      const reverted = (await check.query("SELECT id,amount FROM ledger WHERE user_id='dated-user' ORDER BY id")).rows;
+      assert.equal(reverted.reduce((sum,row)=>sum+Number(row.amount),0),0);
+      for (const row of creditRows) assert.ok(reverted.some(other=>other.id===row.id && other.amount===row.amount));
+      assert.equal((await postOrder('/api/admin/orders/delete',{orderSn:'DELETE_CREDIT',platform:'shopee'})).status,404);
+      assert.deepEqual((await check.query("SELECT id,amount FROM ledger WHERE user_id='dated-user' ORDER BY id")).rows,reverted);
+      console.log('PASS: deleting credited order appends reversal, preserves ledger and retry cannot reverse twice');
       const endpoint = 'http://127.0.0.1:' + http.port + '/api/admin/settings';
       const headers = { Authorization: 'Bearer ' + http.token };
       assert.equal((await fetch(endpoint, { headers })).status, 200);
@@ -208,7 +263,7 @@ if (process.env.AFF_PG_WORKER === '1') {
       assert.equal(Number((await check.query("SELECT COUNT(*) FROM ledger WHERE note='failed-adjustment-must-not-return'")).rows[0].count), 0);
       console.log('PASS: failed adjustment is discarded from cache and cannot return in a later save');
       await check.query('ALTER TABLE orders RENAME TO fixture_unavailable_orders');
-      assert.ok((await call(b, 'save', 'must-not-survive')).error);
+      assert.ok((await call(b, 'saveDirtyOrder')).error);
       assert.equal((await call(b, 'cachedLedger', 'anything')).code, 'CACHE_UNAVAILABLE');
       assert.equal((await call(b, 'save', 'blocked-while-invalid')).code, 'CACHE_UNAVAILABLE');
       await check.query('ALTER TABLE fixture_unavailable_orders RENAME TO orders');

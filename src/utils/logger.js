@@ -22,10 +22,30 @@ function getRequestId() {
   return store?.requestId || null;
 }
 
+const SENSITIVE_KEY_RE = /(password|token|secret|authorization|cookie|apikey|api_key|bankaccount|bank_account)/i;
+
+function redactValue(val, depth = 0) {
+  if (depth > 4 || val === null || val === undefined) return val;
+  if (Array.isArray(val)) return val.map((item) => redactValue(item, depth + 1));
+  if (typeof val === 'object') {
+    const out = {};
+    for (const [k, v] of Object.entries(val)) {
+      if (SENSITIVE_KEY_RE.test(k) && v !== undefined && v !== null && v !== '') {
+        out[k] = '[REDACTED]';
+      } else {
+        out[k] = redactValue(v, depth + 1);
+      }
+    }
+    return out;
+  }
+  return val;
+}
+
 function formatMeta(meta = {}) {
   const ctxReqId = getRequestId();
   const baseMeta = ctxReqId && meta.reqId === undefined ? { reqId: ctxReqId, ...meta } : meta;
-  const entries = Object.entries(baseMeta).filter(([, v]) => v !== undefined);
+  const safeMeta = redactValue(baseMeta);
+  const entries = Object.entries(safeMeta).filter(([, v]) => v !== undefined);
   if (entries.length === 0) return '';
   return entries
     .map(([k, v]) => `[${k}: ${typeof v === 'object' ? JSON.stringify(v) : v}]`)

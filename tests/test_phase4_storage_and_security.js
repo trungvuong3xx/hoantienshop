@@ -36,7 +36,7 @@ const app = require('../server');
 
   // Tamper resistance (flip last character of ciphertext)
   const tampered = encrypted.slice(0, -2) + (encrypted.endsWith('A') ? 'B' : 'A') + 'A';
-  assert.equal(decryptSecretValue(tampered, testKey), '', 'Tampered ciphertext must fail authentication safely');
+  assert.throws(() => decryptSecretValue(tampered, testKey), { code: 'SETTINGS_DECRYPT_FAILED' });
 
   const rawSettingsObj = {
     siteName: 'LiLa',

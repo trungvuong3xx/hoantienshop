@@ -1,0 +1,37 @@
+name: Daily Encrypted PostgreSQL Backup
+
+on:
+  schedule:
+    # Run daily at 02:30 UTC (09:30 Asia/Ho_Chi_Minh)
+    - cron: '30 2 * * *'
+  workflow_dispatch:
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    if: ${{ secrets.DATABASE_URL != '' && secrets.BACKUP_ENCRYPTION_KEY != '' }}
+    steps:
+      - name: Install PostgreSQL 16 client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-16 openssl
+
+      - name: Dump and encrypt database
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          BACKUP_ENCRYPTION_KEY: ${{ secrets.BACKUP_ENCRYPTION_KEY }}
+        run: |
+          STAMP=$(date -u +%Y%m%d_%H%M%S)
+          DUMP_FILE="hoantiensan_${STAMP}.sql.gz"
+          ENC_FILE="${DUMP_FILE}.enc"
+          pg_dump "$DATABASE_URL" --no-owner --no-acl --format=plain | gzip -9 > "$DUMP_FILE"
+          openssl enc -aes-256-cbc -pbkdf2 -iter 100000 -salt -in "$DUMP_FILE" -out "$ENC_FILE" -pass env:BACKUP_ENCRYPTION_KEY
+          rm -f "$DUMP_FILE"
+          echo "ENC_FILE=$ENC_FILE" >> "$GITHUB_ENV"
+
+      - name: Upload encrypted backup artifact (30-day retention)
+        uses: actions/upload-artifact@v4
+        with:
+          name: pg-backup-${{ github.run_id }}
+          path: ${{ env.ENC_FILE }}
+          retention-days: 30

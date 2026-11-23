@@ -459,6 +459,9 @@ function switchView(viewName, updateHistory = true, options = {}) {
   if (targetView === 'admin' && authToken && currentUser?.role === 'admin' && !options.skipReload) {
     loadAdminDashboard();
   }
+  if (targetView === 'leaderboard') {
+    loadPublicLeaderboard();
+  }
 }
 
 window.addEventListener('popstate', (e) => {
@@ -2072,6 +2075,8 @@ async function loadUserDashboard(prefetchedData = null) {
         ? prefetchedData
         : await apiFetch('/api/user/me?' + params.toString());
     currentUser = data.user;
+    updateNotificationBadge(data.unreadNotificationCount ?? 0);
+    renderUserVipProgress(data.vipInfo, data.effectiveCashbackPercent);
     safeStorage.set(
       USER_KEY,
       JSON.stringify({
@@ -2620,6 +2625,11 @@ function loadAdminSettings(settings) {
   if (zaloWidgetEl) {
     zaloWidgetEl.checked = s.zaloWidgetEnabled !== false;
   }
+  const vipEnabledEl = document.getElementById('admVipTiersEnabled');
+  if (vipEnabledEl) {
+    vipEnabledEl.checked = s.vipTiersEnabled !== false;
+  }
+  renderAdminVipTiersTable(s.vipTiers || []);
 }
 
 const ADMIN_PAGE_LIMIT = 50;
@@ -2756,9 +2766,13 @@ function renderAdminUsersTable(users) {
       const lockBadge = u.accountLocked
         ? '<span class="status-badge st-cancelled">Đã khóa</span>'
         : '<span class="status-badge st-approved">Hoạt động</span>';
+      const customRateBadge =
+        u.customCashbackPercent !== null && u.customCashbackPercent !== undefined
+          ? `<div style="margin-top:4px;"><span class="status-badge" style="background:#eef2ff;color:#4f46e5;">Hoàn riêng: ${escapeHtml(String(u.customCashbackPercent))}%</span></div>`
+          : '';
       return `
         <tr>
-          <td><strong>${escapeHtml(u.code)}</strong></td>
+          <td><strong>${escapeHtml(u.code)}</strong>${customRateBadge}</td>
           <td>
             <div>${escapeHtml(u.name || 'Chưa cập nhật')}</div>
             <div style="font-size:12px;color:#64748b;">${escapeHtml(u.phone)}</div>
@@ -3468,6 +3482,12 @@ function openUserManageModal(user) {
   setVal('manageNewPassword', '');
   setVal('manageAdjustAmount', '');
   setVal('manageAdjustNote', '');
+  setVal(
+    'manageCustomCashbackRate',
+    user.customCashbackPercent !== null && user.customCashbackPercent !== undefined
+      ? String(user.customCashbackPercent)
+      : ''
+  );
 
   const lockBtn = document.getElementById('btnToggleUserLock');
   if (lockBtn) {
@@ -3610,8 +3630,8 @@ on('btnToggleUserLock', 'click', async () => {
 on('btnDeleteUser', 'click', async () => {
   if (!currentManagingUser) return;
   const confirmed = await askUserConfirm(
-    `Bạn có chắc chắn muốn xóa tài khoản ${currentManagingUser.code} (${currentManagingUser.phone}) không?`,
-    'Xóa Tài Khoản Thành Viên'
+    `Lưu trữ tài khoản ${currentManagingUser.code} (${currentManagingUser.phone})?\nTài khoản sẽ bị khóa và các phiên đăng nhập cũ bị thu hồi. Thông tin, số điện thoại và lịch sử giao dịch vẫn được giữ.`,
+    'Lưu Trữ Tài Khoản Thành Viên'
   );
   if (!confirmed) {
     return;
@@ -4100,3 +4120,392 @@ if (typeof module !== 'undefined' && module.exports) {
     applyZaloWidget
   };
 }
+
+// ================= NOTIFICATION CENTER & CUSTOM USER CASHBACK RATE =================
+let lastNotifSyncAt = 0;
+
+function updateNotificationBadge(count) {
+  const badge = document.getElementById('notifBadge');
+  if (!badge) return;
+  const n = Math.max(0, Number(count) || 0);
+  if (n > 0) {
+    badge.textContent = n > 99 ? '99+' : String(n);
+    badge.classList.remove('hidden');
+  } else {
+    badge.textContent = '0';
+    badge.classList.add('hidden');
+  }
+}
+
+function formatRelativeTimeVi(isoStr) {
+  const ts = new Date(isoStr).getTime();
+  if (!Number.isFinite(ts)) return '';
+  const diffSec = Math.max(0, Math.floor((Date.now() - ts) / 1000));
+  if (diffSec < 60) return 'Vừa xong';
+  if (diffSec < 3600) return `${Math.floor(diffSec / 60)} phút trước`;
+  if (diffSec < 86400) return `${Math.floor(diffSec / 3600)} giờ trước`;
+  return `${Math.floor(diffSec / 86400)} ngày trước`;
+}
+
+function renderNotificationsList(items = []) {
+  const listEl = document.getElementById('notifList');
+  if (!listEl) return;
+  if (!Array.isArray(items) || items.length === 0) {
+    listEl.innerHTML = '<div class="notif-empty">Chưa có thông báo nào.</div>';
+    return;
+  }
+  listEl.innerHTML = items
+    .map(
+      (n) => `
+      <div class="notif-item ${n.isRead ? '' : 'is-unread'}" data-notif-id="${escapeHtml(n.id)}">
+        <span class="notif-item-dot" aria-hidden="true"></span>
+        <div class="notif-item-body">
+          <div class="notif-item-title">${escapeHtml(n.title)}</div>
+          <div class="notif-item-msg">${escapeHtml(n.message)}</div>
+          <div class="notif-item-time">${escapeHtml(formatRelativeTimeVi(n.createdAt))}</div>
+        </div>
+      </div>`
+    )
+    .join('');
+}
+
+async function fetchAndRenderNotifications() {
+  const listEl = document.getElementById('notifList');
+  if (listEl && !listEl.children.length) {
+    listEl.innerHTML = '<div class="notif-empty">Đang tải thông báo...</div>';
+  }
+  try {
+    const res = await apiFetch('/api/notifications?page=1&limit=20');
+    lastNotifSyncAt = Date.now();
+    updateNotificationBadge(res.unreadCount || 0);
+    renderNotificationsList(res.items || []);
+  } catch (err) {
+    if (listEl) {
+      listEl.innerHTML = `<div class="notif-empty">${escapeHtml(err.message)}</div>`;
+    }
+  }
+}
+
+on('notifBellBtn', 'click', async (e) => {
+  e.stopPropagation();
+  const dd = document.getElementById('notifDropdown');
+  const btn = document.getElementById('notifBellBtn');
+  if (!dd) return;
+  const willOpen = dd.classList.contains('hidden');
+  dd.classList.toggle('hidden', !willOpen);
+  if (btn) btn.setAttribute('aria-expanded', String(willOpen));
+  if (willOpen) {
+    await fetchAndRenderNotifications();
+  }
+});
+
+on('notifMarkAllBtn', 'click', async (e) => {
+  e.stopPropagation();
+  try {
+    const res = await apiFetch('/api/notifications/mark-read', {
+      method: 'POST',
+      body: JSON.stringify({ all: true })
+    });
+    updateNotificationBadge(res.unreadCount || 0);
+    document.querySelectorAll('#notifList .notif-item.is-unread').forEach((el) => {
+      el.classList.remove('is-unread');
+    });
+  } catch (err) {
+    showToast(err.message);
+  }
+});
+
+on('notifList', 'click', async (e) => {
+  const item = e.target.closest('[data-notif-id]');
+  if (!item) return;
+  const id = item.getAttribute('data-notif-id');
+  if (!id || !item.classList.contains('is-unread')) return;
+  item.classList.remove('is-unread');
+  try {
+    const res = await apiFetch('/api/notifications/mark-read', {
+      method: 'POST',
+      body: JSON.stringify({ id })
+    });
+    updateNotificationBadge(res.unreadCount || 0);
+  } catch (_) {}
+});
+
+document.addEventListener('click', (e) => {
+  const wrap = document.getElementById('notifBellWrap');
+  const dd = document.getElementById('notifDropdown');
+  const btn = document.getElementById('notifBellBtn');
+  if (wrap && dd && !dd.classList.contains('hidden') && !wrap.contains(e.target)) {
+    dd.classList.add('hidden');
+    if (btn) btn.setAttribute('aria-expanded', 'false');
+  }
+});
+
+document.addEventListener('visibilitychange', async () => {
+  if (document.visibilityState !== 'visible' || !currentUser) return;
+  if (Date.now() - lastNotifSyncAt < 60000) return;
+  lastNotifSyncAt = Date.now();
+  try {
+    const res = await apiFetch('/api/notifications?page=1&limit=1');
+    updateNotificationBadge(res.unreadCount || 0);
+  } catch (_) {}
+});
+
+async function submitUserCustomCashbackRate(rateValue) {
+  if (!currentManagingUser) return;
+  const btn = document.getElementById('btnSaveCustomCashbackRate');
+  const resetBtn = document.getElementById('btnResetCustomCashbackRate');
+  if (btn) btn.disabled = true;
+  if (resetBtn) resetBtn.disabled = true;
+  try {
+    const res = await apiFetch('/api/admin/users/action', {
+      method: 'POST',
+      body: JSON.stringify({
+        userId: currentManagingUser.id,
+        action: 'set_cashback_rate',
+        customCashbackPercent: rateValue
+      })
+    });
+    currentManagingUser.customCashbackPercent = res.customCashbackPercent ?? null;
+    const input = document.getElementById('manageCustomCashbackRate');
+    if (input) {
+      input.value =
+        res.customCashbackPercent !== null && res.customCashbackPercent !== undefined
+          ? String(res.customCashbackPercent)
+          : '';
+    }
+    showToast(res.message);
+    await loadAdminUsersPage(adminUsersPage);
+  } catch (err) {
+    showToast(err.message);
+  } finally {
+    if (btn) btn.disabled = false;
+    if (resetBtn) resetBtn.disabled = false;
+  }
+}
+
+on('btnSaveCustomCashbackRate', 'click', async () => {
+  const raw = document.getElementById('manageCustomCashbackRate')?.value?.trim() ?? '';
+  if (raw === '') {
+    await submitUserCustomCashbackRate(null);
+    return;
+  }
+  const num = Number(raw);
+  if (!Number.isFinite(num) || num < 0) {
+    showToast('Vui lòng nhập % hoàn tiền hợp lệ (>= 0).');
+    return;
+  }
+  await submitUserCustomCashbackRate(num);
+});
+
+on('btnResetCustomCashbackRate', 'click', async () => {
+  await submitUserCustomCashbackRate(null);
+});
+
+on('admBroadcastSendBtn', 'click', async () => {
+  const titleEl = document.getElementById('admBroadcastTitle');
+  const msgEl = document.getElementById('admBroadcastMessage');
+  const title = titleEl?.value?.trim() || '';
+  const message = msgEl?.value?.trim() || '';
+  if (!title || !message) {
+    showToast('Vui lòng nhập đầy đủ tiêu đề và nội dung thông báo.');
+    return;
+  }
+  const btn = document.getElementById('admBroadcastSendBtn');
+  if (btn) btn.disabled = true;
+  try {
+    const res = await apiFetch('/api/admin/notifications/broadcast', {
+      method: 'POST',
+      body: JSON.stringify({ title, message })
+    });
+    showToast(res.message || 'Đã gửi thông báo toàn sàn!');
+    if (titleEl) titleEl.value = '';
+    if (msgEl) msgEl.value = '';
+  } catch (err) {
+    showToast(err.message);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+});
+
+// ================= VIP TIERING PROGRESS, ADMIN TABLE & PUBLIC LEADERBOARD =================
+let latestVipTiersAdmin = [];
+let latestLeaderboardData = null;
+let activeLeaderboardTab = 'spend';
+
+function renderUserVipProgress(vipInfo, effectiveRate) {
+  const card = document.getElementById('userVipCard');
+  if (!card) return;
+  if (!vipInfo || vipInfo.enabled === false) {
+    card.classList.add('hidden');
+    return;
+  }
+  card.classList.remove('hidden');
+
+  const badgeEl = document.getElementById('userVipBadge');
+  const rateEl = document.getElementById('userEffectiveRateBadge');
+  const fillEl = document.getElementById('userVipProgressFill');
+  const noteEl = document.getElementById('userVipProgressNote');
+
+  const cur = vipInfo.currentTier || { icon: '🥉', name: 'Thành viên Đồng', minSpend: 0, cashbackPercent: 70 };
+  const next = vipInfo.nextTier || null;
+  const spend = Math.max(0, Number(vipInfo.totalApprovedSpend || 0));
+  const shownRate = Number.isFinite(Number(effectiveRate)) ? Number(effectiveRate) : cur.cashbackPercent;
+
+  if (badgeEl) badgeEl.textContent = `${cur.icon || '🏅'} ${cur.name}`;
+  if (rateEl) rateEl.textContent = `Hoàn ${shownRate}%`;
+
+  if (!next) {
+    if (fillEl) fillEl.style.width = '100%';
+    if (noteEl) {
+      noteEl.textContent = `Tổng chi tiêu đã duyệt: ${fmtVnd(spend)} — Bạn đã đạt hạng cao nhất!`;
+    }
+    return;
+  }
+
+  const baseMin = Number(cur.minSpend || 0);
+  const nextMin = Number(next.minSpend || 0);
+  const span = Math.max(1, nextMin - baseMin);
+  const pct = Math.min(100, Math.max(0, Math.round(((spend - baseMin) / span) * 100)));
+  const remaining = Math.max(0, nextMin - spend);
+
+  if (fillEl) fillEl.style.width = `${pct}%`;
+  if (noteEl) {
+    noteEl.textContent = `Đã tích lũy ${fmtVnd(spend)} / ${fmtVnd(nextMin)} — Còn ${fmtVnd(remaining)} để lên ${next.icon || '🏆'} ${next.name} (${next.cashbackPercent}%)`;
+  }
+}
+
+function renderAdminVipTiersTable(tiers = []) {
+  latestVipTiersAdmin = Array.isArray(tiers) ? tiers.map((t) => ({ ...t })) : [];
+  const tbody = document.getElementById('admVipTiersTableBody');
+  if (!tbody) return;
+  if (latestVipTiersAdmin.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="4" class="text-center">Chưa có cấu hình bậc VIP.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = latestVipTiersAdmin
+    .map(
+      (t, idx) => `
+      <tr data-vip-row="${idx}">
+        <td><strong>${escapeHtml(t.icon || '🏅')} ${escapeHtml(t.code)}</strong></td>
+        <td><input type="text" class="adm-vip-name" value="${escapeHtml(t.name || '')}" maxlength="60" /></td>
+        <td><input type="number" class="adm-vip-spend" value="${Number(t.minSpend || 0)}" min="0" step="100000" /></td>
+        <td><input type="number" class="adm-vip-rate" value="${Number(t.cashbackPercent ?? 70)}" min="0" step="0.5" /></td>
+      </tr>`
+    )
+    .join('');
+}
+
+on('admSaveVipTiersBtn', 'click', async () => {
+  const tbody = document.getElementById('admVipTiersTableBody');
+  const enabled = document.getElementById('admVipTiersEnabled')?.checked !== false;
+  if (!tbody) return;
+  const rows = Array.from(tbody.querySelectorAll('tr[data-vip-row]'));
+  const updated = rows.map((row, idx) => {
+    const base = latestVipTiersAdmin[idx] || {};
+    const name = row.querySelector('.adm-vip-name')?.value?.trim() || base.name || `Hạng ${idx + 1}`;
+    const minSpend = Number(row.querySelector('.adm-vip-spend')?.value ?? base.minSpend ?? 0);
+    const cashbackPercent = Number(row.querySelector('.adm-vip-rate')?.value ?? base.cashbackPercent ?? 70);
+    return {
+      code: base.code || `tier_${idx}`,
+      icon: base.icon || '🏅',
+      name,
+      minSpend,
+      cashbackPercent
+    };
+  });
+
+  const btn = document.getElementById('admSaveVipTiersBtn');
+  if (btn) btn.disabled = true;
+  try {
+    await apiFetch('/api/admin/settings', {
+      method: 'POST',
+      body: JSON.stringify({
+        vipTiersEnabled: enabled,
+        vipTiers: updated
+      })
+    });
+    showToast('Đã lưu bảng cấu hình phân hạng VIP!');
+    await loadAdminDashboard();
+  } catch (err) {
+    showToast(err.message);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+});
+
+function renderLeaderboardTable(mode = 'spend') {
+  activeLeaderboardTab = mode === 'cashback' ? 'cashback' : 'spend';
+  const headerEl = document.getElementById('lbMetricHeader');
+  const tbody = document.getElementById('leaderboardTableBody');
+  const myRankEl = document.getElementById('leaderboardMyRank');
+
+  document.querySelectorAll('[data-lb-tab]').forEach((btn) => {
+    const isActive = btn.getAttribute('data-lb-tab') === activeLeaderboardTab;
+    btn.classList.toggle('btn-primary', isActive);
+    btn.classList.toggle('btn-outline', !isActive);
+    btn.classList.toggle('active', isActive);
+  });
+
+  if (headerEl) {
+    headerEl.textContent = activeLeaderboardTab === 'cashback' ? 'Tổng tiền hoàn' : 'Tổng giá trị đơn';
+  }
+  if (!tbody) return;
+
+  const data = latestLeaderboardData || { topBySpend: [], topByCashback: [] };
+  const list = activeLeaderboardTab === 'cashback' ? data.topByCashback : data.topBySpend;
+  const myRank = activeLeaderboardTab === 'cashback' ? data.myRankCashback : data.myRankSpend;
+
+  if (myRankEl) {
+    if (myRank) {
+      const val = activeLeaderboardTab === 'cashback' ? myRank.totalCashback : myRank.totalSpend;
+      myRankEl.textContent = `Vị trí của bạn: Hạng #${myRank.rank} — ${
+        activeLeaderboardTab === 'cashback' ? 'Tổng tiền hoàn' : 'Tổng giá trị đơn'
+      }: ${fmtVnd(val)}`;
+      myRankEl.classList.remove('hidden');
+    } else {
+      myRankEl.classList.add('hidden');
+    }
+  }
+
+  if (!Array.isArray(list) || list.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="4" class="text-center">Chưa có dữ liệu đơn đã duyệt để xếp hạng.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = list
+    .map((item) => {
+      const medalCls = item.rank <= 3 ? `lb-rank-medal lb-rank-${item.rank}` : 'lb-rank-medal';
+      const metricVal = activeLeaderboardTab === 'cashback' ? item.totalCashback : item.totalSpend;
+      return `
+        <tr>
+          <td><span class="${medalCls}">#${item.rank}</span></td>
+          <td>
+            <strong>${escapeHtml(item.displayName)}</strong>
+            <div style="font-size:12px;color:#64748b;">${escapeHtml(item.code)}</div>
+          </td>
+          <td><span class="status-badge" style="background:#fff7ed;color:#c2410c;">${escapeHtml(item.vipTierIcon || '🏅')} ${escapeHtml(item.vipTierName || '')}</span></td>
+          <td><strong style="color:#059669;">${fmtVnd(metricVal)}</strong></td>
+        </tr>`;
+    })
+    .join('');
+}
+
+async function loadPublicLeaderboard() {
+  try {
+    const data = await apiFetch('/api/leaderboard');
+    latestLeaderboardData = data;
+    renderLeaderboardTable(activeLeaderboardTab);
+  } catch (err) {
+    const tbody = document.getElementById('leaderboardTableBody');
+    if (tbody) {
+      tbody.innerHTML = `<tr><td colspan="4" class="text-center">${escapeHtml(err.message)}</td></tr>`;
+    }
+  }
+}
+
+document.addEventListener('click', (e) => {
+  const lbBtn = e.target.closest('[data-lb-tab]');
+  if (lbBtn) {
+    renderLeaderboardTable(lbBtn.getAttribute('data-lb-tab'));
+  }
+});

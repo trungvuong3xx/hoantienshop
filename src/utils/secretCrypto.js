@@ -4,6 +4,8 @@ const logger = require('./logger');
 const SENSITIVE_SETTING_KEYS = [
   'shopeeAppSecret',
   'tiktokAppSecret',
+  'tiktokAccessToken',
+  'tiktokCookie',
   'accesstradeApiKey',
   'addlivetagApiKey',
   'postbackToken',
@@ -11,6 +13,13 @@ const SENSITIVE_SETTING_KEYS = [
 ];
 
 const CIPHER_PREFIX = 'enc:v1:';
+
+function settingsCryptoError() {
+  const error = new Error('Không thể giải mã cấu hình. Kiểm tra khóa mã hóa gốc; dữ liệu chưa được ghi đè.');
+  error.code = 'SETTINGS_DECRYPT_FAILED';
+  error.status = 503;
+  return error;
+}
 
 function deriveSettingsAesKey(secretMaterial) {
   const raw = String(secretMaterial || '').trim();
@@ -38,13 +47,13 @@ function decryptSecretValue(storedValue, keyBuffer) {
   }
   if (!Buffer.isBuffer(keyBuffer) || keyBuffer.length !== 32) {
     logger.warning('secretCrypto', 'Missing encryption key while reading encrypted setting');
-    return '';
+    throw settingsCryptoError();
   }
 
   const parts = storedValue.slice(CIPHER_PREFIX.length).split(':');
   if (parts.length !== 3) {
     logger.warning('secretCrypto', 'Malformed encrypted setting payload');
-    return '';
+    throw settingsCryptoError();
   }
 
   try {
@@ -62,7 +71,7 @@ function decryptSecretValue(storedValue, keyBuffer) {
     logger.warning('secretCrypto', 'Failed to decrypt setting value (key rotated or tampered)', {
       error: err.message
     });
-    return '';
+    throw settingsCryptoError();
   }
 }
 

@@ -27,27 +27,7 @@
     "turnstileSecretKey": "",
     "tiktokCookie": ""
   },
-  "users": [
-    {
-      "id": "usr_admin",
-      "code": "TRUNGVUONG3X",
-      "name": "Quản Trị Viên (Chủ Shop)",
-      "phone": "trungvuong3x",
-      "email": "trungvuong3x@hoantiensan.online",
-      "passwordHash": "scrypt$e577945eeef79b24110c723a11142295$410f56f617dfc087dcd49377d0d5ce37da3b92b290f795f4a7b6a8b999b093572fd552321e241a69970a81ccfcc5f3f824bf7ee54d409a5be47499308b851907",
-      "role": "admin",
-      "balanceAvailable": 0,
-      "balancePending": 0,
-      "totalEarned": 0,
-      "totalWithdrawn": 0,
-      "bankName": "",
-      "bankAccount": "",
-      "bankOwner": "",
-      "createdAt": "2026-11-11T03:51:32.662Z",
-      "hasNegativeBalance": false,
-      "tokenVersion": 3
-    }
-  ],
+  "users": [],
   "clicks": [],
   "orders": [],
   "ledger": [],

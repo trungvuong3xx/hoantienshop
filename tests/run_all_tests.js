@@ -10,6 +10,7 @@ const { spawnSync } = require('child_process');
 const path = require('path');
 
 const TEST_SUITES = [
+  'data-preservation.test.js',
   'manual-order-optional-id.test.js',
   'test_runtime_config.js',
   'test_csv_import.js',
@@ -38,7 +39,8 @@ const TEST_SUITES = [
   'test_phase2_cto_upgrades.js',
   'test_phase3_mobile_ux.js',
   'test_phase4_storage_and_security.js',
-  'test_phase5_performance_and_retention.js'
+  'test_phase5_performance_and_retention.js',
+  'test_accesstrade_resilience.js'
 ];
 
 async function runAllTests() {

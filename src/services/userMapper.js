@@ -20,6 +20,11 @@ function mapUserRow(row) { return {
       deletedAt: row.deleted_at ? new Date(row.deleted_at).toISOString() : null,
       deletedByAdminId: row.deleted_by_admin_id || null,
       hasNegativeBalance: Boolean(row.has_negative_balance),
+      customCashbackPercent: row.custom_cashback_percent !== null && row.custom_cashback_percent !== undefined
+        ? Number(row.custom_cashback_percent)
+        : null,
+      totalApprovedSpend: Math.round(Number(row.total_approved_spend || 0)),
+      vipTier: row.vip_tier || 'bronze',
       createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString()
     }; }
 module.exports = { mapUserRow };

@@ -8,6 +8,7 @@
     "dev": "node --watch server.js",
     "test": "node tests/run_all_tests.js",
     "test:postgres": "node tests/postgres.integration.js",
+    "test:rotation": "node tests/settings-rotation.integration.js",
     "lint": "eslint .",
     "check:config": "node scripts/production-preflight.js",
     "check:production": "node scripts/production-smoke.js",

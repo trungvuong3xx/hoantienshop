@@ -28,6 +28,8 @@ function mapOrderRow(row) { return {
     userCashbackAmount: Math.round(Number(row.user_cashback_amount || 0)),
     adminShareAmount: Math.round(Number(row.admin_share_amount || 0)),
     status: row.status || 'pending',
+    merchant: row.merchant || null,
+    rejectReason: row.reject_reason || null,
     createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
     updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : new Date().toISOString()
   }; }

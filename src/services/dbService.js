@@ -305,8 +305,90 @@ function sanitizeUser(user) {
     bankAccount: user.bankAccount || '',
     bankOwner: user.bankOwner || '',
     accountLocked: Boolean(user.accountLocked),
+    customCashbackPercent: user.customCashbackPercent !== null && user.customCashbackPercent !== undefined && Number.isFinite(Number(user.customCashbackPercent))
+      ? Number(user.customCashbackPercent)
+      : null,
+    totalApprovedSpend: Math.max(0, Math.round(Number(user.totalApprovedSpend || 0))),
+    vipTier: user.vipTier || 'bronze',
     createdAt: user.createdAt || ''
   };
+}
+
+const DEFAULT_VIP_TIERS = [
+  { code: 'bronze', name: 'Thành viên Đồng', icon: '🥉', minSpend: 0, cashbackPercent: 70 },
+  { code: 'silver', name: 'Thành viên Bạc', icon: '🥈', minSpend: 2000000, cashbackPercent: 73 },
+  { code: 'gold', name: 'Thành viên Vàng', icon: '🥇', minSpend: 6000000, cashbackPercent: 76 },
+  { code: 'diamond', name: 'Thành viên Kim Cương', icon: '💎', minSpend: 15000000, cashbackPercent: 80 }
+];
+
+let tierUpgradeListener = null;
+function setTierUpgradeListener(fn) {
+  tierUpgradeListener = typeof fn === 'function' ? fn : null;
+}
+
+function getNormalizedVipTiers(settings = {}) {
+  const raw = Array.isArray(settings?.vipTiers) && settings.vipTiers.length > 0
+    ? settings.vipTiers
+    : DEFAULT_VIP_TIERS;
+  const fallbackBase = Number(settings?.cashbackPercent ?? 70);
+  return raw
+    .map((t, idx) => ({
+      code: String(t?.code || DEFAULT_VIP_TIERS[idx]?.code || `tier_${idx}`).trim().toLowerCase(),
+      name: String(t?.name || DEFAULT_VIP_TIERS[idx]?.name || `Hạng ${idx + 1}`).trim(),
+      icon: String(t?.icon || DEFAULT_VIP_TIERS[idx]?.icon || '🏅').trim(),
+      minSpend: Math.max(0, Math.round(Number(t?.minSpend ?? 0))),
+      cashbackPercent: Number.isFinite(Number(t?.cashbackPercent)) && Number(t?.cashbackPercent) >= 0
+        ? Number(t.cashbackPercent)
+        : (Number.isFinite(fallbackBase) && fallbackBase >= 0 ? fallbackBase : 70)
+    }))
+    .sort((a, b) => a.minSpend - b.minSpend);
+}
+
+function resolveVipTier(totalApprovedSpend = 0, settings = {}) {
+  const tiers = getNormalizedVipTiers(settings);
+  if (settings?.vipTiersEnabled === false) {
+    return tiers[0];
+  }
+  const spend = Math.max(0, Math.round(Number(totalApprovedSpend || 0)));
+  let matched = tiers[0];
+  for (const tier of tiers) {
+    if (spend >= tier.minSpend) {
+      matched = tier;
+    }
+  }
+  return matched;
+}
+
+/**
+ * Resolve effective cashback percentage for a user:
+ * 1. User-level customCashbackPercent (Admin Override, >= 0, no artificial cap)
+ * 2. VIP Tier rate (if vipTiersEnabled !== false)
+ * 3. Default global settings.cashbackPercent
+ */
+function resolveUserCashbackRate(user, settings = {}) {
+  if (
+    user &&
+    user.customCashbackPercent !== null &&
+    user.customCashbackPercent !== undefined &&
+    user.customCashbackPercent !== ''
+  ) {
+    const customRate = Number(user.customCashbackPercent);
+    if (Number.isFinite(customRate) && customRate >= 0) {
+      return customRate;
+    }
+  }
+  if (user && settings?.vipTiersEnabled !== false) {
+    const tiers = getNormalizedVipTiers(settings);
+    const byCode = user.vipTier
+      ? tiers.find((t) => t.code === String(user.vipTier).toLowerCase())
+      : null;
+    const tier = byCode || resolveVipTier(user.totalApprovedSpend || 0, settings);
+    if (tier && Number.isFinite(Number(tier.cashbackPercent)) && Number(tier.cashbackPercent) >= 0) {
+      return Number(tier.cashbackPercent);
+    }
+  }
+  const fallback = Number(settings?.cashbackPercent ?? 70);
+  return Number.isFinite(fallback) && fallback >= 0 ? fallback : 70;
 }
 
 // ================= COMMISSION & TAX CALCULATION (10% PIT + CASHBACK SPLIT) =================
@@ -649,14 +731,14 @@ async function runWithStateContext(fn, { incrementalOnly = false } = {}) {
   });
 }
 
-async function performSaveDb(data, expectedVersion) {
+async function performSaveDb(data, expectedVersion, deletedOrders = []) {
   if (!data) return;
 
   // Retain attribution for the entire configured time window.
   data.clicks = cleanExpiredClicks(data.clicks);
   if (pgPool) {
     if (!pgSchemaReady) throw new Error('Postgres schema is not ready');
-    await syncSnapshotToPostgres(data, expectedVersion);
+    await syncSnapshotToPostgres(data, expectedVersion, deletedOrders);
     return;
   }
 
@@ -690,7 +772,9 @@ async function performSaveDb(data, expectedVersion) {
  * Robust serialized save with internal queue error isolation and batch coalescing.
  * If a save fails, the caller receives the error, but the internal queue recovers immediately.
  */
-function saveDb(data = memoryCache) {
+function saveDb(data = memoryCache, { deletedOrders = [] } = {}) {
+  const deletionTargets = structuredClone(deletedOrders);
+  if (deletionTargets.length && !stateContext.getStore()) return Promise.reject(new Error("Explicit deletion requires a request state context"));
   const context = stateContext.getStore();
   if (context) {
     if (context.invalid) return Promise.reject(cacheUnavailableError());
@@ -703,7 +787,7 @@ function saveDb(data = memoryCache) {
           const error = new Error('Dữ liệu đã thay đổi. Vui lòng tải lại và thử lại.');
           error.status = 409; error.code = 'STATE_CONFLICT'; throw error;
         }
-        await performSaveDb(snapshot, expectedVersion);
+        await performSaveDb(snapshot, expectedVersion, deletionTargets);
         if (!pgPool) currentDbVersion++;
         context.version = currentDbVersion;
         const published = structuredClone(snapshot);
@@ -936,6 +1020,24 @@ async function initPostgresIfConfigured() {
           details JSONB,
           created_at TIMESTAMPTZ DEFAULT NOW()
         );
+        CREATE TABLE IF NOT EXISTS notifications (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NULL,
+          type TEXT NOT NULL,
+          title TEXT NOT NULL,
+          message TEXT NOT NULL,
+          dedupe_key TEXT UNIQUE,
+          metadata JSONB DEFAULT '{}'::jsonb,
+          is_read BOOLEAN DEFAULT FALSE,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_notifications_user_created ON notifications(user_id, created_at DESC);
+        CREATE TABLE IF NOT EXISTS notification_reads (
+          notification_id TEXT NOT NULL,
+          user_id TEXT NOT NULL,
+          read_at TIMESTAMPTZ DEFAULT NOW(),
+          PRIMARY KEY (notification_id, user_id)
+        );
 
         -- Safe idempotent schema migrations for OCC, orders, users, withdrawals & audit_logs
         ALTER TABLE hoantienshop_state ADD COLUMN IF NOT EXISTS version BIGINT DEFAULT 1;
@@ -944,10 +1046,18 @@ async function initPostgresIfConfigured() {
         ALTER TABLE withdrawals ADD COLUMN IF NOT EXISTS idempotency_key TEXT;
         ALTER TABLE withdrawals ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ;
         CREATE UNIQUE INDEX IF NOT EXISTS withdrawals_user_idempotency ON withdrawals(user_id, idempotency_key) WHERE idempotency_key IS NOT NULL;
+        DO $$ BEGIN
+          IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'withdrawals_amount_positive') THEN
+            ALTER TABLE withdrawals ADD CONSTRAINT withdrawals_amount_positive CHECK (amount > 0) NOT VALID;
+          END IF;
+        END $$;
         ALTER TABLE users ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN DEFAULT FALSE;
         ALTER TABLE users ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
         ALTER TABLE users ADD COLUMN IF NOT EXISTS deleted_by_admin_id TEXT;
         ALTER TABLE users ADD COLUMN IF NOT EXISTS has_negative_balance BOOLEAN DEFAULT FALSE;
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS custom_cashback_percent NUMERIC NULL;
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS total_approved_spend BIGINT DEFAULT 0;
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS vip_tier TEXT DEFAULT 'bronze';
         UPDATE orders SET platform = 'shopee' WHERE platform IS NULL OR platform = '';
         ALTER TABLE orders ALTER COLUMN platform SET DEFAULT 'shopee';
         ALTER TABLE orders ALTER COLUMN platform SET NOT NULL;
@@ -970,6 +1080,8 @@ async function initPostgresIfConfigured() {
         ALTER TABLE orders ADD COLUMN IF NOT EXISTS status_source TEXT;
         ALTER TABLE orders ADD COLUMN IF NOT EXISTS event_time BIGINT DEFAULT 0;
         ALTER TABLE orders ADD COLUMN IF NOT EXISTS clawback_at TIMESTAMPTZ;
+        ALTER TABLE orders ADD COLUMN IF NOT EXISTS merchant TEXT;
+        ALTER TABLE orders ADD COLUMN IF NOT EXISTS reject_reason TEXT;
 
         -- Phase 4 Performance Composite Indexes (Idempotent)
         CREATE INDEX IF NOT EXISTS idx_orders_user_status_created ON orders(user_id, status, created_at DESC);
@@ -982,6 +1094,10 @@ async function initPostgresIfConfigured() {
 
       // Relational-authoritative state synchronization from Postgres
       const loadedState = await loadAuthoritativeStateFromPostgres(client);
+      // Bootstrap/fallback users must exist in SQL before marking them committed.
+      const storedUsers = await client.query('SELECT id FROM users');
+      const storedUserIds = new Set(storedUsers.rows.map(row => row.id));
+      await batchSyncUsers(client, loadedState.users.filter(user => !storedUserIds.has(user.id)));
       memoryCache = loadedState;
       pgSchemaReady = true;
 
@@ -1263,7 +1379,7 @@ async function batchSyncUsers(client, users) {
     for (const u of chunk) {
       if (!u || !u.id) continue;
       valuePlaceholders.push(
-        `($${pIdx}, $${pIdx + 1}, $${pIdx + 2}, $${pIdx + 3}, $${pIdx + 4}, $${pIdx + 5}, $${pIdx + 6}, $${pIdx + 7}, $${pIdx + 8}, $${pIdx + 9}, $${pIdx + 10}, $${pIdx + 11}, $${pIdx + 12}, $${pIdx + 13}, $${pIdx + 14}, $${pIdx + 15}, $${pIdx + 16}, $${pIdx + 17}, $${pIdx + 18}, $${pIdx + 19}, $${pIdx + 20})`
+        `($${pIdx}, $${pIdx + 1}, $${pIdx + 2}, $${pIdx + 3}, $${pIdx + 4}, $${pIdx + 5}, $${pIdx + 6}, $${pIdx + 7}, $${pIdx + 8}, $${pIdx + 9}, $${pIdx + 10}, $${pIdx + 11}, $${pIdx + 12}, $${pIdx + 13}, $${pIdx + 14}, $${pIdx + 15}, $${pIdx + 16}, $${pIdx + 17}, $${pIdx + 18}, $${pIdx + 19}, $${pIdx + 20}, $${pIdx + 21}, $${pIdx + 22}, $${pIdx + 23}, $${pIdx + 24})`
       );
       params.push(
         u.id,
@@ -1286,9 +1402,15 @@ async function batchSyncUsers(client, users) {
         Boolean(u.isDeleted),
         u.deletedAt ? new Date(u.deletedAt) : null,
         u.deletedByAdminId || null,
-        Boolean(u.hasNegativeBalance)
+        Boolean(u.hasNegativeBalance),
+        u.customCashbackPercent !== null && u.customCashbackPercent !== undefined && Number.isFinite(Number(u.customCashbackPercent))
+          ? Number(u.customCashbackPercent)
+          : null,
+        Math.max(0, Math.round(Number(u.totalApprovedSpend || 0))),
+        String(u.vipTier || 'bronze'),
+        u.createdAt ? new Date(u.createdAt) : new Date()
       );
-      pIdx += 21;
+      pIdx += 25;
     }
 
     if (valuePlaceholders.length === 0) continue;
@@ -1298,7 +1420,8 @@ async function batchSyncUsers(client, users) {
         id, code, name, phone, email, password_hash, role, token_version,
         referred_by, balance_available, balance_pending, total_earned,
         total_withdrawn, bank_name, bank_account, bank_owner, account_locked,
-        is_deleted, deleted_at, deleted_by_admin_id, has_negative_balance
+        is_deleted, deleted_at, deleted_by_admin_id, has_negative_balance, custom_cashback_percent,
+        total_approved_spend, vip_tier, created_at
       )
       VALUES ${valuePlaceholders.join(', ')}
       ON CONFLICT (id) DO UPDATE SET
@@ -1321,24 +1444,17 @@ async function batchSyncUsers(client, users) {
         is_deleted = EXCLUDED.is_deleted,
         deleted_at = EXCLUDED.deleted_at,
         deleted_by_admin_id = EXCLUDED.deleted_by_admin_id,
-        has_negative_balance = EXCLUDED.has_negative_balance
+        has_negative_balance = EXCLUDED.has_negative_balance,
+        custom_cashback_percent = EXCLUDED.custom_cashback_percent,
+        total_approved_spend = EXCLUDED.total_approved_spend,
+        vip_tier = EXCLUDED.vip_tier
     `;
     await client.query(query, params);
   }
 }
 
-async function batchSyncWithdrawals(client, withdrawals, { skipPrune = false, deletedIds = null } = {}) {
+async function batchSyncWithdrawals(client, withdrawals) {
   if (!Array.isArray(withdrawals)) return;
-  if (!skipPrune) {
-    const activeIds = withdrawals.map((w) => w && w.id).filter(Boolean);
-    if (activeIds.length === 0) {
-      await client.query('DELETE FROM withdrawals WHERE archived_at IS NULL');
-      return;
-    }
-    await client.query('DELETE FROM withdrawals WHERE archived_at IS NULL AND NOT (id = ANY($1::text[]))', [activeIds]);
-  } else if (Array.isArray(deletedIds) && deletedIds.length > 0) {
-    await client.query('DELETE FROM withdrawals WHERE archived_at IS NULL AND id = ANY($1::text[])', [deletedIds]);
-  }
   if (withdrawals.length === 0) return;
 
   const chunks = chunkArray(withdrawals, 30);
@@ -1394,21 +1510,8 @@ async function batchSyncWithdrawals(client, withdrawals, { skipPrune = false, de
   }
 }
 
-async function batchSyncOrders(client, orders, { skipPrune = false, deletedOrders = null } = {}) {
+async function batchSyncOrders(client, orders) {
   if (!Array.isArray(orders)) return;
-  if (!skipPrune) {
-    const activeOrderSns = orders.map((o) => o && o.orderSn).filter(Boolean);
-    if (activeOrderSns.length === 0) {
-      await client.query('DELETE FROM orders');
-      return;
-    }
-    await client.query(`DELETE FROM orders o WHERE NOT EXISTS (SELECT 1 FROM jsonb_to_recordset($1::jsonb) AS k(platform text, sn text) WHERE k.platform=o.platform AND k.sn=o.order_sn)`, [JSON.stringify(orders.filter(o => o?.orderSn).map(o => ({ platform: o.platform || 'shopee', sn: o.orderSn })))]);
-  } else if (Array.isArray(deletedOrders) && deletedOrders.length > 0) {
-    await client.query(
-      `DELETE FROM orders o USING jsonb_to_recordset($1::jsonb) AS k(platform text, sn text) WHERE o.platform = k.platform AND o.order_sn = k.sn`,
-      [JSON.stringify(deletedOrders)]
-    );
-  }
   if (orders.length === 0) return;
 
   const chunks = chunkArray(orders, 25);
@@ -1420,7 +1523,7 @@ async function batchSyncOrders(client, orders, { skipPrune = false, deletedOrder
     for (const o of chunk) {
       if (!o || !o.orderSn) continue;
       valuePlaceholders.push(
-        `($${pIdx}, $${pIdx + 1}, $${pIdx + 2}, $${pIdx + 3}, $${pIdx + 4}, $${pIdx + 5}, $${pIdx + 6}, $${pIdx + 7}, $${pIdx + 8}, $${pIdx + 9}, $${pIdx + 10}, $${pIdx + 11}, $${pIdx + 12}, $${pIdx + 13}, $${pIdx + 14}, $${pIdx + 15}, $${pIdx + 16}, $${pIdx + 17}, $${pIdx + 18}, $${pIdx + 19}, $${pIdx + 20}, $${pIdx + 21}, $${pIdx + 22}, $${pIdx + 23}, $${pIdx + 24}, $${pIdx + 25}, $${pIdx + 26}, $${pIdx + 27})`
+        `($${pIdx}, $${pIdx + 1}, $${pIdx + 2}, $${pIdx + 3}, $${pIdx + 4}, $${pIdx + 5}, $${pIdx + 6}, $${pIdx + 7}, $${pIdx + 8}, $${pIdx + 9}, $${pIdx + 10}, $${pIdx + 11}, $${pIdx + 12}, $${pIdx + 13}, $${pIdx + 14}, $${pIdx + 15}, $${pIdx + 16}, $${pIdx + 17}, $${pIdx + 18}, $${pIdx + 19}, $${pIdx + 20}, $${pIdx + 21}, $${pIdx + 22}, $${pIdx + 23}, $${pIdx + 24}, $${pIdx + 25}, $${pIdx + 26}, $${pIdx + 27}, $${pIdx + 28}, $${pIdx + 29})`
       );
       params.push(
         o.orderSn,
@@ -1450,9 +1553,11 @@ async function batchSyncOrders(client, orders, { skipPrune = false, deletedOrder
         o.updatedAt ? new Date(o.updatedAt) : new Date(),
         Boolean(o.claimVerified),
         Boolean(o.claimRejected),
-        o.claimRejectReason || null
+        o.claimRejectReason || null,
+        o.merchant || null,
+        o.rejectReason || null
       );
-      pIdx += 28;
+      pIdx += 30;
     }
 
     if (valuePlaceholders.length === 0) continue;
@@ -1464,7 +1569,8 @@ async function batchSyncOrders(client, orders, { skipPrune = false, deletedOrder
         user_cashback_amount, admin_share_amount, status,
         cashback_rate, locked_cashback_rate, locked_tax_rate, has_custom_cashback,
         claim_pending, claimed_by_user_id, submitted_by_user_id, status_source,
-        event_time, clawback_at, created_at, updated_at, claim_verified, claim_rejected, claim_reject_reason
+        event_time, clawback_at, created_at, updated_at, claim_verified, claim_rejected, claim_reject_reason,
+        merchant, reject_reason
       )
       VALUES ${valuePlaceholders.join(', ')}
       ON CONFLICT (platform, order_sn) DO UPDATE SET
@@ -1517,6 +1623,8 @@ async function batchSyncOrders(client, orders, { skipPrune = false, deletedOrder
         END,
         event_time = GREATEST(COALESCE(orders.event_time, 0), COALESCE(EXCLUDED.event_time, 0)),
         clawback_at = COALESCE(orders.clawback_at, EXCLUDED.clawback_at),
+        merchant = COALESCE(NULLIF(EXCLUDED.merchant, ''), orders.merchant),
+        reject_reason = COALESCE(NULLIF(EXCLUDED.reject_reason, ''), orders.reject_reason),
         updated_at = NOW()
     `;
     await client.query(query, params);
@@ -1687,9 +1795,10 @@ async function persistOrderToPostgres(order, customClient = null) {
         user_cashback_amount, admin_share_amount, status,
         cashback_rate, locked_cashback_rate, locked_tax_rate, has_custom_cashback,
         claim_pending, claimed_by_user_id, submitted_by_user_id, status_source,
-        event_time, clawback_at, created_at, updated_at, claim_verified, claim_rejected, claim_reject_reason
+        event_time, clawback_at, created_at, updated_at, claim_verified, claim_rejected, claim_reject_reason,
+        merchant, reject_reason
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30)
       ON CONFLICT (platform, order_sn) DO UPDATE SET
         platform = COALESCE(NULLIF(EXCLUDED.platform, ''), orders.platform),
         product_name = CASE
@@ -1740,6 +1849,8 @@ async function persistOrderToPostgres(order, customClient = null) {
         END,
         event_time = GREATEST(COALESCE(orders.event_time, 0), COALESCE(EXCLUDED.event_time, 0)),
         clawback_at = COALESCE(orders.clawback_at, EXCLUDED.clawback_at),
+        merchant = COALESCE(NULLIF(EXCLUDED.merchant, ''), orders.merchant),
+        reject_reason = COALESCE(NULLIF(EXCLUDED.reject_reason, ''), orders.reject_reason),
         updated_at = NOW()
       RETURNING *;
     `;
@@ -1771,7 +1882,9 @@ async function persistOrderToPostgres(order, customClient = null) {
       order.updatedAt ? new Date(order.updatedAt) : new Date(),
       Boolean(order.claimVerified),
       Boolean(order.claimRejected),
-      order.claimRejectReason || null
+      order.claimRejectReason || null,
+      order.merchant || null,
+      order.rejectReason || null
     ];
     const res = await client.query(query, params);
     return res.rows[0];
@@ -1789,9 +1902,10 @@ async function persistUserToPostgres(user, customClient = null) {
         id, code, name, phone, email, password_hash, role, token_version,
         referred_by, balance_available, balance_pending, total_earned,
         total_withdrawn, bank_name, bank_account, bank_owner, account_locked,
-        is_deleted, deleted_at, deleted_by_admin_id, has_negative_balance
+        is_deleted, deleted_at, deleted_by_admin_id, has_negative_balance, custom_cashback_percent,
+        total_approved_spend, vip_tier, created_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)
       ON CONFLICT (id) DO UPDATE SET
         code = EXCLUDED.code,
         name = EXCLUDED.name,
@@ -1812,7 +1926,10 @@ async function persistUserToPostgres(user, customClient = null) {
         is_deleted = EXCLUDED.is_deleted,
         deleted_at = EXCLUDED.deleted_at,
         deleted_by_admin_id = EXCLUDED.deleted_by_admin_id,
-        has_negative_balance = EXCLUDED.has_negative_balance
+        has_negative_balance = EXCLUDED.has_negative_balance,
+        custom_cashback_percent = EXCLUDED.custom_cashback_percent,
+        total_approved_spend = EXCLUDED.total_approved_spend,
+        vip_tier = EXCLUDED.vip_tier
       RETURNING *;
     `;
     const params = [
@@ -1836,7 +1953,13 @@ async function persistUserToPostgres(user, customClient = null) {
       Boolean(user.isDeleted),
       user.deletedAt ? new Date(user.deletedAt) : null,
       user.deletedByAdminId || null,
-      Boolean(user.hasNegativeBalance)
+      Boolean(user.hasNegativeBalance),
+      user.customCashbackPercent !== null && user.customCashbackPercent !== undefined && Number.isFinite(Number(user.customCashbackPercent))
+        ? Number(user.customCashbackPercent)
+        : null,
+      Math.max(0, Math.round(Number(user.totalApprovedSpend || 0))),
+      String(user.vipTier || 'bronze'),
+      user.createdAt ? new Date(user.createdAt) : new Date()
     ];
     const res = await client.query(query, params);
     return res.rows[0];
@@ -1922,7 +2045,7 @@ async function persistWithdrawalToPostgres(withdrawal, customClient = null) {
  * Serializes batches and rejects stale versions. The caller must reload and retry
  * the complete business operation; replaying a fresh snapshot would lose its intent.
  */
-async function syncSnapshotToPostgres(data, expectedVersion = currentDbVersion) {
+async function syncSnapshotToPostgres(data, expectedVersion = currentDbVersion, deletedOrders = []) {
   if (!pgPool || !pgSchemaReady) return;
   const client = await pgPool.connect();
   try {
@@ -1960,46 +2083,18 @@ async function syncSnapshotToPostgres(data, expectedVersion = currentDbVersion) 
       : data.users;
     await batchSyncUsers(client, usersToSync);
 
-    // 3. Sync dirty withdrawals & targeted deletions with protected terminal statuses (paid/rejected)
-    if (baseFp) {
-      const currentWdIds = new Set((data.withdrawals || []).map((w) => w?.id).filter(Boolean));
-      const deletedWdIds = [...baseFp.withdrawals.keys()].filter((id) => !currentWdIds.has(id));
-      const changedWithdrawals = (data.withdrawals || []).filter(
-        (w) => w?.id && baseFp.withdrawals.get(w.id) !== JSON.stringify(w)
-      );
-      await batchSyncWithdrawals(client, changedWithdrawals, {
-        skipPrune: true,
-        deletedIds: deletedWdIds
-      });
-    } else {
-      await batchSyncWithdrawals(client, data.withdrawals);
-    }
-
-    // 4. Sync dirty orders & targeted deletions preserving custom cashback & attribution
-    if (baseFp) {
-      const currentOrdKeys = new Set();
-      const changedOrders = [];
-      for (const o of data.orders || []) {
-        if (!o?.orderSn) continue;
-        const k = `${o.platform || 'shopee'}:${o.orderSn}`;
-        currentOrdKeys.add(k);
-        if (baseFp.orders.get(k) !== JSON.stringify(o)) {
-          changedOrders.push(o);
-        }
+    // Missing records never authorize deletion. Only the explicit admin operation can delete orders.
+    await batchSyncWithdrawals(client, baseFp
+      ? (data.withdrawals || []).filter(w => w?.id && baseFp.withdrawals.get(w.id) !== JSON.stringify(w))
+      : data.withdrawals);
+    await batchSyncOrders(client, baseFp
+      ? (data.orders || []).filter(o => o?.orderSn && baseFp.orders.get(`${o.platform || 'shopee'}:${o.orderSn}`) !== JSON.stringify(o))
+      : data.orders);
+    for (const target of deletedOrders) {
+      if (!target.sn || !target.platform || (data.orders || []).some(o => o.orderSn === target.sn && (o.platform || 'shopee') === target.platform)) {
+        throw new Error('Invalid explicit order deletion');
       }
-      const deletedOrders = [];
-      for (const oldKey of baseFp.orders.keys()) {
-        if (!currentOrdKeys.has(oldKey)) {
-          const sep = oldKey.indexOf(':');
-          deletedOrders.push({ platform: oldKey.slice(0, sep), sn: oldKey.slice(sep + 1) });
-        }
-      }
-      await batchSyncOrders(client, changedOrders, {
-        skipPrune: true,
-        deletedOrders
-      });
-    } else {
-      await batchSyncOrders(client, data.orders);
+      await client.query('DELETE FROM orders WHERE platform=$1 AND order_sn=$2', [target.platform, target.sn]);
     }
 
     // 5. Sync new clicks only (append-only)
@@ -2431,6 +2526,36 @@ function recalculateUserWallet(userId, { persist = false } = {}) {
   user.totalWithdrawn = Math.max(0, Math.round(Number.isFinite(paidWithdrawn) ? paidWithdrawn : 0));
   user.balanceAvailable = Math.round(Number.isFinite(ledgerSum) ? ledgerSum : 0);
   user.hasNegativeBalance = user.balanceAvailable < 0;
+
+  // 5. Recompute VIP Tier from approved order spend (handles clawbacks automatically)
+  const approvedSpend = Math.max(
+    0,
+    Math.round(
+      userOrders
+        .filter((o) => o.status === 'approved')
+        .reduce((sum, o) => sum + (Number.isFinite(Number(o.orderAmount)) ? Number(o.orderAmount) : 0), 0)
+    )
+  );
+  const tiers = getNormalizedVipTiers(db.settings);
+  const prevTierCode = String(user.vipTier || tiers[0].code).toLowerCase();
+  const prevTierIdx = Math.max(0, tiers.findIndex((t) => t.code === prevTierCode));
+  const nextTier = resolveVipTier(approvedSpend, db.settings);
+  const nextTierIdx = Math.max(0, tiers.findIndex((t) => t.code === nextTier.code));
+
+  user.totalApprovedSpend = approvedSpend;
+  user.vipTier = nextTier.code;
+
+  if (
+    db.settings?.vipTiersEnabled !== false &&
+    nextTierIdx > prevTierIdx &&
+    tierUpgradeListener
+  ) {
+    try {
+      tierUpgradeListener(user, nextTier);
+    } catch (err) {
+      logger.warning('recalculateUserWallet', 'Tier upgrade listener error', { error: err.message });
+    }
+  }
 
   if (persist) {
     saveDb(db).catch((err) => {
@@ -3096,5 +3221,10 @@ module.exports = {
   normalizePhoneNumber,
   getPgPool,
   appendClickRecords,
-  findClickById
+  findClickById,
+  resolveUserCashbackRate,
+  DEFAULT_VIP_TIERS,
+  getNormalizedVipTiers,
+  resolveVipTier,
+  setTierUpgradeListener
 };

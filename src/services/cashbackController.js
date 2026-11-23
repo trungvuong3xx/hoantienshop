@@ -35,8 +35,18 @@ const {
   withUserLock,
   inspectTestArtifacts,
   recordAuditLog,
-  normalizePhoneNumber
+  normalizePhoneNumber,
+  resolveUserCashbackRate,
+  getNormalizedVipTiers,
+  resolveVipTier,
+  setTierUpgradeListener
 } = require('./dbService');
+const {
+  createNotification,
+  getUnreadNotificationCount,
+  getUserNotifications,
+  markNotificationsRead
+} = require('./notificationService');
 const { convertTextLinks } = require('./converterService');
 const {
   fetchShopeeConversionReport,
@@ -231,7 +241,9 @@ function upsertNetworkOrder(db, {
   productName,
   eventTime,
   purchaseTime,
-  commissionEstimated
+  commissionEstimated,
+  merchant,
+  rejectReason
 }) {
   migrateLegacyOrderIdentity(db);
   const cleanSn = String(orderSn || '').trim().toUpperCase();
@@ -268,7 +280,7 @@ function upsertNetworkOrder(db, {
 
   const cbRateToUse = existing?.lockedCashbackRate !== undefined && existing?.lockedCashbackRate !== null
     ? existing.lockedCashbackRate
-    : db.settings.cashbackPercent;
+    : resolveUserCashbackRate(matchedUser, db.settings);
   const taxRateToUse = existing?.lockedTaxRate !== undefined && existing?.lockedTaxRate !== null
     ? existing.lockedTaxRate
     : db.settings.taxDeductPercent;
@@ -389,6 +401,8 @@ function upsertNetworkOrder(db, {
         existing.adminShareAmount = Math.max(0, split.netCommission - Number(existing.userCashbackAmount || 0));
       }
       if (orderAmount != null && Number.isFinite(Number(orderAmount)) && Number(orderAmount) >= 0) existing.orderAmount = Number(orderAmount);
+      if (merchant && !existing.merchant) existing.merchant = String(merchant).trim().slice(0, 100);
+      if (rejectReason) existing.rejectReason = String(rejectReason).trim().slice(0, 500);
       if (incomingEventTime > 0) {
         existing.eventTime = incomingEventTime;
       }
@@ -396,6 +410,7 @@ function upsertNetworkOrder(db, {
       if (targetUserId) recalculateUserWallet(targetUserId, { persist: false });
 
       existing.updatedAt = new Date().toISOString();
+      notifyOrderEvent(existing, 'cancelled');
       logger.logLeave('upsertNetworkOrder', {
         orderSn: cleanSn,
         status: existing.status,
@@ -436,6 +451,13 @@ function upsertNetworkOrder(db, {
     if (productName && (!existing.productName || existing.productName.startsWith('Đơn'))) {
       existing.productName = String(productName).slice(0, 150);
     }
+    if (merchant && !existing.merchant) {
+      existing.merchant = String(merchant).trim().slice(0, 100);
+    }
+    if (rejectReason) {
+      existing.rejectReason = String(rejectReason).trim().slice(0, 500);
+    }
+    const prevStatus = existing.status;
     if (status && existing.status !== status) {
       existing.status = status;
       existing.statusUpdatedAt = new Date().toISOString();
@@ -470,6 +492,9 @@ function upsertNetworkOrder(db, {
       existing.claimPending = true;
     }
     existing.updatedAt = new Date().toISOString();
+    if (existing.userId && prevStatus !== existing.status && (existing.status === 'approved' || existing.status === 'cancelled')) {
+      notifyOrderEvent(existing, existing.status);
+    }
     logger.logLeave('upsertNetworkOrder', {
       orderSn: cleanSn,
       status: existing.status,
@@ -500,6 +525,8 @@ function upsertNetworkOrder(db, {
     userCashbackAmount: split.userCashbackAmount,
     adminShareAmount: split.adminShareAmount,
     status,
+    merchant: merchant ? String(merchant).trim().slice(0, 100) : null,
+    rejectReason: rejectReason ? String(rejectReason).trim().slice(0, 500) : null,
     hasCustomCashback: false,
     commissionEstimated: Boolean(commissionEstimated),
     eventTime: incomingEventTime || null,
@@ -508,12 +535,80 @@ function upsertNetworkOrder(db, {
     updatedAt: new Date().toISOString()
   };
   db.orders.unshift(created);
+  if (created.userId) {
+    const initialEvt =
+      created.status === 'approved'
+        ? 'approved'
+        : created.status === 'cancelled'
+          ? 'cancelled'
+          : 'recorded';
+    notifyOrderEvent(created, initialEvt);
+  }
   logger.logLeave('upsertNetworkOrder', {
     orderSn: cleanSn,
     created: true,
     status: created.status
   });
   return created;
+}
+
+function notifyOrderEvent(order, eventType) {
+  if (!order || !order.userId) return;
+  const plat = order.platform === 'tiktok' ? 'TikTok' : 'Shopee';
+  const cbText = `${Math.round(Number(order.userCashbackAmount || 0)).toLocaleString('vi-VN')}đ`;
+  const amtText = `${Math.round(Number(order.orderAmount || 0)).toLocaleString('vi-VN')}đ`;
+  let type = 'order_recorded';
+  let title = `Đơn ${plat} #${order.orderSn} đã được ghi nhận`;
+  let message = `Đơn hàng trị giá ${amtText} đang chờ đối soát (tạm tính hoàn ${cbText}).`;
+  let dedupeKey = `order_recorded:${order.platform}:${order.orderSn}`;
+
+  if (eventType === 'approved') {
+    type = 'order_approved';
+    title = `Đơn ${plat} #${order.orderSn} đã được duyệt!`;
+    message = `Hoàn tiền +${cbText} đã được cộng vào số dư khả dụng của bạn.`;
+    dedupeKey = `order_approved:${order.platform}:${order.orderSn}`;
+  } else if (eventType === 'cancelled') {
+    type = 'order_cancelled';
+    title = `Đơn ${plat} #${order.orderSn} đã bị hủy`;
+    message = 'Đơn hàng bị hủy hoặc đổi trả nên không phát sinh hoàn tiền.';
+    dedupeKey = `order_cancelled:${order.platform}:${order.orderSn}`;
+  }
+
+  void createNotification({
+    userId: order.userId,
+    type,
+    title,
+    message,
+    dedupeKey,
+    metadata: { orderSn: order.orderSn, platform: order.platform, amount: Number(order.userCashbackAmount || 0) }
+  }).catch((err) => {
+    logger.warning('notifyOrderEvent', 'Failed to create order notification', { error: err.message });
+  });
+}
+
+function notifyWithdrawalEvent(wd, status) {
+  if (!wd || !wd.userId) return;
+  const amtText = `${Math.round(Number(wd.amount || 0)).toLocaleString('vi-VN')}đ`;
+  const isPaid = status === 'paid';
+  const type = isPaid ? 'withdrawal_paid' : 'withdrawal_rejected';
+  const title = isPaid
+    ? `Rút tiền #${wd.id} thành công!`
+    : `Yêu cầu rút tiền #${wd.id} bị từ chối`;
+  const message = isPaid
+    ? `Số tiền ${amtText} đã được chuyển khoản về ${wd.bankName || 'ngân hàng của bạn'}.`
+    : `Yêu cầu rút ${amtText} đã bị từ chối và tiền đã được hoàn lại vào số dư khả dụng.`;
+  const dedupeKey = `${type}:${wd.id}`;
+
+  void createNotification({
+    userId: wd.userId,
+    type,
+    title,
+    message,
+    dedupeKey,
+    metadata: { withdrawalId: wd.id, amount: Number(wd.amount || 0), status }
+  }).catch((err) => {
+    logger.warning('notifyWithdrawalEvent', 'Failed to create withdrawal notification', { error: err.message });
+  });
 }
 
 /**
@@ -578,16 +673,15 @@ async function runAccessTradeAutoSync() {
   }
 
   const rows = await fetchAccessTradeOrders(apiKey, 30);
-  for (const row of rows) {
-    if (row.status == null && row.order_status == null && row.approval_status == null) accessTradeAggregateStatus(row);
-  }
   let syncedCount = 0;
+  let skippedCount = 0;
   const affectedUsers = new Set();
 
   for (const row of rows) {
     if (!row || typeof row !== 'object') continue;
+    let orderSn = '';
     try {
-      const orderSn = String(
+      orderSn = String(
         row.order_id || row.conversion_id || row.transaction_id || ''
       )
         .trim()
@@ -625,20 +719,26 @@ async function runAccessTradeAutoSync() {
         platform,
         productName,
         eventTime: row.update_time,
-        purchaseTime: row.sales_time
+        purchaseTime: row.sales_time,
+        merchant: row.merchant || null,
+        rejectReason: row.reason_rejected || row.reason_reject || null
       });
       if (syncedOrd?.userId) affectedUsers.add(syncedOrd.userId);
       if (syncedOrd?.userCode) affectedUsers.add(syncedOrd.userCode);
       syncedCount++;
     } catch (rowErr) {
-      throw rowErr;
+      skippedCount++;
+      logger.warning('runAccessTradeAutoSync', 'Skipped row during AccessTrade sync', {
+        orderSn: orderSn || 'unknown',
+        error: rowErr.message
+      });
     }
   }
 
   recalculateAffectedWallets(affectedUsers, { persist: false });
   await saveDb(db);
-  logger.logLeave('runAccessTradeAutoSync', { syncedCount });
-  return { syncedCount };
+  logger.logLeave('runAccessTradeAutoSync', { syncedCount, skippedCount });
+  return { syncedCount, skippedCount };
 }
 
 /**
@@ -742,6 +842,20 @@ function triggerLazyAutoSyncIfNeeded() {
 }
 
 function registerCashbackRoutes(app) {
+  setTierUpgradeListener((user, newTier) => {
+    if (!user || !user.id || !newTier) return;
+    void createNotification({
+      userId: user.id,
+      type: 'tier_upgrade',
+      title: `Chúc mừng bạn đã lên hạng ${newTier.icon || '🏆'} ${newTier.name}!`,
+      message: `Tỷ lệ hoàn tiền theo hạng của bạn hiện là ${newTier.cashbackPercent}% cho các đơn hàng mới.`,
+      dedupeKey: `tier_up:${user.id}:${newTier.code}`,
+      metadata: { tierCode: newTier.code, cashbackPercent: newTier.cashbackPercent }
+    }).catch((err) => {
+      logger.warning('tierUpgradeListener', 'Failed to send tier upgrade notification', { error: err.message });
+    });
+  });
+
   try {
     const startupDb = ensureDbLoaded();
     migrateZaloSettings(startupDb);
@@ -773,6 +887,28 @@ function registerCashbackRoutes(app) {
     keyPrefix: 'withdraw',
     failClosed: true
   });
+  const notifLimiter = createRateLimiter({
+    windowMs: 60000,
+    max: 60,
+    keyPrefix: 'notif',
+    failClosed: false,
+    keyGenerator(req) {
+      const user = getAuthUser(req);
+      return user ? `user:${user.id}` : `ip:${getClientIp(req)}`;
+    }
+  });
+  const leaderboardLimiter = createRateLimiter({
+    windowMs: 60000,
+    max: 30,
+    keyPrefix: 'leaderboard',
+    failClosed: false
+  });
+  const adminBroadcastLimiter = createRateLimiter({
+    windowMs: 60000,
+    max: 10,
+    keyPrefix: 'admin-broadcast',
+    failClosed: false
+  });
 
   // Ensure Postgres state is initialized on first request if DATABASE_URL is set
   app.use(async (req, res, next) => {
@@ -788,7 +924,7 @@ function registerCashbackRoutes(app) {
       const activeDb = ensureDbLoaded();
       migrateZaloSettings(activeDb);
       next();
-      }, { incrementalOnly: Boolean(getPgPool()) && (req.path.startsWith('/go/') || ['/api/convert', '/api/preview', '/api/settings', '/api/public-config'].includes(req.path) || !req.path.startsWith('/api/')) });
+      }, { incrementalOnly: Boolean(getPgPool()) && (req.path.startsWith('/go/') || ['/api/convert', '/api/preview', '/api/settings', '/api/public-config', '/api/notifications', '/api/leaderboard'].includes(req.path) || !req.path.startsWith('/api/')) });
     } catch (err) {
       logger.error('initMiddleware', 'Postgres startup error', { error: err.message });
       if (process.env.DATABASE_URL || process.env.POSTGRES_URL) {
@@ -929,7 +1065,8 @@ function registerCashbackRoutes(app) {
       const token = createToken(newUser);
       setAuthCookie(res, token);
       logger.logLeave('POST /api/auth/register', { userCode: newUser.code });
-      return res.json({ token, user: sanitizeUser(newUser) });
+      const isBrowserXhr = Boolean(req.headers['x-requested-with']);
+      return res.json(isBrowserXhr ? { user: sanitizeUser(newUser) } : { token, user: sanitizeUser(newUser) });
     } catch (err) {
       logger.error('POST /api/auth/register', 'Lỗi đăng ký tài khoản', { error: err.message });
       next(err);
@@ -997,7 +1134,8 @@ function registerCashbackRoutes(app) {
       const token = createToken(user);
       setAuthCookie(res, token);
       logger.logLeave('POST /api/auth/login', { userCode: user.code, role: user.role });
-      return res.json({ token, user: sanitizeUser(user) });
+      const isBrowserXhr = Boolean(req.headers['x-requested-with']);
+      return res.json(isBrowserXhr ? { user: sanitizeUser(user) } : { token, user: sanitizeUser(user) });
     } catch (err) {
       logger.error('POST /api/auth/login', 'Lỗi đăng nhập', { error: err.message });
       next(err);
@@ -1067,10 +1205,28 @@ function registerCashbackRoutes(app) {
       (u) => u.referredBy && String(u.referredBy).toUpperCase() === userCodeUpper && u.id !== user.id
     ).length;
     const referralBountyAmount = Math.max(0, Math.round(Number(db.settings?.referralBountyAmount ?? 10000)));
+    const unreadNotificationCount = await getUnreadNotificationCount(user.id);
+    const effectiveCashbackPercent = resolveUserCashbackRate(user, db.settings);
+    const vipTiers = getNormalizedVipTiers(db.settings);
+    const vipEnabled = db.settings?.vipTiersEnabled !== false;
+    const currentTier = resolveVipTier(user.totalApprovedSpend || 0, db.settings);
+    const currentTierIdx = vipTiers.findIndex((t) => t.code === currentTier.code);
+    const nextTier = currentTierIdx >= 0 && currentTierIdx < vipTiers.length - 1
+      ? vipTiers[currentTierIdx + 1]
+      : null;
 
-    logger.logLeave('GET /api/user/me', { userCode: user.code, referralCount, referralBountyAmount });
+    logger.logLeave('GET /api/user/me', { userCode: user.code, referralCount, referralBountyAmount, unreadNotificationCount });
     return res.json({
       user: sanitizeUser(user),
+      effectiveCashbackPercent,
+      unreadNotificationCount,
+      vipInfo: {
+        enabled: vipEnabled,
+        currentTier,
+        nextTier,
+        totalApprovedSpend: Number(user.totalApprovedSpend || 0),
+        tiers: vipTiers
+      },
       orders: userOrders.map(sanitizeOrderForUser),
       ordersPagination,
       orderStatusCounts,
@@ -1081,6 +1237,145 @@ function registerCashbackRoutes(app) {
       referralBountyAmount
     });
   }));
+
+  // 4.05. User Notifications (Inbox + Broadcasts)
+  app.get('/api/notifications', notifLimiter, asyncHandler(async (req, res) => {
+    const user = getAuthUser(req);
+    if (!user) {
+      return res.status(401).json({ error: 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.' });
+    }
+    const result = await getUserNotifications(user.id, {
+      page: req.query.page || 1,
+      limit: req.query.limit || 20
+    });
+    return res.json(result);
+  }));
+
+  app.post('/api/notifications/mark-read', notifLimiter, asyncHandler(async (req, res) => {
+    const user = getAuthUser(req);
+    if (!user) {
+      return res.status(401).json({ error: 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.' });
+    }
+    const { id, all } = req.body || {};
+    const result = await markNotificationsRead(user.id, { id, all: Boolean(all) });
+    return res.json({ status: 'ok', ...result });
+  }));
+
+  // 4.06. Public Leaderboard (Top Approved Spend & Top Approved Cashback, 5-min cache, PII masked)
+  const LEADERBOARD_CACHE_TTL_MS = 5 * 60 * 1000;
+  let leaderboardCache = { expiresAt: 0, rankedSpend: [], rankedCashback: [] };
+
+  function maskLeaderboardDisplay(user) {
+    const rawName = String(user?.name || '').trim();
+    const rawPhone = String(user?.phone || '').trim();
+    if (rawName && rawName.length >= 2) {
+      const parts = rawName.split(/\s+/);
+      if (parts.length > 1) {
+        return `${parts[0]} *** ${parts[parts.length - 1]}`;
+      }
+      return `${rawName.slice(0, 2)}***`;
+    }
+    if (rawPhone.length >= 6) {
+      return `${rawPhone.slice(0, 3)}***${rawPhone.slice(-3)}`;
+    }
+    return user?.code || 'Thành viên';
+  }
+
+  function computeLeaderboardData(db) {
+    const tiers = getNormalizedVipTiers(db.settings);
+    const spendMap = new Map();
+    const cashbackMap = new Map();
+
+    for (const o of db.orders || []) {
+      if (String(o.status || '').toLowerCase() !== 'approved') continue;
+      const uid = o.userId;
+      if (!uid) continue;
+      const amt = Number(o.orderAmount || 0);
+      const cb = Number(o.userCashbackAmount || 0);
+      if (Number.isFinite(amt) && amt > 0) {
+        spendMap.set(uid, (spendMap.get(uid) || 0) + Math.round(amt));
+      }
+      if (Number.isFinite(cb) && cb > 0) {
+        cashbackMap.set(uid, (cashbackMap.get(uid) || 0) + Math.round(cb));
+      }
+    }
+
+    const activeUsers = (db.users || []).filter(
+      (u) => !u.isDeleted && !u.accountLocked && u.role !== 'admin'
+    );
+
+    const rows = activeUsers
+      .map((u) => {
+        const totalSpend = spendMap.get(u.id) || 0;
+        const totalCashback = cashbackMap.get(u.id) || 0;
+        const tier = resolveVipTier(totalSpend, db.settings) || tiers[0];
+        return {
+          userId: u.id,
+          code: u.code,
+          displayName: maskLeaderboardDisplay(u),
+          vipTier: tier.code,
+          vipTierName: tier.name,
+          vipTierIcon: tier.icon,
+          totalSpend,
+          totalCashback
+        };
+      })
+      .filter((r) => r.totalSpend > 0 || r.totalCashback > 0);
+
+    const rankedSpend = [...rows]
+      .filter((r) => r.totalSpend > 0)
+      .sort((a, b) => b.totalSpend - a.totalSpend || b.totalCashback - a.totalCashback);
+    const rankedCashback = [...rows]
+      .filter((r) => r.totalCashback > 0)
+      .sort((a, b) => b.totalCashback - a.totalCashback || b.totalSpend - a.totalSpend);
+
+    return { rankedSpend, rankedCashback };
+  }
+
+  app.get('/api/leaderboard', leaderboardLimiter, (req, res) => {
+    const db = ensureDbLoaded();
+    const now = Date.now();
+    const forceFresh = process.env.NODE_ENV === 'test';
+    if (forceFresh || now > leaderboardCache.expiresAt) {
+      const computed = computeLeaderboardData(db);
+      leaderboardCache = {
+        expiresAt: now + LEADERBOARD_CACHE_TTL_MS,
+        rankedSpend: computed.rankedSpend,
+        rankedCashback: computed.rankedCashback
+      };
+    }
+
+    const toPublicEntry = (entry, idx) => ({
+      rank: idx + 1,
+      code: entry.code,
+      displayName: entry.displayName,
+      vipTier: entry.vipTier,
+      vipTierName: entry.vipTierName,
+      vipTierIcon: entry.vipTierIcon,
+      totalSpend: entry.totalSpend,
+      totalCashback: entry.totalCashback
+    });
+
+    const topBySpend = leaderboardCache.rankedSpend.slice(0, 20).map(toPublicEntry);
+    const topByCashback = leaderboardCache.rankedCashback.slice(0, 20).map(toPublicEntry);
+
+    const authUser = getAuthUser(req);
+    let myRankSpend = null;
+    let myRankCashback = null;
+    if (authUser) {
+      const sIdx = leaderboardCache.rankedSpend.findIndex((r) => r.userId === authUser.id);
+      const cIdx = leaderboardCache.rankedCashback.findIndex((r) => r.userId === authUser.id);
+      if (sIdx >= 0) myRankSpend = toPublicEntry(leaderboardCache.rankedSpend[sIdx], sIdx);
+      if (cIdx >= 0) myRankCashback = toPublicEntry(leaderboardCache.rankedCashback[cIdx], cIdx);
+    }
+
+    return res.json({
+      topBySpend,
+      topByCashback,
+      myRankSpend,
+      myRankCashback
+    });
+  });
 
   // 4.1. User Referral Network & Bounty Stats (10.000đ on referee 1st approved order)
   app.get('/api/user/referrals', (req, res) => {
@@ -1657,7 +1952,7 @@ function registerCashbackRoutes(app) {
       };
 
       const result = await convertTextLinks(text, effectiveConfig);
-      const cashbackPercent = Number(s.cashbackPercent || 70);
+      const cashbackPercent = resolveUserCashbackRate(authUser, s);
       const taxDeductPercent = Number(s.taxDeductPercent ?? 10);
 
       const newClicks = [];
@@ -1807,7 +2102,9 @@ function registerCashbackRoutes(app) {
           platform,
           productName,
           eventTime: src.event_time || src.eventTime || src.update_time || src.timestamp,
-          purchaseTime: src.purchase_time || src.purchaseTime
+          purchaseTime: src.purchase_time || src.purchaseTime,
+          merchant: src.merchant || null,
+          rejectReason: src.reason_rejected || src.reason_reject || null
         });
 
         recalculateAffectedWallets(
@@ -1956,6 +2253,8 @@ function registerCashbackRoutes(app) {
       'zaloGroupUrl',
       'zaloWidgetEnabled',
       'announcementBanner',
+      'vipTiersEnabled',
+      'vipTiers',
       'lastAutoSyncAt'
     ];
 
@@ -1967,6 +2266,8 @@ function registerCashbackRoutes(app) {
     }
     safeSettings.zaloGroupUrl = db.settings.zaloGroupUrl || DEFAULT_ZALO_GROUP_URL;
     safeSettings.zaloWidgetEnabled = db.settings.zaloWidgetEnabled ?? true;
+    safeSettings.vipTiersEnabled = db.settings.vipTiersEnabled !== false;
+    safeSettings.vipTiers = getNormalizedVipTiers(db.settings);
 
     const isSuperAdmin = req.adminUser?.role === 'admin';
     const revealRequested = Boolean(
@@ -2238,6 +2539,53 @@ function registerCashbackRoutes(app) {
       }
     }
 
+    if (body.vipTiersEnabled !== undefined) {
+      db.settings.vipTiersEnabled = Boolean(body.vipTiersEnabled);
+    }
+
+    if (body.vipTiers !== undefined) {
+      if (!Array.isArray(body.vipTiers) || body.vipTiers.length === 0) {
+        return res.status(400).json({ error: 'Danh sách bậc VIP không hợp lệ.' });
+      }
+      const normalized = [];
+      const seenCodes = new Set();
+      for (let i = 0; i < body.vipTiers.length; i++) {
+        const raw = body.vipTiers[i] || {};
+        const code = String(raw.code || '').trim().toLowerCase();
+        const name = String(raw.name || '').trim();
+        const icon = String(raw.icon || '🏅').trim().slice(0, 8);
+        const minSpend = Number(raw.minSpend);
+        const cashbackPercent = Number(raw.cashbackPercent);
+        if (!code || seenCodes.has(code)) {
+          return res.status(400).json({ error: `Mã bậc VIP không hợp lệ hoặc bị trùng tại dòng ${i + 1}.` });
+        }
+        seenCodes.add(code);
+        if (!name || name.length > 60) {
+          return res.status(400).json({ error: `Tên bậc VIP không hợp lệ tại dòng ${i + 1}.` });
+        }
+        if (!Number.isFinite(minSpend) || minSpend < 0) {
+          return res.status(400).json({ error: `Ngưỡng chi tiêu không hợp lệ tại bậc ${name}.` });
+        }
+        if (!Number.isFinite(cashbackPercent) || cashbackPercent < 0) {
+          return res.status(400).json({ error: `Tỷ lệ % hoàn tiền không hợp lệ tại bậc ${name}.` });
+        }
+        normalized.push({
+          code,
+          name,
+          icon,
+          minSpend: Math.round(minSpend),
+          cashbackPercent: Math.round(cashbackPercent * 100) / 100
+        });
+      }
+      normalized.sort((a, b) => a.minSpend - b.minSpend);
+      for (let i = 1; i < normalized.length; i++) {
+        if (normalized[i].minSpend <= normalized[i - 1].minSpend) {
+          return res.status(400).json({ error: 'Ngưỡng chi tiêu giữa các bậc VIP phải tăng dần và không trùng nhau.' });
+        }
+      }
+      db.settings.vipTiers = normalized;
+    }
+
     if (body.newAdminPassword) {
       const cleanNewPass = String(body.newAdminPassword).trim();
       if (cleanNewPass.length < 6) {
@@ -2342,14 +2690,6 @@ function registerCashbackRoutes(app) {
     migrateLegacyOrderIdentity(db);
     const targetOrderExisted = Boolean(targetOrder);
 
-    const cbRateToUse = targetOrder?.lockedCashbackRate ?? db.settings.cashbackPercent;
-    const taxRateToUse = targetOrder?.lockedTaxRate ?? db.settings.taxDeductPercent;
-    const split = calculateCommissionSplit(
-      validComm,
-      cbRateToUse,
-      taxRateToUse
-    );
-
     const rawCode = String(userCode || 'ADMIN').trim();
     // Match either by clickId in db.clicks OR by user code / phone
     const matchedClick = db.clicks.find((c) => c.clickId === rawCode);
@@ -2361,6 +2701,17 @@ function registerCashbackRoutes(app) {
             String(u.phone || '').trim() === rawCode ||
             (normalizePhoneNumber(u.phone) && normalizePhoneNumber(u.phone) === normalizePhoneNumber(rawCode))
         );
+    const effectiveOrderUser = targetOrder?.userId
+      ? db.users.find((u) => u.id === targetOrder.userId) || matchedUser
+      : matchedUser;
+
+    const cbRateToUse = targetOrder?.lockedCashbackRate ?? resolveUserCashbackRate(effectiveOrderUser, db.settings);
+    const taxRateToUse = targetOrder?.lockedTaxRate ?? db.settings.taxDeductPercent;
+    const split = calculateCommissionSplit(
+      validComm,
+      cbRateToUse,
+      taxRateToUse
+    );
 
     // Validation phase BEFORE any mutation to targetOrder
     const isProvidedCustom = userCashbackAmount !== undefined && userCashbackAmount !== null && String(userCashbackAmount).trim() !== '';
@@ -2549,7 +2900,7 @@ function registerCashbackRoutes(app) {
         details: { orderSn: removed.orderSn, previousStatus: removed.status, userId: removed.userId || null }
       });
       recalculateAffectedWallets([removed.userId, removed.userCode], { persist: false });
-      await saveDb(db);
+      await saveDb(db, { deletedOrders: [{ platform: removed.platform || "shopee", sn: removed.orderSn }] });
       return removed;
     });
 
@@ -2675,6 +3026,7 @@ function registerCashbackRoutes(app) {
 
     if (getPgPool()) {
       const withdrawal = await settleWithdrawal(id, status, admin);
+      notifyWithdrawalEvent(withdrawal, status);
       return res.json({ withdrawal });
     }
     const db = ensureDbLoaded();
@@ -2692,11 +3044,13 @@ function registerCashbackRoutes(app) {
 
     if (status === 'rejected') {
       await refundWithdrawal(db, wd, admin);
+      notifyWithdrawalEvent(wd, 'rejected');
       logger.logLeave('POST /api/admin/withdrawals/update', { id, status: 'rejected' });
       return res.json({ withdrawal: wd });
     }
 
     await settleWithdrawal(wd.id, 'paid', admin);
+    notifyWithdrawalEvent(wd, 'paid');
 
     logger.logLeave('POST /api/admin/withdrawals/update', { id, status: 'paid' });
     return res.json({ withdrawal: wd });
@@ -2714,6 +3068,7 @@ function registerCashbackRoutes(app) {
 
     if (getPgPool()) {
       const withdrawal = await settleWithdrawal(id, 'rejected', admin);
+      notifyWithdrawalEvent(withdrawal, 'rejected');
       return res.json({ status: 'ok', message: 'Đã hủy và hoàn tiền lệnh rút.', withdrawal });
     }
     const db = ensureDbLoaded();
@@ -2735,6 +3090,7 @@ function registerCashbackRoutes(app) {
     }
 
     await refundWithdrawal(db, wd, admin);
+    notifyWithdrawalEvent(wd, 'rejected');
 
 
     logger.logLeave('POST /api/admin/withdrawals/cancel', { id });
@@ -2771,7 +3127,7 @@ function registerCashbackRoutes(app) {
     logger.logEnter('POST /api/admin/users/action');
     if (!requireAdmin(req, res)) return;
 
-    const { userId, action, newPassword, amount, note } = req.body || {};
+    const { userId, action, newPassword, amount, note, customCashbackPercent } = req.body || {};
     if (!userId) return res.status(400).json({ error: 'Thiếu ID người dùng.' });
 
     const admin = req.adminUser || getAuthUser(req);
@@ -2902,59 +3258,90 @@ function registerCashbackRoutes(app) {
         return res.status(400).json({ error: 'Không thể xóa tài khoản Quản trị viên tối cao.' });
       }
 
-      // Check if user has financial history (orders, withdrawals, ledger)
-      const hasOrders = db.orders.some((o) => o.userId === userId);
-      const hasWithdrawals = db.withdrawals.some((w) => w.userId === userId);
-      const hasLedger = db.ledger.some((l) => l.userId === userId);
+      if (targetUser.isDeleted) return res.json({ status: 'ok', message: 'Tài khoản đã được lưu trữ.' });
+      targetUser.accountLocked = true;
+      targetUser.isDeleted = true;
+      targetUser.deletedAt = new Date().toISOString();
+      targetUser.deletedByAdminId = adminId;
+      targetUser.tokenVersion = Number(targetUser.tokenVersion || 1) + 1;
+      // Preserve identity and attribution; all users are archived, never removed from state.
+      recordAuditLog(db, { adminId, adminName, action: 'soft_delete', targetId: userId,
+        details: { userCode: targetUser.code, reason: 'Admin archived account' } });
+      await saveDb(db);
+      return res.json({ status: 'ok', message: `Đã vô hiệu hóa và lưu trữ tài khoản ${targetUser.code}.` });
+    }
 
-      const adminCode = admin?.phone || admin?.code || 'admin';
-
-      if (hasOrders || hasWithdrawals || hasLedger) {
-        // Soft-delete to preserve ledger immutability and financial accounting audit trails
-        targetUser.accountLocked = true;
-        targetUser.isDeleted = true;
-        targetUser.deletedAt = new Date().toISOString();
-        targetUser.deletedByAdminId = adminId;
-        targetUser.tokenVersion = Number(targetUser.tokenVersion || 1) + 1;
-        targetUser.phone = `DELETED_${Date.now()}_${String(targetUser.phone || '')}`;
-        recordAuditLog(db, {
-          adminId,
-          adminName,
-          action: 'soft_delete',
-          targetId: targetUser.id,
-          details: { userCode: targetUser.code, reason: 'Has financial records' }
-        });
-        await saveDb(db);
-        logger.log('admin_audit', `Admin ${adminCode} soft-deleted user ${targetUser.code} (retained for ledger audit)`, {
-          adminId,
-          targetUserId: targetUser.id
-        });
-        logger.logLeave('POST /api/admin/users/action', { action: 'soft_delete', userId });
-        return res.json({
-          status: 'ok',
-          message: `Đã vô hiệu hóa và chuyển tài khoản ${targetUser.code} vào lưu trữ bảo toàn sổ cái kiểm toán!`
-        });
+    if (action === 'set_cashback_rate') {
+      const isReset =
+        customCashbackPercent === null ||
+        customCashbackPercent === undefined ||
+        String(customCashbackPercent).trim() === '';
+      let nextRate = null;
+      if (!isReset) {
+        const parsed = Number(customCashbackPercent);
+        if (!Number.isFinite(parsed) || parsed < 0) {
+          return res.status(400).json({ error: 'Tỷ lệ hoàn tiền riêng phải là số hợp lệ lớn hơn hoặc bằng 0%.' });
+        }
+        nextRate = Math.round(parsed * 100) / 100;
       }
-
-      // If user has zero financial records, safe to hard delete
-      db.users = db.users.filter((u) => u.id !== userId);
+      const oldRate = targetUser.customCashbackPercent ?? null;
+      targetUser.customCashbackPercent = nextRate;
       recordAuditLog(db, {
         adminId,
         adminName,
-        action: 'delete',
-        targetId: userId,
-        details: { userCode: targetUser.code }
+        action: 'set_cashback_rate',
+        targetId: targetUser.id,
+        details: { userCode: targetUser.code, oldRate, newRate: nextRate }
       });
       await saveDb(db);
-      logger.log('admin_audit', `Admin ${adminCode} permanently deleted empty user ${targetUser.code}`, {
-        adminId,
-        targetUserId: targetUser.id
+      logger.logLeave('POST /api/admin/users/action', { action, userCode: targetUser.code, newRate: nextRate });
+      return res.json({
+        status: 'ok',
+        customCashbackPercent: nextRate,
+        message: nextRate === null
+          ? `Đã đưa ${targetUser.code} về tỷ lệ hoàn tiền mặc định.`
+          : `Đã cập nhật tỷ lệ hoàn riêng cho ${targetUser.code} thành ${nextRate}%.`
       });
-      logger.logLeave('POST /api/admin/users/action', { action: 'delete', userId });
-      return res.json({ status: 'ok', message: `Đã xóa tài khoản ${targetUser.code} thành công!` });
     }
 
     return res.status(400).json({ error: 'Thao tác không hợp lệ.' });
+  }));
+
+  // Admin Broadcast Notification to All Users
+  app.post('/api/admin/notifications/broadcast', adminBroadcastLimiter, requireAdmin, asyncHandler(async (req, res) => {
+    logger.logEnter('POST /api/admin/notifications/broadcast');
+    const admin = req.adminUser || getAuthUser(req);
+    const adminId = admin?.id || 'admin';
+    const adminName = admin?.name || admin?.phone || admin?.code || 'Admin';
+    const { title, message } = req.body || {};
+    const cleanTitle = String(title || '').trim();
+    const cleanMessage = String(message || '').trim();
+
+    if (!cleanTitle || cleanTitle.length > 150) {
+      return res.status(400).json({ error: 'Tiêu đề thông báo không hợp lệ (1-150 ký tự).' });
+    }
+    if (!cleanMessage || cleanMessage.length > 1000) {
+      return res.status(400).json({ error: 'Nội dung thông báo không hợp lệ (1-1000 ký tự).' });
+    }
+
+    const db = ensureDbLoaded();
+    const created = await createNotification({
+      userId: null,
+      type: 'system_broadcast',
+      title: cleanTitle,
+      message: cleanMessage,
+      metadata: { sentBy: adminName }
+    });
+    recordAuditLog(db, {
+      adminId,
+      adminName,
+      action: 'broadcast_notification',
+      targetId: created?.id || 'broadcast',
+      details: { title: cleanTitle }
+    });
+    await saveDb(db);
+    logger.logLeave('POST /api/admin/notifications/broadcast', { id: created?.id });
+    return res.json({ status: 'ok', notification: created, message: 'Đã gửi thông báo đến toàn bộ thành viên!' });
   }));
 
   // Centralized express error handler

@@ -196,10 +196,118 @@ async function convertTikTokLink(cleanInfo, config = {}) {
   };
 }
 
+const DEFAULT_RETRY_BACKOFFS_MS = [1000, 2000];
+const MAX_RETRY_WAIT_MS = 3000;
+
+function parseRetryAfterMs(response, data) {
+  const retryHeader = response?.headers?.get?.('retry-after');
+  if (retryHeader != null && retryHeader !== '') {
+    const num = Number(retryHeader);
+    if (Number.isFinite(num) && num >= 0) {
+      return Math.min(MAX_RETRY_WAIT_MS, Math.round(num * 1000));
+    }
+  }
+  const bodyRetry = Number(data?.retry_after);
+  if (Number.isFinite(bodyRetry) && bodyRetry >= 0) {
+    return Math.min(MAX_RETRY_WAIT_MS, Math.round(bodyRetry * 1000));
+  }
+  return null;
+}
+
+function isRetryableAccessTradeStatus(status) {
+  return status === 429 || status === 502 || status === 503 || status === 504;
+}
+
+async function fetchAccessTradePageWithRetry(urlStr, cleanKey, deadline, options = {}) {
+  const fetchFn = options.fetchFn || fetch;
+  const sleepFn = options.sleepFn || ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
+  const maxRetries = DEFAULT_RETRY_BACKOFFS_MS.length;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const remainingMs = deadline - Date.now();
+    if (remainingMs <= 1000) {
+      throw new Error('AccessTrade report vượt quá giới hạn thời gian tác vụ; cần chạy lại.');
+    }
+
+    try {
+      const response = await fetchFn(urlStr, {
+        headers: { Authorization: `Token ${cleanKey}`, Accept: 'application/json' },
+        signal: AbortSignal.timeout(Math.max(1000, Math.min(8000, remainingMs - 500)))
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data?.success === false) {
+          const msg = String(data.message || 'AccessTrade API trả về success=false');
+          const retryAfterMs = parseRetryAfterMs(response, data);
+          const isTransientMsg = /rate\s*limit|maximum\s*execution\s*time|timeout|overload/i.test(msg);
+          if (isTransientMsg && attempt < maxRetries) {
+            const waitMs = retryAfterMs ?? DEFAULT_RETRY_BACKOFFS_MS[attempt];
+            if (Date.now() + waitMs + 1500 < deadline) {
+              logger.warning('fetchAccessTradeOrders', 'Transient AccessTrade API error, retrying', {
+                attempt: attempt + 1,
+                waitMs,
+                message: msg
+              });
+              await sleepFn(waitMs);
+              continue;
+            }
+          }
+          throw new Error(`AccessTrade API lỗi: ${msg}`);
+        }
+        return data;
+      }
+
+      let errData = null;
+      try {
+        errData = await response.json();
+      } catch (_) {
+        errData = null;
+      }
+
+      if (isRetryableAccessTradeStatus(response.status) && attempt < maxRetries) {
+        const retryAfterMs = parseRetryAfterMs(response, errData);
+        const waitMs = retryAfterMs ?? DEFAULT_RETRY_BACKOFFS_MS[attempt];
+        if (Date.now() + waitMs + 1500 < deadline) {
+          logger.warning('fetchAccessTradeOrders', 'AccessTrade HTTP error, retrying', {
+            status: response.status,
+            attempt: attempt + 1,
+            waitMs
+          });
+          await sleepFn(waitMs);
+          continue;
+        }
+      }
+
+      const detail = errData?.message ? ` (${errData.message})` : '';
+      throw new Error(`AccessTrade API trả về HTTP ${response.status}${detail}.`);
+    } catch (err) {
+      const isNetworkOrTimeout =
+        err?.name === 'AbortError' ||
+        err?.name === 'TimeoutError' ||
+        /fetch failed|network|timeout/i.test(String(err?.message || ''));
+
+      if (isNetworkOrTimeout && attempt < maxRetries) {
+        const waitMs = DEFAULT_RETRY_BACKOFFS_MS[attempt];
+        if (Date.now() + waitMs + 1500 < deadline) {
+          logger.warning('fetchAccessTradeOrders', 'AccessTrade network/timeout error, retrying', {
+            attempt: attempt + 1,
+            waitMs,
+            error: err.message
+          });
+          await sleepFn(waitMs);
+          continue;
+        }
+      }
+      throw err;
+    }
+  }
+}
+
 /**
- * Fetch conversion orders from AccessTrade Publisher API v1 (/v1/orders).
+ * Fetch conversion orders from AccessTrade Publisher API v1 (/v1/order-list).
  */
-async function fetchAccessTradeOrders(apiKey, days = 30) {
+async function fetchAccessTradeOrders(apiKey, days = 30, options = {}) {
   logger.logEnter('fetchAccessTradeOrders', { days });
   const cleanKey = String(apiKey || '').trim();
   if (!cleanKey) {
@@ -213,29 +321,35 @@ async function fetchAccessTradeOrders(apiKey, days = 30) {
   url.searchParams.set('since', since.toISOString());
   url.searchParams.set('until', now.toISOString());
   url.searchParams.set('limit', '300');
-  const rows = [], seen = new Set();
+  const rows = [];
+  const seen = new Set();
   let expectedTotal = null;
-  const deadline = Date.now() + 22000;
+  const deadlineMs = Number(options.deadlineMs) > 0 ? Number(options.deadlineMs) : 22000;
+  const deadline = Date.now() + deadlineMs;
+
   for (let page = 1; page <= 10 && Date.now() < deadline; page++) {
     url.searchParams.set('page', String(page));
-    const response = await fetch(url.toString(), {
-      headers: { Authorization: `Token ${cleanKey}`, Accept: 'application/json' },
-      signal: AbortSignal.timeout(Math.max(1, Math.min(8000, deadline - Date.now())))
-    });
-    if (!response.ok) throw new Error(`AccessTrade API trả về HTTP ${response.status}.`);
-    const data = await response.json();
+    const data = await fetchAccessTradePageWithRetry(url.toString(), cleanKey, deadline, options);
     if (!Array.isArray(data?.data) || !Number.isSafeInteger(data.total) || data.total < 0) {
       throw new Error('AccessTrade report thiếu data/total hợp lệ.');
     }
-    if (expectedTotal !== null && expectedTotal !== data.total) throw new Error('AccessTrade report thay đổi trong lúc phân trang; cần chạy lại.');
+    if (expectedTotal !== null && expectedTotal !== data.total) {
+      throw new Error('AccessTrade report thay đổi trong lúc phân trang; cần chạy lại.');
+    }
     expectedTotal = data.total;
     for (const row of data.data) {
       const key = JSON.stringify([row.merchant, row.order_id]);
       if (!row.order_id || seen.has(key)) throw new Error('AccessTrade report thiếu mã đơn hoặc lặp trang.');
-      seen.add(key); rows.push(row);
+      seen.add(key);
+      rows.push(row);
     }
-    if (rows.length === expectedTotal) return rows;
-    if (!data.data.length || rows.length > expectedTotal) throw new Error('AccessTrade report không khớp tổng số đơn.');
+    if (rows.length === expectedTotal) {
+      logger.logLeave('fetchAccessTradeOrders', { count: rows.length });
+      return rows;
+    }
+    if (!data.data.length || rows.length > expectedTotal) {
+      throw new Error('AccessTrade report không khớp tổng số đơn.');
+    }
   }
   throw new Error('AccessTrade report chưa lấy đủ trang trong giới hạn tác vụ; chưa đánh dấu thành công.');
 }

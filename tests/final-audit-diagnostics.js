@@ -49,6 +49,7 @@ if (process.env.AFF_PG_WORKER === '1') {
       }
       if (action === 'reload') { await d.reloadStateFromPostgres(); result = true; }
       if (action === 'save') { const db = d.ensureDbLoaded(); db.settings.siteName = input; await d.saveDb(db); result = true; }
+      if (action === 'saveDirtyOrder') { const db = d.ensureDbLoaded(); db.orders.push({ orderSn: 'must-not-survive', platform: 'shopee', status: 'pending' }); await d.saveDb(db); result = true; }
       if (action === 'withdraw') result = await d.executeAtomicWithdrawal({ userId: 'usr_admin', amount: 50000, bankName: 'MB', bankAccount: '12345678', bankOwner: 'TEST USER', minWithdraw: 50000, ...input });
       process.send({ id, result });
     } catch (e) { process.send({ id, error: e.message, code: e.code }); }
@@ -230,7 +231,7 @@ if (process.env.AFF_PG_WORKER === '1') {
       assert.equal(Number((await check.query("SELECT COUNT(*) FROM ledger WHERE note='failed-adjustment-must-not-return'")).rows[0].count), 0);
       console.log('PASS: failed adjustment is discarded from cache and cannot return in a later save');
       await check.query('ALTER TABLE orders RENAME TO fixture_unavailable_orders');
-      assert.ok((await call(b, 'save', 'must-not-survive')).error);
+      assert.ok((await call(b, 'saveDirtyOrder')).error);
       assert.equal((await call(b, 'cachedLedger', 'anything')).code, 'CACHE_UNAVAILABLE');
       assert.equal((await call(b, 'save', 'blocked-while-invalid')).code, 'CACHE_UNAVAILABLE');
       await check.query('ALTER TABLE fixture_unavailable_orders RENAME TO orders');
