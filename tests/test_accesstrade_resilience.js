@@ -1,8 +1,10 @@
 const assert = require('assert');
 const {
+  TIKTOK_VIDEO_LINK_ERROR,
   fetchAccessTradeOrders,
   fetchAccessTradeOrderProducts,
   generateTikTokAccessTradeLink,
+  fetchTikTokAccessTradePreview,
   convertTikTokLink,
   parseAccessTradeMoney,
   parseAccessTradeCommissionRate
@@ -200,7 +202,7 @@ async function runTests() {
     console.log('✓ Test 8: generateTikTokAccessTradeLink live payload parsing passed');
   }
 
-  // 9. convertTikTokLink falls back to buildTikTokDeepLink when AT v2 fails or drops subId
+  // 9. convertTikTokLink throws explicit error without falling back to DeepLink v6 when AT v2 fails
   {
     const mockFailFetch = async () => ({
       ok: false,
@@ -208,20 +210,25 @@ async function runTests() {
       json: async () => ({ message: 'Server error' })
     });
 
-    const conv = await convertTikTokLink(
-      { cleanUrl: 'https://shop.tiktok.com/view/product/1733649211783283904', productId: '1733649211783283904' },
-      {
-        tiktokMode: 'deeplink',
-        accesstradeApiKey: 'test_key',
-        subId: 'CLK999',
-        tiktokDeepLinkTemplate: 'https://go.isclix.com/deep_link/v6/7110811489339796158/6648523843406889655?sub4=oneatweb',
-        fetchFn: mockFailFetch
-      }
+    await assert.rejects(
+      () =>
+        convertTikTokLink(
+          {
+            cleanUrl: 'https://shop.tiktok.com/view/product/1733649211783283904',
+            productId: '1733649211783283904',
+            linkType: 'product'
+          },
+          {
+            tiktokMode: 'deeplink',
+            accesstradeApiKey: 'test_key',
+            subId: 'CLK999',
+            tiktokDeepLinkTemplate: 'https://go.isclix.com/deep_link/v6/7110811489339796158/6648523843406889655?sub4=oneatweb',
+            fetchFn: mockFailFetch
+          }
+        ),
+      /Hệ thống TikTok đang bận/
     );
-    assert.strictEqual(conv.usedMethod, 'TikTok DeepLink (AccessTrade)');
-    assert.ok(conv.affiliateUrl.includes('go.isclix.com/deep_link/v6/'));
-    assert.ok(conv.affiliateUrl.includes('sub1=CLK999'));
-    console.log('✓ Test 9: convertTikTokLink fallback to DeepLink v6 passed');
+    console.log('✓ Test 9: convertTikTokLink strict no-fallback on AT v2 error passed');
   }
 
   // 10. fetchAccessTradeOrderProducts extracts & deduplicates reject reasons, ignores N/A
@@ -245,6 +252,67 @@ async function runTests() {
     assert.strictEqual(res.products.length, 3);
     assert.strictEqual(res.rejectReason, 'Khách hoàn hàng');
     console.log('✓ Test 10: fetchAccessTradeOrderProducts reject reason extraction passed');
+  }
+
+  // 11. convertTikTokLink blocks video/content links with clear guidance
+  {
+    await assert.rejects(
+      () =>
+        convertTikTokLink(
+          {
+            cleanUrl: 'https://www.tiktok.com/@nguyetsuy/video/7601779958305885448',
+            productId: null,
+            linkType: 'content'
+          },
+          {
+            tiktokMode: 'deeplink',
+            accesstradeApiKey: 'test_key',
+            subId: 'CLK_VID'
+          }
+        ),
+      (err) => err.message === TIKTOK_VIDEO_LINK_ERROR
+    );
+    console.log('✓ Test 11: convertTikTokLink blocks video/content links passed');
+  }
+
+  // 12. fetchTikTokAccessTradePreview caches metadata from AT v2
+  {
+    let calls = 0;
+    const mockFetch = async () => {
+      calls++;
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          status: true,
+          data: {
+            aff_short_url: 'https://shorten.asia/preview123',
+            aff_url: 'https://go.isclix.com/deep_link/7110811489339796158/6648523843406889655?url=https%3A%2F%2Fwww.tiktok.com%2Ft%2Fabc%2F',
+            product_id: '1733649211783999999',
+            product_name: 'Sản phẩm Test Cache',
+            product_image: 'https://p16-oec-sg.ibyteimg.com/test.jpeg',
+            product_price: { minimum_amount: '99000' },
+            product_commission: { amount: '5940', rate: '0.06' }
+          }
+        })
+      };
+    };
+
+    const first = await fetchTikTokAccessTradePreview(
+      'https://www.tiktok.com/view/product/1733649211783999999',
+      '1733649211783999999',
+      { accesstradeApiKey: 'test_key', fetchFn: mockFetch }
+    );
+    const second = await fetchTikTokAccessTradePreview(
+      'https://www.tiktok.com/view/product/1733649211783999999',
+      '1733649211783999999',
+      { accesstradeApiKey: 'test_key', fetchFn: mockFetch }
+    );
+    assert.strictEqual(calls, 1);
+    assert.strictEqual(first.productName, 'Sản phẩm Test Cache');
+    assert.strictEqual(second.commission, 5940);
+    assert.strictEqual(second.dataSource, 'accesstrade_v2');
+    console.log('✓ Test 12: fetchTikTokAccessTradePreview cache & metadata passed');
   }
 
   console.log('ALL ACCESSTRADE RESILIENCE TESTS PASSED ✔');

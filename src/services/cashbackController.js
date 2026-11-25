@@ -59,7 +59,13 @@ const {
   fetchAddlivetagProductData,
   DEFAULT_ADDLIVETAG_API_KEY
 } = require('./shopeeService');
-const { fetchAccessTradeOrders, fetchAccessTradeOrderProducts } = require('./tiktokService');
+const {
+  TIKTOK_VIDEO_LINK_ERROR,
+  fetchTikTokAccessTradePreview,
+  mapAccessTradeTikTokError,
+  fetchAccessTradeOrders,
+  fetchAccessTradeOrderProducts
+} = require('./tiktokService');
 const {
   isAllowedHost,
   isAllowedAffiliateRedirectUrl,
@@ -1869,63 +1875,75 @@ function registerCashbackRoutes(app) {
 
       if (platform === 'tiktok') {
         const cleanInfo = cleanTikTokUrl(resolvedUrl, htmlSnippet);
-        const addlivetagKey = (s.addlivetagApiKey || process.env.ADDLIVETAG_API_KEY || DEFAULT_ADDLIVETAG_API_KEY).trim();
+        if (!cleanInfo.productId || cleanInfo.linkType === 'content') {
+          logger.logLeave('POST /api/preview', { platform: 'tiktok', isVideoLink: true });
+          return res.json({
+            found: false,
+            isVideoLink: true,
+            platform: 'tiktok',
+            error: TIKTOK_VIDEO_LINK_ERROR
+          });
+        }
+
+        const accesstradeApiKey = (
+          process.env.ACCESSTRADE_API_KEY ||
+          s.accesstradeApiKey ||
+          ''
+        ).trim();
+        const tiktokDeepLinkTemplate = (
+          process.env.TIKTOK_DEEPLINK_TEMPLATE ||
+          s.tiktokDeepLinkTemplate ||
+          'https://go.isclix.com/deep_link/v6/7110811489339796158/6648523843406889655?sub4=oneatweb'
+        ).trim();
 
         let productMeta = null;
-        if (addlivetagKey) {
-          productMeta = await fetchAddlivetagProductData({
-            platform: 'tiktok',
-            url: resolvedUrl,
-            apiKey: addlivetagKey
+        try {
+          productMeta = await fetchTikTokAccessTradePreview(
+            cleanInfo.cleanUrl,
+            cleanInfo.productId,
+            { accesstradeApiKey, tiktokDeepLinkTemplate }
+          );
+        } catch (atErr) {
+          const userMsg = mapAccessTradeTikTokError(atErr);
+          logger.warning('POST /api/preview', 'TikTok AccessTrade v2 preview failed', {
+            productId: cleanInfo.productId,
+            error: atErr.message
           });
-        }
-
-        if (productMeta) {
-          const price = Number(productMeta.price || 0);
-          const commRate = Number(productMeta.commissionRate || 0);
-          const grossCommission =
-            productMeta.commission > 0
-              ? Number(productMeta.commission)
-              : (price * commRate) / 100;
-          const split = calculateCommissionSplit(grossCommission, cbPct, taxRate);
-
-          logger.logLeave('POST /api/preview', {
-            platform: 'tiktok',
-            hasOffer: Boolean(grossCommission || commRate),
-            source: 'addlivetag'
-          });
-          const title = productMeta.productName || cleanInfo.titleHint || 'Sản phẩm TikTok Shop';
           return res.json({
-            found: true,
+            found: false,
             platform: 'tiktok',
-            hasOffer: Boolean(grossCommission || commRate),
-            productName: title,
-            title,
-            imageUrl: productMeta.imageUrl || cleanInfo.imageUrl || '',
-            price,
-            commissionRate: commRate,
-            estimatedCashback: split.userCashbackAmount,
-            shopName: productMeta.shopName || '',
-            cashbackPercent: cbPct,
-            cleanUrl: cleanInfo.cleanUrl,
-            dataSource: 'addlivetag'
+            error: userMsg
           });
         }
 
-        logger.logLeave('POST /api/preview', { platform: 'tiktok' });
-        const safeTitle = cleanInfo.titleHint || 'Sản phẩm TikTok Shop';
+        const price = Number(productMeta.price || 0);
+        const commRate = Number(productMeta.commissionRate || 0);
+        const grossCommission =
+          productMeta.commission > 0
+            ? Number(productMeta.commission)
+            : (price * commRate) / 100;
+        const split = calculateCommissionSplit(grossCommission, cbPct, taxRate);
+
+        logger.logLeave('POST /api/preview', {
+          platform: 'tiktok',
+          hasOffer: Boolean(grossCommission || commRate),
+          source: 'accesstrade_v2'
+        });
+        const title = productMeta.productName || cleanInfo.titleHint || 'Sản phẩm TikTok Shop';
         return res.json({
           found: true,
           platform: 'tiktok',
-          hasOffer: Boolean(cleanInfo.imageUrl),
-          productName: safeTitle,
-          title: safeTitle,
-          imageUrl: cleanInfo.imageUrl || '',
-          price: 0,
-          estimatedCashback: 0,
+          hasOffer: Boolean(grossCommission || commRate),
+          productName: title,
+          title,
+          imageUrl: productMeta.imageUrl || cleanInfo.imageUrl || '',
+          price,
+          commissionRate: commRate,
+          estimatedCashback: split.userCashbackAmount,
+          shopName: '',
           cashbackPercent: cbPct,
-          note: `Hoàn ${cbPct}% hoa hồng sàn (tự động cộng ví khi hoàn tất đơn hàng)`,
-          cleanUrl: cleanInfo.cleanUrl
+          cleanUrl: cleanInfo.cleanUrl,
+          dataSource: 'accesstrade_v2'
         });
       }
     } catch (err) {

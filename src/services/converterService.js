@@ -68,19 +68,7 @@ async function processSingleUrl(originalUrl, config = {}) {
       const cleanInfo = cleanTikTokUrl(resolvedUrl, htmlSnippet);
       const conv = await convertTikTokLink(cleanInfo, perClickConfig);
 
-      let tiktokMeta = null;
-      if (!conv.hasMeta) {
-        const addlivetagKey = (config.addlivetagApiKey || process.env.ADDLIVETAG_API_KEY || DEFAULT_ADDLIVETAG_API_KEY).trim();
-        if (addlivetagKey) {
-          tiktokMeta = await fetchAddlivetagProductData({
-            platform: 'tiktok',
-            url: resolvedUrl,
-            apiKey: addlivetagKey
-          });
-        }
-      }
-
-      const resolvedName = conv.productName || tiktokMeta?.productName || cleanInfo.titleHint || 'Sản phẩm TikTok Shop';
+      const resolvedName = conv.productName || cleanInfo.titleHint || 'Sản phẩm TikTok Shop';
       const itemResult = {
         originalUrl,
         resolvedUrl,
@@ -91,10 +79,10 @@ async function processSingleUrl(originalUrl, config = {}) {
         clickId,
         productName: resolvedName,
         title: resolvedName,
-        imageUrl: conv.imageUrl || tiktokMeta?.imageUrl || cleanInfo.imageUrl || '',
-        price: conv.price || tiktokMeta?.price || 0,
-        commissionRate: conv.commissionRate || tiktokMeta?.commissionRate || 0,
-        commission: conv.commission || tiktokMeta?.commission || 0,
+        imageUrl: conv.imageUrl || cleanInfo.imageUrl || '',
+        price: conv.price || 0,
+        commissionRate: conv.commissionRate || 0,
+        commission: conv.commission || 0,
         affiliateUrl: conv.affiliateUrl,
         fullAffiliateUrl: conv.fullAffiliateUrl,
         usedMethod: conv.usedMethod,

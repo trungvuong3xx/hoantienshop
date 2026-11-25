@@ -1366,7 +1366,22 @@ async function fetchInstantPreview(rawText) {
     if (signal.aborted) return;
     if (!res || !res.found) {
       lastPreviewedGuestUrl = '';
-      instantPreviewArea.classList.add('hidden');
+      if (res && res.error) {
+        instantPreviewArea.classList.remove('hidden');
+        const isWarn = Boolean(res.isVideoLink);
+        const bg = isWarn ? '#fffbeb' : '#fef2f2';
+        const border = isWarn ? '#fcd34d' : '#fecaca';
+        const color = isWarn ? '#92400e' : '#991b1b';
+        instantPreviewCard.innerHTML = `
+          <div style="display:flex;align-items:flex-start;gap:10px;padding:12px 14px;border-radius:12px;background:${bg};border:1px solid ${border};color:${color};font-size:13.5px;line-height:1.5;">
+            <span style="flex-shrink:0;margin-top:2px;">${UI_ICONS.alertCircle || '⚠️'}</span>
+            <span>${escapeHtml(res.error)}</span>
+          </div>
+        `;
+        instantPreviewCard.setAttribute('role', 'alert');
+      } else {
+        instantPreviewArea.classList.add('hidden');
+      }
       return;
     }
     lastPreviewedGuestUrl = !authToken ? url : '';

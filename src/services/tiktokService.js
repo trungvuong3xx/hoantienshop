@@ -7,6 +7,11 @@ const ACCESSTRADE_TIKTOK_V2_CREATE_LINK = 'https://api.accesstrade.vn/v2/tiktoks
 
 const TIKTOK_OPEN_API_HOST = 'https://open-api.tiktokglobalshop.com';
 const TIKTOK_SHARE_LINK_PATH = '/affiliate_creator/202405/affiliate_sharing_links/generate_batch';
+const TIKTOK_VIDEO_LINK_ERROR =
+  'Bạn đang dán link Video/Nội dung TikTok! Để đảm bảo nhận được hoàn tiền, hãy mở trang chi tiết sản phẩm (bấm vào giỏ hàng của video nhưng KHÔNG thêm vào giỏ trước) → chọn Chia sẻ → Sao chép liên kết sản phẩm rồi dán lại vào đây.';
+const TIKTOK_PREVIEW_CACHE_TTL_MS = 10 * 60 * 1000;
+const TIKTOK_PREVIEW_CACHE_MAX = 500;
+const tiktokPreviewCache = new Map();
 
 function signTikTokOpenApiRequest(appSecret, apiPath, queryParams, bodyString) {
   const sortedKeys = Object.keys(queryParams)
@@ -279,19 +284,86 @@ async function generateTikTokAccessTradeLink(cleanUrl, productId, config = {}) {
   return result;
 }
 
+function mapAccessTradeTikTokError(err) {
+  const msg = String(err?.message || '');
+  const isTransient =
+    err?.name === 'AbortError' ||
+    err?.name === 'TimeoutError' ||
+    /timeout|aborted|fetch failed|network|econn|enotfound|HTTP (429|5\d\d)/i.test(msg);
+  if (isTransient) {
+    return 'Hệ thống TikTok đang bận, vui lòng thử lại sau vài giây.';
+  }
+  if (/Thiếu AccessTrade API Key/i.test(msg)) {
+    return msg;
+  }
+  return 'Sản phẩm TikTok này hiện không hỗ trợ hoàn tiền trên hệ thống.';
+}
+
+async function fetchTikTokAccessTradePreview(cleanUrl, productId, config = {}) {
+  logger.logEnter('fetchTikTokAccessTradePreview', { cleanUrl, productId });
+  const cacheKey = String(productId || cleanUrl || '').trim();
+  if (cacheKey) {
+    const cached = tiktokPreviewCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) {
+      logger.logLeave('fetchTikTokAccessTradePreview', { cached: true, productId });
+      return cached.value;
+    }
+    if (cached) {
+      tiktokPreviewCache.delete(cacheKey);
+    }
+  }
+
+  const res = await generateTikTokAccessTradeLink(cleanUrl, productId, {
+    ...config,
+    subId: ''
+  });
+  const preview = {
+    productId: res.productId || productId || null,
+    productName: res.productName || '',
+    imageUrl: res.imageUrl || '',
+    price: Number(res.price || 0),
+    commission: Number(res.commission || 0),
+    commissionRate: Number(res.commissionRate || 0),
+    hasMeta: Boolean(res.hasMeta),
+    dataSource: 'accesstrade_v2'
+  };
+
+  if (cacheKey) {
+    if (tiktokPreviewCache.size >= TIKTOK_PREVIEW_CACHE_MAX) {
+      const oldestKey = tiktokPreviewCache.keys().next().value;
+      if (oldestKey !== undefined) tiktokPreviewCache.delete(oldestKey);
+    }
+    tiktokPreviewCache.set(cacheKey, {
+      expiresAt: Date.now() + TIKTOK_PREVIEW_CACHE_TTL_MS,
+      value: preview
+    });
+  }
+
+  logger.logLeave('fetchTikTokAccessTradePreview', {
+    cached: false,
+    productId: preview.productId,
+    hasMeta: preview.hasMeta
+  });
+  return preview;
+}
+
 /**
  * Main TikTok Shop link conversion entry point (Cookie mode removed for security).
  */
 async function convertTikTokLink(cleanInfo, config = {}) {
   logger.logEnter('convertTikTokLink', {
-    cleanUrl: cleanInfo.cleanUrl,
-    productId: cleanInfo.productId,
+    cleanUrl: cleanInfo?.cleanUrl,
+    productId: cleanInfo?.productId,
+    linkType: cleanInfo?.linkType,
     mode: config.tiktokMode || 'deeplink'
   });
 
   const mode = config.tiktokMode || 'deeplink';
-  const shortenerProvider = config.shortenerProvider || 'none';
-  const productId = cleanInfo.productId;
+  const productId = cleanInfo?.productId || null;
+
+  if (!productId || cleanInfo?.linkType === 'content') {
+    throw new Error(TIKTOK_VIDEO_LINK_ERROR);
+  }
 
   let affiliateUrl = '';
   let fullAffiliateUrl = '';
@@ -311,36 +383,28 @@ async function convertTikTokLink(cleanInfo, config = {}) {
     usedMethod = 'TikTok Shop Open API';
   } else if (mode === 'deeplink') {
     const hasAtKey = Boolean(String(config.accesstradeApiKey || '').trim());
-    let usedAtV2 = false;
-
-    if (hasAtKey) {
-      try {
-        const atRes = await generateTikTokAccessTradeLink(cleanInfo.cleanUrl, productId, config);
-        affiliateUrl = atRes.affiliateUrl;
-        fullAffiliateUrl = atRes.fullAffiliateUrl;
-        resolvedProductId = atRes.productId || productId;
-        productName = atRes.productName;
-        imageUrl = atRes.imageUrl;
-        price = atRes.price;
-        commission = atRes.commission;
-        commissionRate = atRes.commissionRate;
-        hasMeta = atRes.hasMeta;
-        usedMethod = 'TikTok Shop API v2 (AccessTrade)';
-        usedAtV2 = true;
-      } catch (atErr) {
-        logger.warning('convertTikTokLink', 'AccessTrade TikTok v2 failed, falling back to deeplink template', {
-          error: atErr.message
-        });
-      }
+    if (!hasAtKey) {
+      throw new Error('Chưa cấu hình AccessTrade API Key cho TikTok Shop.');
     }
 
-    if (!usedAtV2) {
-      fullAffiliateUrl = buildTikTokDeepLink(cleanInfo.cleanUrl, productId, config);
-      affiliateUrl =
-        shortenerProvider !== 'none'
-          ? await shortenUrl(fullAffiliateUrl, shortenerProvider)
-          : fullAffiliateUrl;
-      usedMethod = 'TikTok DeepLink (AccessTrade)';
+    try {
+      const atRes = await generateTikTokAccessTradeLink(cleanInfo.cleanUrl, productId, config);
+      affiliateUrl = atRes.affiliateUrl;
+      fullAffiliateUrl = atRes.fullAffiliateUrl;
+      resolvedProductId = atRes.productId || productId;
+      productName = atRes.productName;
+      imageUrl = atRes.imageUrl;
+      price = atRes.price;
+      commission = atRes.commission;
+      commissionRate = atRes.commissionRate;
+      hasMeta = atRes.hasMeta;
+      usedMethod = 'TikTok Shop API v2 (AccessTrade)';
+    } catch (atErr) {
+      logger.warning('convertTikTokLink', 'AccessTrade TikTok v2 failed (no fallback)', {
+        error: atErr.message,
+        productId
+      });
+      throw new Error(mapAccessTradeTikTokError(atErr));
     }
   } else {
     throw new Error('Tính năng hoàn tiền TikTok Shop hiện đang được nâng cấp, vui lòng sử dụng link Shopee.');
@@ -586,9 +650,12 @@ async function fetchAccessTradeOrderProducts(apiKey, orderSn, merchant, options 
 }
 
 module.exports = {
+  TIKTOK_VIDEO_LINK_ERROR,
   convertTikTokLink,
   generateTikTokOpenApiLink,
   generateTikTokAccessTradeLink,
+  fetchTikTokAccessTradePreview,
+  mapAccessTradeTikTokError,
   buildTikTokDeepLink,
   fetchAccessTradeOrders,
   fetchAccessTradeOrderProducts,
