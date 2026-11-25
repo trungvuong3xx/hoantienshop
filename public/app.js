@@ -819,6 +819,7 @@ function syncAuthUi() {
   const accountAuthenticatedContent = document.getElementById('accountAuthenticatedContent');
 
   if (authToken && currentUser) {
+    document.body.classList.add('is-authenticated');
     navAuthArea?.classList.add('hidden');
     navUserArea?.classList.remove('hidden');
     walletGuestPrompt?.classList.add('hidden');
@@ -842,6 +843,7 @@ function syncAuthUi() {
       ensureAdminAssetsLoaded();
     }
   } else {
+    document.body.classList.remove('is-authenticated');
     navAuthArea?.classList.remove('hidden');
     navUserArea?.classList.add('hidden');
     navAdminBtn?.classList.add('hidden');
@@ -1501,6 +1503,13 @@ async function handleGetCashbackLink(rawOptions) {
       : '';
 
     if (resultCardsList) {
+      if (items[0] && items[0].originalUrl) {
+        saveRecentConvertedLink({
+          url: items[0].originalUrl,
+          title: items[0].productName || (items[0].platform === 'tiktok' ? 'Sản phẩm TikTok' : 'Sản phẩm Shopee'),
+          platform: items[0].platform || 'shopee'
+        });
+      }
       resultCardsList.innerHTML = items
         .map((item) => {
           const isShopee = item.platform === 'shopee';
@@ -3045,6 +3054,15 @@ async function loadAdminDashboard() {
   }
 }
 
+// Prevent browser password managers from autofilling saved admin usernames into search bars.
+['admOrderSearchInput', 'admWithdrawalSearchInput', 'admUserSearchInput'].forEach((id) => {
+  const unlock = (e) => {
+    if (e.currentTarget && e.currentTarget.readOnly) e.currentTarget.readOnly = false;
+  };
+  on(id, 'pointerdown', unlock);
+  on(id, 'focus', unlock);
+});
+
 on('refreshAdminBtn', 'click', loadAdminDashboard);
 on('admOrderSearchBtn', 'click', () => loadAdminOrdersPage(1));
 on('admOrderSearchInput', 'keydown', (e) => {
@@ -4209,18 +4227,28 @@ async function fetchAndRenderNotifications() {
   }
 }
 
+function setNotifDrawerOpen(isOpen) {
+  const dd = document.getElementById('notifDropdown');
+  const backdrop = document.getElementById('notifBackdrop');
+  const btn = document.getElementById('notifBellBtn');
+  if (dd) dd.classList.toggle('hidden', !isOpen);
+  if (backdrop) backdrop.classList.toggle('hidden', !isOpen);
+  if (btn) btn.setAttribute('aria-expanded', String(Boolean(isOpen)));
+}
+
 on('notifBellBtn', 'click', async (e) => {
   e.stopPropagation();
   const dd = document.getElementById('notifDropdown');
-  const btn = document.getElementById('notifBellBtn');
   if (!dd) return;
   const willOpen = dd.classList.contains('hidden');
-  dd.classList.toggle('hidden', !willOpen);
-  if (btn) btn.setAttribute('aria-expanded', String(willOpen));
+  setNotifDrawerOpen(willOpen);
   if (willOpen) {
     await fetchAndRenderNotifications();
   }
 });
+
+on('notifBackdrop', 'click', () => setNotifDrawerOpen(false));
+on('notifCloseBtn', 'click', () => setNotifDrawerOpen(false));
 
 on('notifMarkAllBtn', 'click', async (e) => {
   e.stopPropagation();
@@ -4256,10 +4284,17 @@ on('notifList', 'click', async (e) => {
 document.addEventListener('click', (e) => {
   const wrap = document.getElementById('notifBellWrap');
   const dd = document.getElementById('notifDropdown');
-  const btn = document.getElementById('notifBellBtn');
-  if (wrap && dd && !dd.classList.contains('hidden') && !wrap.contains(e.target)) {
-    dd.classList.add('hidden');
-    if (btn) btn.setAttribute('aria-expanded', 'false');
+  if (dd && !dd.classList.contains('hidden') && !dd.contains(e.target) && (!wrap || !wrap.contains(e.target))) {
+    setNotifDrawerOpen(false);
+  }
+});
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    const dd = document.getElementById('notifDropdown');
+    if (dd && !dd.classList.contains('hidden')) {
+      setNotifDrawerOpen(false);
+    }
   }
 });
 
@@ -4499,15 +4534,17 @@ function renderLeaderboardTable(mode = 'spend') {
     .map((item) => {
       const medalCls = item.rank <= 3 ? `lb-rank-medal lb-rank-${item.rank}` : 'lb-rank-medal';
       const metricVal = activeLeaderboardTab === 'cashback' ? item.totalCashback : item.totalSpend;
+      const isMe = currentUser && item.code && currentUser.code === item.code;
+      const shortTier = String(item.vipTierName || '').replace(/^Thành viên\s+/i, '');
       return `
-        <tr>
-          <td><span class="${medalCls}">#${item.rank}</span></td>
-          <td>
-            <strong>${escapeHtml(item.displayName)}</strong>
-            <div style="font-size:12px;color:#64748b;">${escapeHtml(item.code)}</div>
+        <tr class="${isMe ? 'is-me' : ''}">
+          <td class="lb-col-rank"><span class="${medalCls}">#${item.rank}</span></td>
+          <td class="lb-col-user">
+            <strong>${escapeHtml(item.displayName)}${isMe ? ' (Bạn)' : ''}</strong>
+            <div class="lb-user-code" style="font-size:12px;color:#64748b;">${escapeHtml(item.code)}</div>
           </td>
-          <td><span class="status-badge" style="background:#fff7ed;color:#c2410c;">${escapeHtml(item.vipTierIcon || '🏅')} ${escapeHtml(item.vipTierName || '')}</span></td>
-          <td><strong style="color:#059669;">${fmtVnd(metricVal)}</strong></td>
+          <td class="lb-col-tier"><span class="lb-tier-pill">${escapeHtml(item.vipTierIcon || '🏅')} ${escapeHtml(shortTier || item.vipTierName || '')}</span></td>
+          <td class="lb-col-metric"><strong class="lb-metric-val">${fmtVnd(metricVal)}</strong></td>
         </tr>`;
     })
     .join('');
@@ -4531,4 +4568,65 @@ document.addEventListener('click', (e) => {
   if (lbBtn) {
     renderLeaderboardTable(lbBtn.getAttribute('data-lb-tab'));
   }
+  const recentChip = e.target.closest('[data-recent-url]');
+  if (recentChip) {
+    const url = recentChip.getAttribute('data-recent-url');
+    if (url && productUrlInput) {
+      productUrlInput.value = url;
+      clearInputBtn?.classList.remove('hidden');
+      handleGetCashbackLink();
+    }
+  }
 });
+
+// ================= RECENT CONVERTED LINKS (LOCAL HISTORY, MAX 3) =================
+const RECENT_LINKS_STORAGE_KEY = 'lila_recent_links_v1';
+
+function loadRecentConvertedLinks() {
+  try {
+    const raw = localStorage.getItem(RECENT_LINKS_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed.filter((x) => x && typeof x.url === 'string').slice(0, 3) : [];
+  } catch {
+    return [];
+  }
+}
+
+function renderRecentConvertedLinks() {
+  const strip = document.getElementById('recentLinksStrip');
+  if (!strip) return;
+  const list = loadRecentConvertedLinks();
+  if (!list.length) {
+    strip.classList.add('hidden');
+    strip.innerHTML = '';
+    return;
+  }
+  strip.classList.remove('hidden');
+  strip.innerHTML =
+    '<span class="recent-links-label">Vừa tạo:</span>' +
+    list
+      .map((item) => {
+        const prefix = item.platform === 'tiktok' ? 'TikTok' : 'Shopee';
+        const shortTitle = String(item.title || prefix).slice(0, 22);
+        return `<button type="button" class="recent-link-chip" data-recent-url="${escapeHtml(item.url)}" title="${escapeHtml(item.title || item.url)}">${escapeHtml(shortTitle)}</button>`;
+      })
+      .join('');
+}
+
+function saveRecentConvertedLink(entry) {
+  if (!entry || !entry.url) return;
+  try {
+    const current = loadRecentConvertedLinks().filter((x) => x.url !== entry.url);
+    current.unshift({
+      url: String(entry.url).slice(0, 500),
+      title: String(entry.title || '').slice(0, 80),
+      platform: entry.platform === 'tiktok' ? 'tiktok' : 'shopee'
+    });
+    localStorage.setItem(RECENT_LINKS_STORAGE_KEY, JSON.stringify(current.slice(0, 3)));
+    renderRecentConvertedLinks();
+  } catch {
+    // Ignore storage quota errors
+  }
+}
+
+renderRecentConvertedLinks();
