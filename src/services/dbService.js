@@ -2689,6 +2689,55 @@ async function verifyAndConsumePasswordResetOtp(userId, rawOtp, { nowMs = Date.n
   }
 }
 
+async function pruneExpiredAuthRecords({
+  sessionRetentionDays = 30,
+  otpRetentionDays = 7,
+  nowMs = Date.now()
+} = {}) {
+  logger.logEnter('pruneExpiredAuthRecords', { sessionRetentionDays, otpRetentionDays });
+  const sessionCutoffMs = nowMs - Math.max(1, sessionRetentionDays) * 24 * 3600 * 1000;
+  const otpCutoffMs = nowMs - Math.max(1, otpRetentionDays) * 24 * 3600 * 1000;
+
+  if (!pgPool) {
+    let prunedSessions = 0;
+    for (const [id, s] of memorySessions.entries()) {
+      const expired = s.expiresAt < sessionCutoffMs || s.absoluteExpiresAt < sessionCutoffMs;
+      const revokedOld = s.revokedAt && s.revokedAt < sessionCutoffMs;
+      if (expired || revokedOld) {
+        memorySessions.delete(id);
+        prunedSessions++;
+      }
+    }
+    let prunedOtps = 0;
+    for (const [id, rec] of memoryResetTokens.entries()) {
+      if (rec.createdAt < otpCutoffMs || rec.expiresAt < otpCutoffMs || rec.usedAt) {
+        memoryResetTokens.delete(id);
+        prunedOtps++;
+      }
+    }
+    logger.logLeave('pruneExpiredAuthRecords', { mode: 'memory', prunedSessions, prunedOtps });
+    return { prunedSessions, prunedOtps };
+  }
+
+  const sessRes = await pgPool.query(
+    `DELETE FROM user_sessions
+     WHERE expires_at < $1
+        OR absolute_expires_at < $1
+        OR (revoked_at IS NOT NULL AND revoked_at < $1)`,
+    [new Date(sessionCutoffMs)]
+  );
+  const otpRes = await pgPool.query(
+    `DELETE FROM password_reset_tokens
+     WHERE created_at < $1
+        OR expires_at < $1
+        OR (used_at IS NOT NULL AND used_at < $1)`,
+    [new Date(otpCutoffMs)]
+  );
+  const result = { prunedSessions: sessRes.rowCount || 0, prunedOtps: otpRes.rowCount || 0 };
+  logger.logLeave('pruneExpiredAuthRecords', { mode: 'postgres', ...result });
+  return result;
+}
+
 // ================= TRUE APPEND-ONLY LEDGER & WALLET ACCOUNTING =================
 
 /**
@@ -3670,6 +3719,7 @@ module.exports = {
   revokeSessionByRefreshToken,
   createPasswordResetOtp,
   verifyAndConsumePasswordResetOtp,
+  pruneExpiredAuthRecords,
   sanitizeUser,
   getDatabaseStatus,
   reloadStateFromPostgres,

@@ -224,7 +224,46 @@ async function run() {
       }
     });
     assert.equal(retryB.status, 401, 'Logout-all must revoke all sessions');
-    console.log('PASS: HTTP login, refresh rotation, CSRF guard, single-device logout, and logout-all verified.');
+
+    // AUD-01: Admin reset_password & toggle_lock must revoke existing refresh sessions immediately
+    const loginC = await fetch(`${baseUrl}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+      body: JSON.stringify({ identifier: phone, password })
+    });
+    assert.equal(loginC.status, 200);
+    const refreshC = extractCookieValue(getSetCookies(loginC), 'hts_refresh');
+    assert.ok(refreshC);
+
+    const adminUser = db.users.find((u) => u.role === 'admin');
+    const adminToken = dbService.createToken(adminUser);
+    const targetUser = db.users.find((u) => u.phone === phone);
+    const adminResetRes = await fetch(`${baseUrl}/api/admin/users/action`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest',
+        Authorization: `Bearer ${adminToken}`
+      },
+      body: JSON.stringify({ userId: targetUser.id, action: 'reset_password', newPassword: 'AdminReset!2026' })
+    });
+    assert.equal(adminResetRes.status, 200);
+
+    const retryCAfterAdminReset = await fetch(`${baseUrl}/api/auth/refresh`, {
+      method: 'POST',
+      headers: {
+        'X-Requested-With': 'XMLHttpRequest',
+        Cookie: `hts_refresh=${encodeURIComponent(refreshC)}`
+      }
+    });
+    assert.equal(retryCAfterAdminReset.status, 401, 'Admin reset_password must revoke user refresh sessions');
+
+    // AUD-05: Expired sessions & OTP records are safely pruned by TTL cleanup
+    const pruneOut = await dbService.pruneExpiredAuthRecords({
+      nowMs: Date.now() + 120 * 24 * 3600 * 1000
+    });
+    assert.ok(pruneOut.prunedSessions >= 1, 'pruneExpiredAuthRecords should prune expired/revoked sessions');
+    console.log('PASS: HTTP login, refresh rotation, CSRF guard, single-device logout, logout-all, admin revocation (AUD-01), and TTL pruning (AUD-05) verified.');
 
     // 5. Frontend integration checks
     const appJs = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');

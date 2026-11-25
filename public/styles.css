@@ -5732,6 +5732,18 @@ body:has(#conversionResultSection:not(.hidden)) .floating-zalo {
   color: #ffffff;
 }
 
+@media (max-width: 768px) {
+  .btn-copy-code-mini {
+    min-height: 44px;
+    min-width: 44px;
+    padding: 8px 14px;
+    font-size: 12px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+}
+
 @media (max-width: 640px) {
   .hero-card {
     padding: 0;

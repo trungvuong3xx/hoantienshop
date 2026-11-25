@@ -34,6 +34,7 @@ const {
   revokeSessionByRefreshToken,
   createPasswordResetOtp,
   verifyAndConsumePasswordResetOtp,
+  pruneExpiredAuthRecords,
   sanitizeUser,
   getDatabaseStatus,
   getPgPool,
@@ -973,7 +974,13 @@ function registerCashbackRoutes(app) {
   });
 
   // Safe Outbound Redirect Route (/go/:clickId) - Whitelist enforced & strict-origin-when-cross-origin
-  app.get('/go/:clickId', asyncHandler(async (req, res) => {
+  const goRedirectLimiter = createRateLimiter({
+    windowMs: 60000,
+    max: 120,
+    keyPrefix: 'go-redir',
+    failClosed: false
+  });
+  app.get('/go/:clickId', goRedirectLimiter, asyncHandler(async (req, res) => {
     logger.logEnter('GET /go/:clickId', { clickId: req.params.clickId });
     const db = ensureDbLoaded();
     const click = await findClickById(req.params.clickId);
@@ -1316,13 +1323,23 @@ function registerCashbackRoutes(app) {
 
     if (user && user.email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(user.email).trim())) {
       const otpRecord = await createPasswordResetOtp(user, { ttlSec: 600 });
-      await sendPasswordResetOtpEmail({
+      const mailResult = await sendPasswordResetOtpEmail({
         to: String(user.email).trim(),
         userName: user.name || user.code,
         otpCode: otpRecord.otpCode,
         settings: db.settings,
         ttlMinutes: otpRecord.ttlMinutes
       });
+      if (!mailResult?.sent) {
+        logger.warning('POST /api/auth/forgot-password', 'Failed to deliver password reset OTP email', {
+          reason: mailResult?.reason || 'UNKNOWN'
+        });
+        logger.logLeave('POST /api/auth/forgot-password', { processed: false, mailError: mailResult?.reason || 'UNKNOWN' });
+        return res.status(503).json({
+          code: 'MAIL_DELIVERY_FAILED',
+          error: 'Hệ thống gửi email đang tạm gián đoạn. Vui lòng thử lại sau ít phút hoặc nhắn Zalo CSKH để được hỗ trợ ngay.'
+        });
+      }
     }
 
     // Always return generic success message to prevent account enumeration
@@ -1390,7 +1407,13 @@ function registerCashbackRoutes(app) {
   }));
 
   // 4. Current User Dashboard (Includes Orders, Withdrawals, Immutable Ledger & Referral Count)
-  app.get('/api/user/me', asyncHandler(async (req, res) => {
+  const userMeLimiter = createRateLimiter({
+    windowMs: 60000,
+    max: 120,
+    keyPrefix: 'user-me',
+    failClosed: false
+  });
+  app.get('/api/user/me', userMeLimiter, asyncHandler(async (req, res) => {
     logger.logEnter('GET /api/user/me');
     const user = getAuthUser(req);
     if (!user) {
@@ -2292,7 +2315,11 @@ function registerCashbackRoutes(app) {
     isAutoSyncInFlight = true;
     try {
       const out = await runAutoSyncAll({ requireAtLeastOne: false });
-      return res.json({ status: 'ok', ...out });
+      const pruned = await pruneExpiredAuthRecords().catch((pruneErr) => {
+        logger.warning('GET /api/cron/sync-shopee', 'Auth record TTL prune failed', { error: pruneErr.message });
+        return null;
+      });
+      return res.json({ status: 'ok', ...out, ...(pruned ? { pruned } : {}) });
     } catch (err) {
       logger.error('GET /api/cron/sync-shopee', 'Cron sync error', { error: err.message });
       return res.status(500).json({ error: 'Đã có lỗi xảy ra trên hệ thống.' });
@@ -2923,6 +2950,7 @@ function registerCashbackRoutes(app) {
       db.settings.vipTiers = normalized;
     }
 
+    let adminPasswordChangedUser = null;
     if (body.newAdminPassword) {
       const cleanNewPass = String(body.newAdminPassword).trim();
       if (cleanNewPass.length < 6) {
@@ -2936,7 +2964,7 @@ function registerCashbackRoutes(app) {
         return res.status(400).json({ error: 'Mật khẩu hiện tại không đúng hoặc chưa được cung cấp.' });
       }
       adminUser.passwordHash = await hashPasswordAsync(cleanNewPass);
-      adminUser.tokenVersion = Number(adminUser.tokenVersion || 1) + 1;
+      adminPasswordChangedUser = adminUser;
     }
 
     recordAuditLog(db, {
@@ -2951,6 +2979,14 @@ function registerCashbackRoutes(app) {
     });
 
     await saveDb(db);
+    if (adminPasswordChangedUser) {
+      await revokeUserSessions(adminPasswordChangedUser.id);
+      const freshAdmin = ensureDbLoaded().users.find((u) => u.id === adminPasswordChangedUser.id) || adminPasswordChangedUser;
+      const freshToken = createToken(freshAdmin);
+      const freshRefresh = await createRefreshSession(freshAdmin, { userAgent: req.headers['user-agent'] });
+      setAuthCookie(res, freshToken, freshRefresh.policy.accessTtlSec);
+      setRefreshCookie(res, freshRefresh.rawRefreshToken, freshRefresh.policy.idleTtlSec);
+    }
     logger.logLeave('POST /api/admin/settings');
     return res.json({ status: 'ok' });
   }));
@@ -3515,7 +3551,6 @@ function registerCashbackRoutes(app) {
         return res.status(400).json({ error: 'Mật khẩu mới phải có ít nhất 6 ký tự.' });
       }
       targetUser.passwordHash = await hashPasswordAsync(String(newPassword).trim());
-      targetUser.tokenVersion = Number(targetUser.tokenVersion || 1) + 1;
       recordAuditLog(db, {
         adminId,
         adminName,
@@ -3524,6 +3559,7 @@ function registerCashbackRoutes(app) {
         details: { userCode: targetUser.code }
       });
       await saveDb(db);
+      await revokeUserSessions(targetUser.id);
       logger.logLeave('POST /api/admin/users/action', { action, userCode: targetUser.code });
       return res.json({ status: 'ok', message: `Đã đổi mật khẩu cho ${targetUser.code} thành công!` });
     }
@@ -3533,7 +3569,6 @@ function registerCashbackRoutes(app) {
         return res.status(400).json({ error: 'Không thể khóa tài khoản Quản trị viên tối cao.' });
       }
       targetUser.accountLocked = !targetUser.accountLocked;
-      targetUser.tokenVersion = Number(targetUser.tokenVersion || 1) + 1;
       recordAuditLog(db, {
         adminId,
         adminName,
@@ -3542,6 +3577,7 @@ function registerCashbackRoutes(app) {
         details: { userCode: targetUser.code, accountLocked: targetUser.accountLocked }
       });
       await saveDb(db);
+      await revokeUserSessions(targetUser.id);
       const msg = targetUser.accountLocked
         ? `Đã khóa tài khoản ${targetUser.code} (chặn đăng nhập & rút tiền)!`
         : `Đã mở khóa tài khoản cho ${targetUser.code}!`;
@@ -3602,11 +3638,11 @@ function registerCashbackRoutes(app) {
       targetUser.isDeleted = true;
       targetUser.deletedAt = new Date().toISOString();
       targetUser.deletedByAdminId = adminId;
-      targetUser.tokenVersion = Number(targetUser.tokenVersion || 1) + 1;
       // Preserve identity and attribution; all users are archived, never removed from state.
       recordAuditLog(db, { adminId, adminName, action: 'soft_delete', targetId: userId,
         details: { userCode: targetUser.code, reason: 'Admin archived account' } });
       await saveDb(db);
+      await revokeUserSessions(targetUser.id);
       return res.json({ status: 'ok', message: `Đã vô hiệu hóa và lưu trữ tài khoản ${targetUser.code}.` });
     }
 

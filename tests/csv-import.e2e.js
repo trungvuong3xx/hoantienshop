@@ -78,7 +78,9 @@ if (process.env.CSV_UI_WORKER === '1') {
       assert.match(report, /Đã xác nhận nhập 500 đơn/);
       assert.match(report, /1 đơn ở lô hiện tại chưa rõ kết quả/);
       const committed = await state();
-      assert.equal(committed.balance, 501 * 6300);
+      // Batch 1 (500 orders at Bronze 70% = 6,300đ each) upgrades user to VIP Diamond (+10%),
+      // so Batch 2 order #501 earns 7,200đ (total: 500 * 6300 + 7200 = 3,157,200đ).
+      assert.equal(committed.balance, 500 * 6300 + 7200);
       assert.equal(committed.orders, 502);
       await upload(buildCsv(batchRows), '36');
       assert.deepEqual(await state(), committed, 'Retry must not double-credit committed batches');
