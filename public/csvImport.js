@@ -39,15 +39,27 @@
     if (dot >= 0 && comma >= 0) {
       const decimal = dot > comma ? '.' : ',', thousands = decimal === '.' ? ',' : '.';
       const parts = s.split(decimal);
-      if (parts.length !== 2 || !/^\d{1,2}$/.test(parts[1])) throw new Error(`Số tiền không rõ định dạng ở cột ${column}.`);
+      if (parts.length !== 2 || !/^\d{1,4}$/.test(parts[1])) throw new Error(`Số tiền không rõ định dạng ở cột ${column}.`);
       const groups = parts[0].split(thousands);
       if (groups.length > 1 && (!/^\d{1,3}$/.test(groups[0]) || groups.slice(1).some(v => !/^\d{3}$/.test(v)))) throw new Error(`Phân cách hàng nghìn không hợp lệ: ${column}.`);
       s = groups.join('') + '.' + parts[1];
     } else if (dot >= 0 || comma >= 0) {
-      const parts = s.split(dot >= 0 ? '.' : ',');
-      if (parts.length === 2 && parts[1].length <= 2) s = parts.join('.');
-      else if (/^\d{1,3}$/.test(parts[0]) && parts.slice(1).every(v => /^\d{3}$/.test(v))) s = parts.join('');
-      else throw new Error(`Số tiền không rõ định dạng ở cột ${column}.`);
+      const sep = dot >= 0 ? '.' : ',';
+      const parts = s.split(sep);
+      if (parts.length > 2) {
+        if (/^\d{1,3}$/.test(parts[0]) && parts.slice(1).every(v => /^\d{3}$/.test(v))) s = parts.join('');
+        else throw new Error(`Phân cách hàng nghìn không hợp lệ: ${column}.`);
+      } else if (parts.length === 2) {
+        if (parts[1].length <= 4 && (parts[1].length !== 3 || parts[0].length > 3)) {
+          s = parts.join('.');
+        } else if (/^\d{1,3}$/.test(parts[0]) && /^\d{3}$/.test(parts[1])) {
+          s = parts.join('');
+        } else {
+          throw new Error(`Số tiền không rõ định dạng ở cột ${column}.`);
+        }
+      } else {
+        throw new Error(`Số tiền không rõ định dạng ở cột ${column}.`);
+      }
     }
     const value = Number(s);
     if (!Number.isFinite(value) || value < 0 || value > Number.MAX_SAFE_INTEGER / 100) throw new Error(`Số tiền vượt giới hạn: ${column}.`);
@@ -56,9 +68,9 @@
 
   function statusOf(value) {
     const status = String(value || '').trim().toLowerCase();
-    if (['1', 'hoàn thành', 'đã hoàn thành', 'completed', 'approved', 'đã duyệt'].includes(status)) return 'approved';
+    if (['1', 'hoàn thành', 'đã hoàn thành', 'completed', 'approved', 'đã duyệt', 'đã thanh toán'].includes(status)) return 'approved';
     if (['2', '-1', 'đã hủy', 'đã huỷ', 'hủy', 'huỷ', 'cancelled', 'canceled', 'rejected'].includes(status)) return 'cancelled';
-    if (['0', 'pending', 'unpaid', 'chờ duyệt', 'đang chờ', 'chưa thanh toán', 'đang xử lý', 'đang giao', 'đang giao hàng'].includes(status)) return 'pending';
+    if (['0', 'pending', 'unpaid', 'chờ duyệt', 'đang chờ', 'đang chờ xử lý', 'chưa thanh toán', 'đang xử lý', 'đang giao', 'đang giao hàng'].includes(status)) return 'pending';
     throw new Error('Trạng thái CSV chưa được hỗ trợ: ' + (status || '(trống)'));
   }
 

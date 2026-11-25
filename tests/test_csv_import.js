@@ -41,6 +41,11 @@ async function run() {
   assert.throws(() => csv.parse('order_id,status,total commission,order amount\nBAD,approved,100,200,EXTRA'), /số cột/);
   assert.throws(() => csv.parse('order_id,status,total commission,order amount\nBAD,approved,"100,200'), /nháy đóng/);
   assert.equal(csv.reportTime('AffiliateCommissionReport_202611161133.csv'), Date.parse('2026-11-16T11:33:00+07:00'));
+  const shopeeFraction = sample({ 'Trạng thái đặt hàng': 'Đang chờ xử lý', 'Trạng thái sản phẩm liên kết': 'Đang chờ xử lý', 'Tổng hoa hồng đơn hàng(₫)': '1363.275', 'Giá trị đơn hàng (₫)': '54531' });
+  const shopeeParsed = csv.parse(buildCsv([shopeeFraction]));
+  assert.equal(shopeeParsed.rows[0].status, 'pending');
+  assert.equal(shopeeParsed.rows[0].totalCommission, 1363.275);
+  assert.equal(shopeeParsed.rows[0].orderAmount, 54531);
   console.log('PASS: exact 48-column schema, money, BOM, quotes/newlines, duplicate items and invalid/conflicting rows');
 
   const d = require('../src/services/dbService');
