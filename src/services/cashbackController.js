@@ -269,7 +269,7 @@ function upsertNetworkOrder(db, {
     : null;
 
   const validGross = Number.isFinite(Number(grossCommission)) && Number(grossCommission) >= 0
-    ? Number(grossCommission)
+    ? Math.round(Number(grossCommission))
     : 0;
 
   const normalizedPlatform =
@@ -3040,11 +3040,13 @@ function registerCashbackRoutes(app) {
         const existing = db.orders.find(o => sameOrder(o, orderSn, r.platform));
         const incomingTime = parseTimestamp(r.eventTime);
         const existingTime = parseTimestamp(existing?.eventTime);
+        const incomingGross = Math.round(r.totalCommission);
+        const incomingAmount = Math.round(r.orderAmount);
         if (existing && incomingTime && existingTime && incomingTime < existingTime) {
           throw new Error('Báo cáo cũ hơn dữ liệu đã nhập; đã bỏ qua.');
         }
         if (existing && incomingTime && incomingTime === existingTime &&
-            (existing.status !== r.status || Number(existing.grossCommission) !== r.totalCommission || Number(existing.orderAmount) !== r.orderAmount)) {
+            (existing.status !== r.status || Math.round(Number(existing.grossCommission || 0)) !== incomingGross || Math.round(Number(existing.orderAmount || 0)) !== incomingAmount)) {
           throw new Error('Hai báo cáo cùng thời điểm có dữ liệu khác nhau; cần đối soát thủ công.');
         }
         if (existing?.status === 'cancelled' && r.status === 'approved' && !incomingTime) {
@@ -3057,8 +3059,8 @@ function registerCashbackRoutes(app) {
         const syncedOrd = upsertNetworkOrder(db, {
           orderSn,
           rawSubId: r.userCode || r.sub1 || '',
-          grossCommission: r.totalCommission,
-          orderAmount: r.orderAmount,
+          grossCommission: incomingGross,
+          orderAmount: incomingAmount,
           status: normalizeNetworkStatus(r.status),
           platform: r.platform,
           productName: r.productName,

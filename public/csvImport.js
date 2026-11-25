@@ -32,7 +32,7 @@
     return records;
   }
 
-  function money(raw, column) {
+  function money(raw, column, opts = {}) {
     let s = String(raw ?? '').trim().replace(/(?:VND|₫|đ|\s)/gi, '');
     if (!s || !/^[0-9]+(?:[.,][0-9]+)*$/.test(s)) throw new Error(`Giá trị không hợp lệ ở cột ${column}.`);
     const dot = s.lastIndexOf('.'), comma = s.lastIndexOf(',');
@@ -50,7 +50,9 @@
         if (/^\d{1,3}$/.test(parts[0]) && parts.slice(1).every(v => /^\d{3}$/.test(v))) s = parts.join('');
         else throw new Error(`Phân cách hàng nghìn không hợp lệ: ${column}.`);
       } else if (parts.length === 2) {
-        if (parts[1].length <= 4 && (parts[1].length !== 3 || parts[0].length > 3)) {
+        if (sep === '.' && opts.dotIsDecimal && /^\d{1,4}$/.test(parts[1])) {
+          s = parts.join('.');
+        } else if (parts[1].length <= 4 && (parts[1].length !== 3 || parts[0].length > 3)) {
           s = parts.join('.');
         } else if (/^\d{1,3}$/.test(parts[0]) && /^\d{3}$/.test(parts[1])) {
           s = parts.join('');
@@ -64,6 +66,26 @@
     const value = Number(s);
     if (!Number.isFinite(value) || value < 0 || value > Number.MAX_SAFE_INTEGER / 100) throw new Error(`Số tiền vượt giới hạn: ${column}.`);
     return value;
+  }
+
+  function inferDotDecimalMode(records, colIndices, isShopeeSchema) {
+    let sawDotThousands = false;
+    let sawDotDecimal = false;
+    for (let i = 1; i < records.length; i++) {
+      for (const idx of colIndices) {
+        if (idx === undefined) continue;
+        const s = String(records[i][idx] ?? '').trim().replace(/(?:VND|₫|đ|\s)/gi, '');
+        if (!s) continue;
+        if (/^\d{1,3}(?:\.\d{3}){2,}(?:,\d+)?$/.test(s) || /^\d{1,3}(?:\.\d{3})+,\d+$/.test(s)) {
+          sawDotThousands = true;
+        } else if (/\.\d{1,2}$/.test(s) || /\.\d{4,}$/.test(s) || /^\d{4,}\.\d+$/.test(s) || /,.*\.\d+$/.test(s)) {
+          sawDotDecimal = true;
+        }
+      }
+    }
+    if (sawDotThousands) return false;
+    if (sawDotDecimal || isShopeeSchema) return true;
+    return false;
   }
 
   function statusOf(value) {
@@ -104,6 +126,8 @@
     for (const field of ['orderSn', 'status', 'commission', 'amount']) if (columns[field] === undefined) throw new Error('CSV thiếu cột bắt buộc: ' + field);
     const groups = new Map(); let duplicateRows = 0;
     const eventTime = reportTime(filename);
+    const isShopeeSchema = eventTime !== null || (columns.itemStatus !== undefined && columns.mcnFee !== undefined);
+    const moneyOpts = { dotIsDecimal: inferDotDecimalMode(records, [columns.commission, columns.amount, columns.mcnFee], isShopeeSchema) };
     for (let i = 1; i < records.length; i++) {
       const cells = records[i];
       if (cells.length !== headers.length) throw new Error(`Dòng ${i + 1}: số cột không khớp tiêu đề.`);
@@ -113,13 +137,13 @@
         if (orderSn.length < 2 || orderSn.length > 64 || !/^[A-Z0-9_.-]+$/.test(orderSn)) throw new Error('Mã đơn không hợp lệ.');
         const status = statusOf(val('status'));
         if (columns.itemStatus !== undefined && statusOf(val('itemStatus')) !== status) throw new Error('Trạng thái đơn và sản phẩm khác nhau; cần đối soát riêng.');
-        if (columns.mcnFee !== undefined && money(val('mcnFee'), 'Phí quản lý MCN') !== 0) throw new Error('Đơn có phí MCN; cần xác nhận cơ sở chia hoa hồng trước khi nhập.');
+        if (columns.mcnFee !== undefined && money(val('mcnFee'), 'Phí quản lý MCN', moneyOpts) !== 0) throw new Error('Đơn có phí MCN; cần xác nhận cơ sở chia hoa hồng trước khi nhập.');
         const merchant = val('platform').toLowerCase();
         const row = {
           orderSn, status, platform: merchant.includes('tiktok') ? 'tiktok' : 'shopee',
           userCode: val('attribution') || 'GUEST',
-          totalCommission: money(val('commission'), 'Tổng hoa hồng đơn hàng'),
-          orderAmount: money(val('amount'), 'Giá trị đơn hàng'),
+          totalCommission: Math.round(money(val('commission'), 'Tổng hoa hồng đơn hàng', moneyOpts)),
+          orderAmount: Math.round(money(val('amount'), 'Giá trị đơn hàng', moneyOpts)),
           productName: val('product').slice(0, 150), eventTime
         };
         const groupKey = JSON.stringify([row.platform, orderSn]);

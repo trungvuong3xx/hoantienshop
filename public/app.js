@@ -348,7 +348,7 @@ function ensureAdminAssetsLoaded() {
 
   adminAssetsPromise = Promise.all([
     loadStyle('/adminMobile.css?v=2'),
-    loadScript('/csvImport.js?v=2.3.2'),
+    loadScript('/csvImport.js?v=2.3.3'),
     loadScript('/tiktokReply.js?v=2'),
     loadScript('/adminMobile.js?v=3')
   ]).then(() => true);

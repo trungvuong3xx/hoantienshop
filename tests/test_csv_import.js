@@ -42,10 +42,15 @@ async function run() {
   assert.throws(() => csv.parse('order_id,status,total commission,order amount\nBAD,approved,"100,200'), /nháy đóng/);
   assert.equal(csv.reportTime('AffiliateCommissionReport_202611161133.csv'), Date.parse('2026-11-16T11:33:00+07:00'));
   const shopeeFraction = sample({ 'Trạng thái đặt hàng': 'Đang chờ xử lý', 'Trạng thái sản phẩm liên kết': 'Đang chờ xử lý', 'Tổng hoa hồng đơn hàng(₫)': '1363.275', 'Giá trị đơn hàng (₫)': '54531' });
-  const shopeeParsed = csv.parse(buildCsv([shopeeFraction]));
+  const shopeeShortFraction = sample({ 'ID đơn hàng': 'CSV_SHORT_FRACTION', 'Trạng thái đặt hàng': 'Đang chờ xử lý', 'Trạng thái sản phẩm liên kết': 'Đang chờ xử lý', 'Tổng hoa hồng đơn hàng(₫)': '308.625', 'Giá trị đơn hàng (₫)': '12345' });
+  const shopeeParsed = csv.parse(buildCsv([shopeeFraction, shopeeShortFraction]), 'AffiliateCommissionReport_202611161133.csv');
   assert.equal(shopeeParsed.rows[0].status, 'pending');
-  assert.equal(shopeeParsed.rows[0].totalCommission, 1363.275);
+  assert.equal(shopeeParsed.rows[0].totalCommission, 1363);
   assert.equal(shopeeParsed.rows[0].orderAmount, 54531);
+  assert.equal(shopeeParsed.rows[1].totalCommission, 309, '3-digit integer + 3-digit decimal in Shopee CSV must not be multiplied by 1000');
+  const vnThousands = csv.parse(buildCsv([sample({ 'Tổng hoa hồng đơn hàng(₫)': '1.000.000', 'Giá trị đơn hàng (₫)': '2.500.000' })]));
+  assert.equal(vnThousands.rows[0].totalCommission, 1000000);
+  assert.equal(vnThousands.rows[0].orderAmount, 2500000);
   console.log('PASS: exact 48-column schema, money, BOM, quotes/newlines, duplicate items and invalid/conflicting rows');
 
   const d = require('../src/services/dbService');
