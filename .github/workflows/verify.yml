@@ -24,11 +24,11 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - run: npx playwright install --with-deps chromium
       - run: npm run lint
       - run: npm test
       - run: npm run test:postgres
       - run: npm run test:csv:postgres
       - run: npm run test:regression
-      - run: npx playwright install --with-deps chromium
       - run: npm run test:browser
       - run: npm run test:csv:browser

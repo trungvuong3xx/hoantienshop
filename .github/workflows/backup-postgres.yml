@@ -9,14 +9,28 @@ on:
 jobs:
   backup:
     runs-on: ubuntu-latest
-    if: ${{ secrets.DATABASE_URL != '' && secrets.BACKUP_ENCRYPTION_KEY != '' }}
     steps:
+      - name: Check backup secrets
+        id: check_secrets
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          BACKUP_ENCRYPTION_KEY: ${{ secrets.BACKUP_ENCRYPTION_KEY }}
+        run: |
+          if [ -z "$DATABASE_URL" ] || [ -z "$BACKUP_ENCRYPTION_KEY" ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "Skipping backup: DATABASE_URL or BACKUP_ENCRYPTION_KEY secret is not configured."
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Install PostgreSQL 16 client
+        if: steps.check_secrets.outputs.ready == 'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y postgresql-client-16 openssl
 
       - name: Dump and encrypt database
+        if: steps.check_secrets.outputs.ready == 'true'
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           BACKUP_ENCRYPTION_KEY: ${{ secrets.BACKUP_ENCRYPTION_KEY }}
@@ -30,6 +44,7 @@ jobs:
           echo "ENC_FILE=$ENC_FILE" >> "$GITHUB_ENV"
 
       - name: Upload encrypted backup artifact (30-day retention)
+        if: steps.check_secrets.outputs.ready == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: pg-backup-${{ github.run_id }}
