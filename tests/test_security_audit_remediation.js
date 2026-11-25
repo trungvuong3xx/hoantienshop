@@ -136,7 +136,7 @@ async function runTests() {
     const bottomNavSlice = indexHtml.slice(indexHtml.indexOf('id="mobileBottomNav"'));
     assert(bottomNavSlice.includes('data-nav="leaderboard"'), 'Mobile bottom nav must include leaderboard tab');
     assert(indexHtml.includes('property="og:image" content="https://hoantiensan.online/'), 'og:image must be absolute URL');
-    assert(/CACHE_NAME\s*=\s*'lila-pwa-v1[4-9]'/.test(swJs), 'sw.js cache version must be bumped');
+    assert(/CACHE_NAME\s*=\s*'lila-pwa-v(1[4-9]|2[0-9])'/.test(swJs), 'sw.js cache version must be bumped');
 
     console.log('PASS: Security & comprehensive audit remediation verified (seedDb clean, all 8 admin secrets masked, logger redaction, XHR cookie-only, mobile bottom nav leaderboard, absolute og:image, SW v14)');
   } finally {

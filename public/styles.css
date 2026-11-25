@@ -5780,3 +5780,114 @@ body:has(#conversionResultSection:not(.hidden)) .floating-zalo {
     gap: 10px;
   }
 }
+
+/* ================= PASSWORD VISIBILITY TOGGLE & ADMIN RESET RESULT BOX ================= */
+.password-field-wrap {
+  position: relative;
+  width: 100%;
+  display: flex;
+  align-items: center;
+}
+
+.password-field-wrap input {
+  width: 100%;
+  padding-right: 46px !important;
+}
+
+.btn-toggle-password {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 38px;
+  height: 38px;
+  min-width: 38px !important;
+  min-height: 38px !important;
+  padding: 0 !important;
+  border: none !important;
+  border-radius: 8px !important;
+  background: transparent !important;
+  color: #64748b;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 2;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+@media (hover: hover) {
+  .btn-toggle-password:hover {
+    color: #0f172a;
+    background: rgba(15, 23, 42, 0.06) !important;
+  }
+}
+
+.btn-toggle-password:active {
+  color: #ee4d2d;
+  background: rgba(238, 77, 45, 0.08) !important;
+}
+
+.btn-toggle-password[aria-pressed="true"] {
+  color: #ee4d2d;
+}
+
+@media (max-width: 768px) {
+  .password-field-wrap input {
+    padding-right: 50px !important;
+  }
+  .btn-toggle-password {
+    right: 2px;
+    width: 44px;
+    height: 44px;
+    min-width: 44px !important;
+    min-height: 44px !important;
+  }
+}
+
+.manage-reset-result-box {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #ecfdf5;
+  border: 1.5px solid #6ee7b7;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.manage-reset-result-head {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12.5px;
+  color: #065f46;
+  font-weight: 600;
+}
+
+.manage-reset-pwd-code {
+  display: block;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: #ffffff;
+  border: 1px dashed #10b981;
+  color: #0f172a;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  word-break: break-all;
+  user-select: all;
+}
+
+.manage-reset-result-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+@media (max-width: 374px) {
+  .manage-reset-result-actions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

@@ -1195,7 +1195,10 @@ on('openLoginBtn', 'click', () => openAuthModal('login'));
 on('openRegisterBtn', 'click', () => openAuthModal('register'));
 on('walletLoginBtn', 'click', () => openAuthModal('login'));
 on('walletRegisterBtn', 'click', () => openAuthModal('register'));
-on('closeAuthModalBtn', 'click', () => authModal?.classList.add('hidden'));
+on('closeAuthModalBtn', 'click', () => {
+  resetPasswordVisibility(authModal);
+  authModal?.classList.add('hidden');
+});
 
 document.querySelectorAll('.auth-tab').forEach((tabBtn) => {
   tabBtn.addEventListener('click', () => openAuthModal(tabBtn.getAttribute('data-auth-tab')));
@@ -3776,6 +3779,8 @@ function openUserManageModal(user) {
     if (el) el.value = v;
   };
   setVal('manageNewPassword', '');
+  clearManageResetResult();
+  resetPasswordVisibility(userManageModal);
   setVal('manageAdjustAmount', '');
   setVal('manageAdjustNote', '');
   setVal(
@@ -3798,8 +3803,32 @@ function openUserManageModal(user) {
   userManageModal.classList.remove('hidden');
 }
 
+let lastAdminResetTempPwd = '';
+
+function clearManageResetResult() {
+  lastAdminResetTempPwd = '';
+  const box = document.getElementById('manageResetResultBox');
+  const valEl = document.getElementById('manageResetPwdValue');
+  if (valEl) valEl.textContent = '';
+  if (box) box.classList.add('hidden');
+}
+
 on('closeUserManageModalBtn', 'click', () => {
+  clearManageResetResult();
+  resetPasswordVisibility(userManageModal);
   userManageModal?.classList.add('hidden');
+});
+
+on('btnCopyResetPwd', 'click', () => {
+  if (!lastAdminResetTempPwd) return;
+  copyText(lastAdminResetTempPwd, 'Đã sao chép mật khẩu tạm!');
+});
+
+on('btnCopyResetMsg', 'click', () => {
+  if (!lastAdminResetTempPwd || !currentManagingUser) return;
+  const label = currentManagingUser.phone || currentManagingUser.code || currentManagingUser.name || '';
+  const msg = `Mật khẩu tạm tài khoản LiLa của bạn (${label}) là: ${lastAdminResetTempPwd}. Vui lòng đăng nhập tại https://hoantiensan.online và đổi lại mật khẩu mới nhé!`;
+  copyText(msg, 'Đã sao chép tin nhắn gửi Zalo cho khách!');
 });
 
 on('btnGenerateRandomPwd', 'click', () => {
@@ -3818,6 +3847,7 @@ on('btnGenerateRandomPwd', 'click', () => {
   if (input) {
     input.value = pwd;
     input.type = 'text';
+    syncPasswordToggleUi(input);
     showToast('Đã tạo mật khẩu ngẫu nhiên: ' + pwd);
   }
 });
@@ -3841,8 +3871,16 @@ on('btnResetUserPassword', 'click', async () => {
       })
     });
     showToast(res.message);
-    if (document.getElementById('manageNewPassword')) {
-      document.getElementById('manageNewPassword').value = '';
+    lastAdminResetTempPwd = newPassword;
+    const resultBox = document.getElementById('manageResetResultBox');
+    const resultVal = document.getElementById('manageResetPwdValue');
+    if (resultVal) resultVal.textContent = newPassword;
+    if (resultBox) resultBox.classList.remove('hidden');
+    const pwdInput = document.getElementById('manageNewPassword');
+    if (pwdInput) {
+      pwdInput.value = '';
+      pwdInput.type = 'password';
+      syncPasswordToggleUi(pwdInput);
     }
     await loadAdminDashboard();
   } catch (err) {
@@ -4313,7 +4351,70 @@ setTimeout(() => {
 }, 1500);
 
 // ================= BOOTSTRAP INITIALIZATION =================
+const PASSWORD_EYE_SVG = '<svg class="svg-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>';
+const PASSWORD_EYE_OFF_SVG = '<svg class="svg-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" y1="2" x2="22" y2="22"/></svg>';
+
+function syncPasswordToggleUi(input) {
+  if (!input || !input.parentElement) return;
+  const btn = input.parentElement.querySelector('.btn-toggle-password');
+  if (!btn) return;
+  const isVisible = input.type === 'text';
+  btn.setAttribute('aria-pressed', isVisible ? 'true' : 'false');
+  btn.setAttribute('aria-label', isVisible ? 'Ẩn mật khẩu' : 'Hiện mật khẩu');
+  btn.title = isVisible ? 'Ẩn mật khẩu' : 'Hiện mật khẩu';
+  btn.innerHTML = isVisible ? PASSWORD_EYE_OFF_SVG : PASSWORD_EYE_SVG;
+}
+
+function resetPasswordVisibility(container) {
+  if (!container || typeof container.querySelectorAll !== 'function') return;
+  container.querySelectorAll('.password-field-wrap input').forEach((input) => {
+    if (input.type === 'text') {
+      input.type = 'password';
+      syncPasswordToggleUi(input);
+    }
+  });
+}
+
+function initPasswordVisibilityToggles() {
+  if (typeof document === 'undefined') return;
+  document.querySelectorAll('input[type="password"]').forEach((input) => {
+    if (input.dataset.pwdToggleReady === '1') return;
+    input.dataset.pwdToggleReady = '1';
+    const parent = input.parentElement;
+    if (!parent) return;
+
+    const wrap = document.createElement('div');
+    wrap.className = 'password-field-wrap';
+    parent.insertBefore(wrap, input);
+    wrap.appendChild(input);
+
+    const toggleBtn = document.createElement('button');
+    toggleBtn.type = 'button';
+    toggleBtn.className = 'btn-toggle-password';
+    toggleBtn.setAttribute('aria-label', 'Hiện mật khẩu');
+    toggleBtn.setAttribute('aria-pressed', 'false');
+    toggleBtn.title = 'Hiện mật khẩu';
+    toggleBtn.innerHTML = PASSWORD_EYE_SVG;
+
+    toggleBtn.addEventListener('click', () => {
+      const nextType = input.type === 'password' ? 'text' : 'password';
+      input.type = nextType;
+      syncPasswordToggleUi(input);
+      input.focus({ preventScroll: true });
+    });
+
+    wrap.appendChild(toggleBtn);
+  });
+
+  document.addEventListener('submit', (e) => {
+    if (e.target && typeof e.target.querySelectorAll === 'function') {
+      resetPasswordVisibility(e.target);
+    }
+  });
+}
+
 async function initBoot() {
+  initPasswordVisibilityToggles();
   syncAuthUi();
   // Font download must not block the first paint or application scripts.
   const font = document.getElementById('webFont');
