@@ -23,11 +23,17 @@ jobs:
             echo "ready=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Install PostgreSQL 16 client
+      - name: Install PostgreSQL 18 client
         if: steps.check_secrets.outputs.ready == 'true'
         run: |
           sudo apt-get update
-          sudo apt-get install -y postgresql-client-16 openssl
+          sudo apt-get install -y curl ca-certificates openssl
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          . /etc/os-release
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-18
 
       - name: Dump and encrypt database
         if: steps.check_secrets.outputs.ready == 'true'
