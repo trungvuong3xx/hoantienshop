@@ -9,7 +9,8 @@ const SENSITIVE_SETTING_KEYS = [
   'accesstradeApiKey',
   'addlivetagApiKey',
   'postbackToken',
-  'turnstileSecretKey'
+  'turnstileSecretKey',
+  'resendApiKey'
 ];
 
 const CIPHER_PREFIX = 'enc:v1:';

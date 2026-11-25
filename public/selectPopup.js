@@ -43,6 +43,7 @@
       list.append(button);
     }
     if (!list.childElementCount) list.textContent = 'Không tìm thấy lựa chọn phù hợp.';
+    list.scrollTop = 0;
   };
   dialog.querySelector('header button').addEventListener('click', () => dialog.close());
   dialog.addEventListener('click', event => { if (event.target === dialog) dialog.close(); });
@@ -57,6 +58,8 @@
     }
   });
   dialog.addEventListener('close', () => {
+    search.blur();
+    dialog.classList.remove('has-search');
     const button = controls.get(active);
     button?.setAttribute('aria-expanded', 'false');
     active = null;
@@ -93,6 +96,7 @@
       title.textContent = label(select);
       search.value = '';
       search.hidden = select.options.length < 8;
+      dialog.classList.toggle('has-search', !search.hidden);
       render();
       button.setAttribute('aria-expanded', 'true');
       dialog.showModal();

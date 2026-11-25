@@ -1076,6 +1076,17 @@ async function initPostgresIfConfigured() {
         CREATE INDEX IF NOT EXISTS idx_user_sessions_user_id ON user_sessions(user_id);
         CREATE INDEX IF NOT EXISTS idx_user_sessions_family_id ON user_sessions(family_id);
         CREATE INDEX IF NOT EXISTS idx_user_sessions_expires_at ON user_sessions(expires_at);
+        CREATE TABLE IF NOT EXISTS password_reset_tokens (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL,
+          email TEXT NOT NULL,
+          otp_hash TEXT NOT NULL,
+          attempts INT DEFAULT 0,
+          expires_at TIMESTAMPTZ NOT NULL,
+          used_at TIMESTAMPTZ NULL,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_pwd_reset_user ON password_reset_tokens(user_id, created_at DESC);
 
         -- Safe idempotent schema migrations for OCC, orders, users, withdrawals & audit_logs
         ALTER TABLE hoantienshop_state ADD COLUMN IF NOT EXISTS version BIGINT DEFAULT 1;
@@ -2546,6 +2557,138 @@ async function revokeUserSessions(userId) {
   await reloadStateFromPostgres({ strict: true });
 }
 
+const memoryResetTokens = new Map();
+const MAX_RESET_OTP_ATTEMPTS = 5;
+
+function hashResetOtp(userId, rawOtp) {
+  return crypto
+    .createHmac('sha256', getJwtSecret())
+    .update(`pwd_reset:${userId}:${String(rawOtp || '').trim()}`)
+    .digest('hex');
+}
+
+async function createPasswordResetOtp(user, { ttlSec = 600, nowMs = Date.now() } = {}) {
+  const otpCode = String(crypto.randomInt(100000, 1000000));
+  const id = `prt_${crypto.randomUUID()}`;
+  const otpHash = hashResetOtp(user.id, otpCode);
+  const expiresAt = nowMs + ttlSec * 1000;
+  const email = String(user.email || '').trim().toLowerCase();
+
+  if (!pgPool) {
+    for (const tok of memoryResetTokens.values()) {
+      if (tok.userId === user.id && !tok.usedAt) tok.usedAt = nowMs;
+    }
+    memoryResetTokens.set(id, {
+      id,
+      userId: user.id,
+      email,
+      otpHash,
+      attempts: 0,
+      expiresAt,
+      usedAt: null,
+      createdAt: nowMs
+    });
+    return { id, otpCode, expiresAt, ttlMinutes: Math.round(ttlSec / 60) };
+  }
+
+  const client = await pgPool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('UPDATE password_reset_tokens SET used_at = COALESCE(used_at, $2) WHERE user_id = $1 AND used_at IS NULL', [
+      user.id,
+      new Date(nowMs)
+    ]);
+    await client.query(
+      `INSERT INTO password_reset_tokens (id, user_id, email, otp_hash, attempts, expires_at, created_at)
+       VALUES ($1, $2, $3, $4, 0, $5, $6)`,
+      [id, user.id, email, otpHash, new Date(expiresAt), new Date(nowMs)]
+    );
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
+  return { id, otpCode, expiresAt, ttlMinutes: Math.round(ttlSec / 60) };
+}
+
+async function verifyAndConsumePasswordResetOtp(userId, rawOtp, { nowMs = Date.now() } = {}) {
+  const cleanOtp = String(rawOtp || '').trim();
+  if (!/^\d{6}$/.test(cleanOtp)) return { ok: false, reason: 'INVALID_FORMAT' };
+  const candidateHash = hashResetOtp(userId, cleanOtp);
+
+  if (!pgPool) {
+    let latest = null;
+    for (const tok of memoryResetTokens.values()) {
+      if (tok.userId === userId && !tok.usedAt) {
+        if (!latest || tok.createdAt > latest.createdAt) latest = tok;
+      }
+    }
+    if (!latest) return { ok: false, reason: 'NOT_FOUND' };
+    if (nowMs > latest.expiresAt) {
+      latest.usedAt = nowMs;
+      return { ok: false, reason: 'EXPIRED' };
+    }
+    if (latest.attempts >= MAX_RESET_OTP_ATTEMPTS) {
+      latest.usedAt = nowMs;
+      return { ok: false, reason: 'TOO_MANY_ATTEMPTS' };
+    }
+    const a = Buffer.from(candidateHash, 'hex');
+    const b = Buffer.from(latest.otpHash, 'hex');
+    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+      latest.attempts += 1;
+      if (latest.attempts >= MAX_RESET_OTP_ATTEMPTS) latest.usedAt = nowMs;
+      return { ok: false, reason: latest.attempts >= MAX_RESET_OTP_ATTEMPTS ? 'TOO_MANY_ATTEMPTS' : 'MISMATCH' };
+    }
+    latest.usedAt = nowMs;
+    return { ok: true };
+  }
+
+  const client = await pgPool.connect();
+  try {
+    await client.query('BEGIN');
+    const res = await client.query(
+      'SELECT * FROM password_reset_tokens WHERE user_id = $1 AND used_at IS NULL ORDER BY created_at DESC LIMIT 1 FOR UPDATE',
+      [userId]
+    );
+    const row = res.rows[0];
+    if (!row) {
+      await client.query('ROLLBACK');
+      return { ok: false, reason: 'NOT_FOUND' };
+    }
+    if (nowMs > new Date(row.expires_at).getTime()) {
+      await client.query('UPDATE password_reset_tokens SET used_at = $2 WHERE id = $1', [row.id, new Date(nowMs)]);
+      await client.query('COMMIT');
+      return { ok: false, reason: 'EXPIRED' };
+    }
+    if (Number(row.attempts || 0) >= MAX_RESET_OTP_ATTEMPTS) {
+      await client.query('UPDATE password_reset_tokens SET used_at = $2 WHERE id = $1', [row.id, new Date(nowMs)]);
+      await client.query('COMMIT');
+      return { ok: false, reason: 'TOO_MANY_ATTEMPTS' };
+    }
+    const a = Buffer.from(candidateHash, 'hex');
+    const b = Buffer.from(String(row.otp_hash || ''), 'hex');
+    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+      const nextAttempts = Number(row.attempts || 0) + 1;
+      await client.query(
+        'UPDATE password_reset_tokens SET attempts = $2, used_at = CASE WHEN $2 >= $3 THEN $4 ELSE used_at END WHERE id = $1',
+        [row.id, nextAttempts, MAX_RESET_OTP_ATTEMPTS, new Date(nowMs)]
+      );
+      await client.query('COMMIT');
+      return { ok: false, reason: nextAttempts >= MAX_RESET_OTP_ATTEMPTS ? 'TOO_MANY_ATTEMPTS' : 'MISMATCH' };
+    }
+    await client.query('UPDATE password_reset_tokens SET used_at = $2 WHERE id = $1', [row.id, new Date(nowMs)]);
+    await client.query('COMMIT');
+    return { ok: true };
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 // ================= TRUE APPEND-ONLY LEDGER & WALLET ACCOUNTING =================
 
 /**
@@ -3525,6 +3668,8 @@ module.exports = {
   createRefreshSession,
   rotateRefreshSession,
   revokeSessionByRefreshToken,
+  createPasswordResetOtp,
+  verifyAndConsumePasswordResetOtp,
   sanitizeUser,
   getDatabaseStatus,
   reloadStateFromPostgres,

@@ -44,7 +44,9 @@ const TEST_SUITES = [
   'test_stage1_notifications_and_custom_rate.js',
   'test_stage2_vip_and_leaderboard.js',
   'test_security_audit_remediation.js',
-  'test_persistent_auth.js'
+  'test_persistent_auth.js',
+  'test_mobile_keyboard_popups.js',
+  'test_forgot_password.js'
 ];
 
 async function runAllTests() {

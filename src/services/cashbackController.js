@@ -5,6 +5,7 @@ const crypto = require('crypto');
 const express = require('express');
 const logger = require('../utils/logger');
 const { SENSITIVE_SETTING_KEYS } = require('../utils/secretCrypto');
+const { resolveMailConfig, sendPasswordResetOtpEmail } = require('./mailService');
 const {
   ensureDbLoaded,
   runWithStateContext,
@@ -31,6 +32,8 @@ const {
   createRefreshSession,
   rotateRefreshSession,
   revokeSessionByRefreshToken,
+  createPasswordResetOtp,
+  verifyAndConsumePasswordResetOtp,
   sanitizeUser,
   getDatabaseStatus,
   getPgPool,
@@ -1016,7 +1019,8 @@ function registerCashbackRoutes(app) {
       zaloGroupUrl: s.zaloGroupUrl || DEFAULT_ZALO_GROUP_URL,
       zaloWidgetEnabled: s.zaloWidgetEnabled ?? true,
       turnstileSiteKey: process.env.TURNSTILE_SITE_KEY || s.turnstileSiteKey || '',
-      hasShopeeConfigured: Boolean(s.shopeeAffiliateId || s.shopeeAppId)
+      hasShopeeConfigured: Boolean(s.shopeeAffiliateId || s.shopeeAppId),
+      emailResetEnabled: resolveMailConfig(s).enabled
     });
     logger.logLeave(routeLabel);
   }
@@ -1046,13 +1050,24 @@ function registerCashbackRoutes(app) {
         });
       }
 
-      const exists = db.users.find(
-        (u) =>
-          (u.phone && (String(u.phone).trim() === cleanPhone || normalizePhoneNumber(u.phone) === cleanPhone)) ||
-          (email && u.email && String(u.email).toLowerCase() === String(email).trim().toLowerCase())
+      const cleanEmail = String(email || '').trim().toLowerCase().slice(0, 80);
+      if (cleanEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+        return res.status(400).json({ error: 'Địa chỉ Email không hợp lệ.' });
+      }
+
+      const phoneExists = db.users.find(
+        (u) => u.phone && (String(u.phone).trim() === cleanPhone || normalizePhoneNumber(u.phone) === cleanPhone)
       );
-      if (exists) {
+      if (phoneExists) {
         return res.status(400).json({ error: 'Số điện thoại này đã được đăng ký.' });
+      }
+      if (cleanEmail) {
+        const emailExists = db.users.find(
+          (u) => u.email && String(u.email).trim().toLowerCase() === cleanEmail
+        );
+        if (emailExists) {
+          return res.status(400).json({ error: 'Địa chỉ Email này đã được đăng ký cho tài khoản khác.' });
+        }
       }
 
       // Validate 1-level referrer if provided (prevent self-referral)
@@ -1077,7 +1092,7 @@ function registerCashbackRoutes(app) {
         code: generateUserCode(cleanPhone, db.users),
         name: String(name || cleanPhone).trim().slice(0, 60),
         phone: cleanPhone,
-        email: String(email || '').trim().slice(0, 80),
+        email: cleanEmail,
         passwordHash,
         role: 'user',
         tokenVersion: 1,
@@ -1259,6 +1274,121 @@ function registerCashbackRoutes(app) {
     return res.json({ status: 'ok', message: 'Đã đăng xuất khỏi tất cả thiết bị.' });
   }));
 
+  const forgotPasswordLimiter = createRateLimiter({
+    windowMs: 15 * 60 * 1000,
+    max: 3,
+    keyPrefix: 'forgot-pwd',
+    failClosed: false
+  });
+  app.post('/api/auth/forgot-password', forgotPasswordLimiter, asyncHandler(async (req, res) => {
+    logger.logEnter('POST /api/auth/forgot-password');
+    const { identifier, turnstileToken } = req.body || {};
+    const rawId = String(identifier || '').trim();
+    if (!rawId) {
+      return res.status(400).json({ error: 'Vui lòng nhập Số điện thoại hoặc Email đã đăng ký.' });
+    }
+
+    const db = ensureDbLoaded();
+    const turnstileOk = await verifyTurnstileIfEnabled(turnstileToken, getClientIp(req), {
+      settings: db?.settings
+    });
+    if (!turnstileOk) {
+      return res.status(400).json({ error: 'Xác thực chống bot không hợp lệ.' });
+    }
+
+    if (!resolveMailConfig(db?.settings).enabled) {
+      logger.logLeave('POST /api/auth/forgot-password', { mailConfigured: false });
+      return res.status(503).json({
+        code: 'MAIL_NOT_CONFIGURED',
+        error: 'Tính năng gửi mã qua Email đang được bảo trì. Vui lòng nhắn Zalo CSKH để được cấp lại mật khẩu nhanh.'
+      });
+    }
+
+    const cleanId = rawId.toLowerCase();
+    const normId = normalizePhoneNumber(cleanId);
+    const user = db.users.find(
+      (u) =>
+        !u.isDeleted &&
+        !u.accountLocked &&
+        ((u.phone && (String(u.phone).toLowerCase() === cleanId || (normId && normalizePhoneNumber(u.phone) === normId))) ||
+          (u.email && String(u.email).trim().toLowerCase() === cleanId))
+    );
+
+    if (user && user.email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(user.email).trim())) {
+      const otpRecord = await createPasswordResetOtp(user, { ttlSec: 600 });
+      await sendPasswordResetOtpEmail({
+        to: String(user.email).trim(),
+        userName: user.name || user.code,
+        otpCode: otpRecord.otpCode,
+        settings: db.settings,
+        ttlMinutes: otpRecord.ttlMinutes
+      });
+    }
+
+    // Always return generic success message to prevent account enumeration
+    logger.logLeave('POST /api/auth/forgot-password', { processed: true });
+    return res.json({
+      status: 'ok',
+      message: 'Nếu tài khoản đã liên kết Email hợp lệ, mã xác nhận 6 số đã được gửi tới hộp thư của bạn (kiểm tra cả mục Spam).'
+    });
+  }));
+
+  const resetPasswordLimiter = createRateLimiter({
+    windowMs: 15 * 60 * 1000,
+    max: 10,
+    keyPrefix: 'reset-pwd',
+    failClosed: false
+  });
+  app.post('/api/auth/reset-password', resetPasswordLimiter, asyncHandler(async (req, res) => {
+    logger.logEnter('POST /api/auth/reset-password');
+    const { identifier, otp, newPassword } = req.body || {};
+    const rawId = String(identifier || '').trim();
+    const cleanOtp = String(otp || '').trim();
+    const nextPwd = String(newPassword || '');
+
+    if (!rawId || !/^\d{6}$/.test(cleanOtp)) {
+      return res.status(400).json({ error: 'Vui lòng nhập SĐT/Email và mã xác nhận gồm đúng 6 chữ số.' });
+    }
+    if (nextPwd.length < 6 || nextPwd.length > 128) {
+      return res.status(400).json({ error: 'Mật khẩu mới phải từ 6 đến 128 ký tự.' });
+    }
+
+    const db = ensureDbLoaded();
+    const cleanId = rawId.toLowerCase();
+    const normId = normalizePhoneNumber(cleanId);
+    const user = db.users.find(
+      (u) =>
+        !u.isDeleted &&
+        !u.accountLocked &&
+        ((u.phone && (String(u.phone).toLowerCase() === cleanId || (normId && normalizePhoneNumber(u.phone) === normId))) ||
+          (u.email && String(u.email).trim().toLowerCase() === cleanId))
+    );
+
+    if (!user) {
+      return res.status(400).json({ error: 'Mã xác nhận không đúng hoặc đã hết hạn.' });
+    }
+
+    const verify = await verifyAndConsumePasswordResetOtp(user.id, cleanOtp);
+    if (!verify.ok) {
+      const msg =
+        verify.reason === 'TOO_MANY_ATTEMPTS'
+          ? 'Bạn đã nhập sai quá 5 lần. Mã xác nhận đã bị hủy, vui lòng yêu cầu mã mới.'
+          : 'Mã xác nhận không đúng hoặc đã hết hạn.';
+      logger.logLeave('POST /api/auth/reset-password', { ok: false, reason: verify.reason });
+      return res.status(400).json({ error: msg });
+    }
+
+    user.passwordHash = await hashPasswordAsync(nextPwd);
+    await saveDb(db);
+    await revokeUserSessions(user.id);
+    clearAuthCookie(res);
+    logger.logLeave('POST /api/auth/reset-password', { ok: true, userCode: user.code });
+    return res.json({
+      status: 'ok',
+      message: 'Đặt lại mật khẩu thành công! Vui lòng đăng nhập lại bằng mật khẩu mới.'
+    });
+  }));
+
   // 4. Current User Dashboard (Includes Orders, Withdrawals, Immutable Ledger & Referral Count)
   app.get('/api/user/me', asyncHandler(async (req, res) => {
     logger.logEnter('GET /api/user/me');
@@ -1368,12 +1498,13 @@ function registerCashbackRoutes(app) {
   function maskLeaderboardDisplay(user) {
     const rawName = String(user?.name || '').trim();
     const rawPhone = String(user?.phone || '').trim();
-    if (rawName && rawName.length >= 2) {
-      const parts = rawName.split(/\s+/);
-      if (parts.length > 1) {
-        return `${parts[0]} *** ${parts[parts.length - 1]}`;
-      }
-      return `${rawName.slice(0, 2)}***`;
+    const looksLikePhoneOrEmail =
+      !rawName ||
+      rawName.includes('@') ||
+      /^\+?[0-9\s.-]{8,15}$/.test(rawName) ||
+      (rawPhone && rawName === rawPhone);
+    if (!looksLikePhoneOrEmail) {
+      return rawName;
     }
     if (rawPhone.length >= 6) {
       return `${rawPhone.slice(0, 3)}***${rawPhone.slice(-3)}`;
@@ -1575,20 +1706,38 @@ function registerCashbackRoutes(app) {
     const user = getAuthUser(req);
     if (!user) return res.status(401).json({ error: 'Chưa đăng nhập.' });
 
-    const { name, bankName, bankAccount, bankOwner, currentPassword, password } = req.body || {};
+    const { name, email, bankName, bankAccount, bankOwner, currentPassword, password } = req.body || {};
     const newAcc = bankAccount !== undefined ? String(bankAccount).trim() : undefined;
     const newBank = bankName !== undefined ? String(bankName).trim() : undefined;
+    const newEmail = email !== undefined ? String(email).trim().toLowerCase().slice(0, 80) : undefined;
 
     const isAccChanged = newAcc !== undefined && newAcc !== (user.bankAccount || '');
     const isBankChanged = newBank !== undefined && newBank !== (user.bankName || '');
+    const isEmailChanged = newEmail !== undefined && newEmail !== String(user.email || '').trim().toLowerCase();
 
-    if (isAccChanged || isBankChanged) {
+    if (isAccChanged || isBankChanged || isEmailChanged) {
       const pwd = password || currentPassword;
       if (!pwd || !(await verifyPasswordAsync(pwd, user.passwordHash))) {
         return res.status(400).json({
-          error: 'Vui lòng nhập đúng mật khẩu hiện tại khi thay đổi thông tin ngân hàng.'
+          error: 'Vui lòng nhập đúng mật khẩu hiện tại khi thay đổi thông tin ngân hàng hoặc Email.'
         });
       }
+    }
+
+    const db = ensureDbLoaded();
+    if (newEmail !== undefined) {
+      if (newEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) {
+        return res.status(400).json({ error: 'Địa chỉ Email không hợp lệ.' });
+      }
+      if (newEmail) {
+        const dupEmail = db.users.find(
+          (u) => u.id !== user.id && u.email && String(u.email).trim().toLowerCase() === newEmail
+        );
+        if (dupEmail) {
+          return res.status(400).json({ error: 'Địa chỉ Email này đã được sử dụng bởi tài khoản khác.' });
+        }
+      }
+      user.email = newEmail;
     }
 
     if (name !== undefined) {
@@ -1604,7 +1753,6 @@ function registerCashbackRoutes(app) {
       user.bankOwner = String(bankOwner).trim().toUpperCase().slice(0, 60);
     }
 
-    const db = ensureDbLoaded();
     await saveDb(db);
     logger.logLeave('POST /api/user/profile', { userCode: user.code });
     return res.json({ user: sanitizeUser(user) });
@@ -2619,7 +2767,8 @@ function registerCashbackRoutes(app) {
       tiktokAppSecret: process.env.TIKTOK_APP_SECRET || '',
       turnstileSecretKey: process.env.TURNSTILE_SECRET_KEY || '',
       accesstradeApiKey: process.env.ACCESSTRADE_API_KEY || '',
-      addlivetagApiKey: process.env.ADDLIVETAG_API_KEY || ''
+      addlivetagApiKey: process.env.ADDLIVETAG_API_KEY || '',
+      resendApiKey: process.env.RESEND_API_KEY || ''
     };
     for (const sKey of SENSITIVE_SETTING_KEYS) {
       if (shouldReveal) {
@@ -2649,7 +2798,8 @@ function registerCashbackRoutes(app) {
       'tiktokAppKey',
       'tiktokDeepLinkTemplate',
       'shortenerProvider',
-      'supportZalo'
+      'supportZalo',
+      'mailFrom'
     ];
 
     for (const key of textKeys) {

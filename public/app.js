@@ -800,12 +800,16 @@ function syncPayoutMethodFields({
 function syncAccountBankPasswordRequirement() {
   const savedAcc = String(currentUser?.bankAccount || '').replace(/\s+/g, '');
   const savedBank = String(currentUser?.bankName || '').trim();
+  const savedEmail = String(currentUser?.email || '').trim().toLowerCase();
   const newAcc = String(document.getElementById('accBankAccount')?.value || '').replace(/\s+/g, '');
   const newBank = String(document.getElementById('accBankName')?.value || '').trim();
+  const newEmail = String(document.getElementById('accProfileEmail')?.value || '').trim().toLowerCase();
   const isBankEdited = Boolean(newAcc || newBank);
+  const isEmailChanged = document.getElementById('accProfileEmail') && newEmail !== savedEmail;
   const required =
-    isBankEdited &&
-    ((newAcc && newAcc !== savedAcc) || (newBank && newBank !== savedBank));
+    Boolean(isEmailChanged) ||
+    (isBankEdited &&
+      ((newAcc && newAcc !== savedAcc) || (newBank && newBank !== savedBank)));
   const pwdGroup = document.getElementById('accBankPasswordGroup');
   const pwdInput = document.getElementById('accBankCurrentPassword');
   pwdGroup?.classList.toggle('hidden', !required);
@@ -844,10 +848,12 @@ function syncAccountProfileUi({ populateForm = false } = {}) {
 
   if (populateForm || !isEditingProfile) {
     const nameInput = document.getElementById('accProfileName');
+    const emailInput = document.getElementById('accProfileEmail');
     const accBankSelect = document.getElementById('accBankName');
     const accBankAccInput = document.getElementById('accBankAccount');
     const accBankOwnerInput = document.getElementById('accBankOwner');
     if (nameInput) nameInput.value = currentUser.name || '';
+    if (emailInput) emailInput.value = currentUser.email || '';
     if (accBankSelect) accBankSelect.value = currentUser.bankName || '';
     if (accBankAccInput) accBankAccInput.value = currentUser.bankAccount || '';
     if (accBankOwnerInput) accBankOwnerInput.value = currentUser.bankOwner || '';
@@ -1028,6 +1034,14 @@ async function initPublicConfig() {
 
 // Auth Modal Logic
 const authModal = document.getElementById('authModal');
+function getForgotZaloHref() {
+  const rawSupport = String(publicConfig?.supportZalo || '').trim();
+  if (/^https?:\/\//i.test(rawSupport)) return rawSupport;
+  const digits = rawSupport.replace(/\D/g, '');
+  if (digits.length >= 8) return `https://zalo.me/${digits}`;
+  return publicConfig?.zaloGroupUrl || 'https://zalo.me/g/cl2cmiseoqienusnrbyr';
+}
+
 function openAuthModal(tab = 'login') {
   if (!authModal) return;
   authModal.classList.remove('hidden');
@@ -1036,9 +1050,24 @@ function openAuthModal(tab = 'login') {
   });
   document.getElementById('loginFormBox')?.classList.toggle('hidden', tab !== 'login');
   document.getElementById('registerFormBox')?.classList.toggle('hidden', tab !== 'register');
+  document.getElementById('forgotPasswordBox')?.classList.toggle('hidden', tab !== 'forgot');
   const titleEl = document.getElementById('authModalTitle');
   if (titleEl) {
-    titleEl.textContent = tab === 'login' ? 'Đăng nhập tài khoản' : 'Đăng ký tài khoản';
+    titleEl.textContent =
+      tab === 'forgot'
+        ? 'Quên mật khẩu'
+        : tab === 'login'
+          ? 'Đăng nhập tài khoản'
+          : 'Đăng ký tài khoản';
+  }
+  if (tab === 'forgot') {
+    document.getElementById('forgotStep1Form')?.classList.remove('hidden');
+    document.getElementById('forgotStep2Form')?.classList.add('hidden');
+    const zaloBtn = document.getElementById('forgotZaloSupportBtn');
+    if (zaloBtn) zaloBtn.href = getForgotZaloHref();
+    const loginId = document.getElementById('loginIdentifier')?.value?.trim() || '';
+    const forgotId = document.getElementById('forgotIdentifier');
+    if (forgotId && loginId && !forgotId.value) forgotId.value = loginId;
   }
 
   const savedRef =
@@ -1051,6 +1080,116 @@ function openAuthModal(tab = 'login') {
     regRefNotice?.classList.remove('hidden');
   }
 }
+
+on('openForgotPwdBtn', 'click', () => openAuthModal('forgot'));
+on('backToLoginBtn', 'click', () => openAuthModal('login'));
+
+let forgotOtpCooldownTimer = null;
+function startForgotOtpCooldown(sec = 60) {
+  const resendBtn = document.getElementById('resendForgotOtpBtn');
+  if (!resendBtn) return;
+  if (forgotOtpCooldownTimer) clearInterval(forgotOtpCooldownTimer);
+  let left = sec;
+  resendBtn.disabled = true;
+  resendBtn.textContent = `Gửi lại mã sau ${left}s`;
+  forgotOtpCooldownTimer = setInterval(() => {
+    left -= 1;
+    if (left <= 0) {
+      clearInterval(forgotOtpCooldownTimer);
+      forgotOtpCooldownTimer = null;
+      resendBtn.disabled = false;
+      resendBtn.textContent = 'Gửi lại mã xác nhận';
+    } else {
+      resendBtn.textContent = `Gửi lại mã sau ${left}s`;
+    }
+  }, 1000);
+}
+
+async function requestForgotPasswordOtp() {
+  const identifier = document.getElementById('forgotIdentifier')?.value?.trim() || '';
+  if (!identifier) {
+    showToast('Vui lòng nhập Số điện thoại hoặc Email đã đăng ký.');
+    return;
+  }
+  const btn = document.getElementById('sendForgotOtpBtn');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Đang gửi mã...';
+  }
+  try {
+    const turnstileToken = getTurnstileToken('loginTurnstile');
+    const payload = { identifier };
+    if (turnstileToken) payload.turnstileToken = turnstileToken;
+    const res = await apiFetch('/api/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+    const hint = document.getElementById('forgotOtpHint');
+    if (hint && res?.message) hint.textContent = res.message;
+    document.getElementById('forgotStep1Form')?.classList.add('hidden');
+    document.getElementById('forgotStep2Form')?.classList.remove('hidden');
+    startForgotOtpCooldown(60);
+    document.getElementById('forgotOtpInput')?.focus();
+  } catch (err) {
+    showToast(err.message);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Gửi Mã Xác Nhận (OTP)';
+    }
+  }
+}
+
+on('forgotStep1Form', 'submit', async (e) => {
+  e.preventDefault();
+  await requestForgotPasswordOtp();
+});
+on('resendForgotOtpBtn', 'click', requestForgotPasswordOtp);
+
+on('forgotStep2Form', 'submit', async (e) => {
+  e.preventDefault();
+  const identifier = document.getElementById('forgotIdentifier')?.value?.trim() || '';
+  const otp = document.getElementById('forgotOtpInput')?.value?.trim() || '';
+  const newPassword = document.getElementById('forgotNewPassword')?.value || '';
+  const confirmPassword = document.getElementById('forgotConfirmPassword')?.value || '';
+
+  if (!/^\d{6}$/.test(otp)) {
+    showToast('Vui lòng nhập đúng mã xác nhận gồm 6 chữ số.');
+    return;
+  }
+  if (newPassword.length < 6) {
+    showToast('Mật khẩu mới phải có tối thiểu 6 ký tự.');
+    return;
+  }
+  if (newPassword !== confirmPassword) {
+    showToast('Mật khẩu xác nhận không khớp.');
+    return;
+  }
+  const btn = document.getElementById('confirmResetPwdBtn');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Đang đặt lại...';
+  }
+  try {
+    const res = await apiFetch('/api/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({ identifier, otp, newPassword })
+    });
+    showToast(res?.message || 'Đặt lại mật khẩu thành công!');
+    if (document.getElementById('forgotOtpInput')) document.getElementById('forgotOtpInput').value = '';
+    if (document.getElementById('forgotNewPassword')) document.getElementById('forgotNewPassword').value = '';
+    if (document.getElementById('forgotConfirmPassword')) document.getElementById('forgotConfirmPassword').value = '';
+    if (document.getElementById('loginIdentifier')) document.getElementById('loginIdentifier').value = identifier;
+    openAuthModal('login');
+  } catch (err) {
+    showToast(err.message);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Đặt Lại Mật Khẩu';
+    }
+  }
+});
 
 on('openLoginBtn', 'click', () => openAuthModal('login'));
 on('openRegisterBtn', 'click', () => openAuthModal('register'));
@@ -1136,11 +1275,16 @@ async function handleDoRegister() {
   const btn = document.getElementById('doRegisterBtn');
   const name = document.getElementById('regName')?.value?.trim() || '';
   const phone = document.getElementById('regPhone')?.value?.trim() || '';
+  const email = document.getElementById('regEmail')?.value?.trim() || '';
   const password = document.getElementById('regPassword')?.value || '';
   const refCode = document.getElementById('regRefCode')?.value?.trim() || '';
 
   if (!name || !phone || !password) {
     showToast('Vui lòng điền đầy đủ họ tên, SĐT và mật khẩu!');
+    return;
+  }
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    showToast('Địa chỉ Email không hợp lệ.');
     return;
   }
   if (password.length < 6) {
@@ -1163,6 +1307,7 @@ async function handleDoRegister() {
   try {
     const turnstileToken = getTurnstileToken('registerTurnstile');
     const payload = { name, phone, password, refCode };
+    if (email) payload.email = email;
     if (turnstileToken) payload.turnstileToken = turnstileToken;
 
     const data = await apiFetch('/api/auth/register', {
@@ -1625,12 +1770,16 @@ async function handleGetCashbackLink(rawOptions) {
               ? `<span class="prod-price-tag">Giá bán: <strong>${fmtVnd(item.price)}</strong></span>`
               : `<span class="prod-price-tag">Giá bán: <strong>Đang cập nhật</strong></span>`;
 
-          const estCashbackHtml =
+          const estCashbackStripHtml =
             item.estimatedCashback > 0
-              ? `<span class="cashback-badge">Hoàn tiền ước tính: ~<strong>${fmtVnd(
-                  item.estimatedCashback
-                )}</strong></span>`
-              : `<span class="cashback-badge" style="background:#ecfdf5;color:#059669;">Có hoàn tiền</span>`;
+              ? `<div class="cp-cashback-strip">
+                   <span class="cp-cashback-label">Hoàn tiền ước tính</span>
+                   <strong class="cp-cashback-value">+ ${fmtVnd(item.estimatedCashback)}</strong>
+                 </div>`
+              : `<div class="cp-cashback-strip">
+                   <span class="cp-cashback-label">Trạng thái hoàn tiền</span>
+                   <strong class="cp-cashback-value">Có hoàn tiền</strong>
+                 </div>`;
 
           const rawTitle = item.productName || item.title || '';
           const displayItemTitle =
@@ -1658,54 +1807,57 @@ async function handleGetCashbackLink(rawOptions) {
           return `
             <div class="cashback-product-card">
               <div class="cp-top">
-                <span class="valid-badge inline-icon-row">${UI_ICONS.checkCircle}<span>Đã tạo link hoàn tiền</span></span>
+                <span class="valid-badge inline-icon-row">${UI_ICONS.checkCircle}<span>Sẵn sàng mua nhận hoàn tiền</span></span>
                 ${platLabel}
               </div>
 
-              <!-- Product Details Row -->
-              <div class="product-meta-row">
-                ${thumbHtml}
-                <div class="product-meta-info">
-                  <h4>${escapeHtml(displayItemTitle)}</h4>
-                  <div class="product-meta-sub">
-                    ${priceInfoHtml}
-                    ${estCashbackHtml}
+              <div class="cp-body">
+                <!-- Product Details Row -->
+                <div class="product-meta-row">
+                  ${thumbHtml}
+                  <div class="product-meta-info">
+                    <h4>${escapeHtml(displayItemTitle)}</h4>
+                    <div class="product-meta-sub">
+                      ${priceInfoHtml}
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <!-- Nút Mua Hàng to rõ -->
-              <div class="cp-cta-block">
-                ${ctaButtonHtml}
-                ${webviewHintHtml}
-              </div>
+                ${estCashbackStripHtml}
 
-              <!-- Rút gọn link aff thành 1 ô ngang duy nhất (Bỏ hoàn toàn mã QR) -->
-              <div class="cp-link-single-row">
-                <div class="aff-input-box" title="Bấm để sao chép link">
-                  <span class="aff-link-icon">${UI_ICONS.link}</span>
-                  <input
-                    type="text"
-                    class="aff-single-input"
-                    value="${safeAffUrl}"
-                    readonly
+                <!-- Nút Mua Hàng to rõ -->
+                <div class="cp-cta-block">
+                  ${ctaButtonHtml}
+                  ${webviewHintHtml}
+                </div>
+
+                <!-- Rút gọn link aff thành 1 ô ngang duy nhất (Bỏ hoàn toàn mã QR) -->
+                <div class="cp-link-single-row">
+                  <div class="aff-input-box" title="Bấm để sao chép link">
+                    <span class="aff-link-icon">${UI_ICONS.link}</span>
+                    <input
+                      type="text"
+                      class="aff-single-input"
+                      value="${safeAffUrl}"
+                      readonly
+                      data-copy="${safeAffUrl}"
+                      data-copy-msg="Đã sao chép link mua hàng hoàn tiền!"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    class="btn btn-copy-inline btn-icon-svg"
                     data-copy="${safeAffUrl}"
                     data-copy-msg="Đã sao chép link mua hàng hoàn tiền!"
-                  />
+                    title="Sao chép link mua hàng"
+                  >
+                    ${UI_ICONS.copy}
+                    <span>Sao chép</span>
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  class="btn btn-copy-inline btn-icon-svg"
-                  data-copy="${safeAffUrl}"
-                  data-copy-msg="Đã sao chép link mua hàng hoàn tiền!"
-                  title="Sao chép link mua hàng"
-                >
-                  ${UI_ICONS.copy}
-                  <span>Sao chép</span>
-                </button>
-              </div>
 
-              ${cardFooterNoticeHtml}
+                ${cardFooterNoticeHtml}
+              </div>
             </div>
           `;
         })
@@ -1869,11 +2021,13 @@ on('accBankName', 'change', () => {
   }
 });
 on('accBankAccount', 'input', syncAccountBankPasswordRequirement);
+on('accProfileEmail', 'input', syncAccountBankPasswordRequirement);
 
 on('accProfileForm', 'submit', async (e) => {
   e.preventDefault();
   if (!authToken) return;
   const name = document.getElementById('accProfileName')?.value?.trim() || '';
+  const email = document.getElementById('accProfileEmail')?.value?.trim() || '';
   const method = document.getElementById('accBankMethod')?.value || 'bank';
   const bankName =
     method === 'momo'
@@ -1888,6 +2042,10 @@ on('accProfileForm', 'submit', async (e) => {
 
   if (name.length < 2) {
     showToast('Vui lòng nhập Họ và tên hợp lệ (tối thiểu 2 ký tự).');
+    return;
+  }
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    showToast('Địa chỉ Email không hợp lệ.');
     return;
   }
   if ((bankAccount || bankOwner) && !bankName) {
@@ -1905,7 +2063,7 @@ on('accProfileForm', 'submit', async (e) => {
     saveBtn.textContent = 'Đang lưu...';
   }
   try {
-    const payload = { name, bankName, bankAccount, bankOwner };
+    const payload = { name, email, bankName, bankAccount, bankOwner };
     if (currentPassword) payload.currentPassword = currentPassword;
     const res = await apiFetch('/api/user/profile', {
       method: 'POST',
@@ -2721,6 +2879,8 @@ function loadAdminSettings(settings) {
   setVal('admReferralBounty', s.referralBountyAmount ?? 10000);
   setVal('admShortener', s.shortenerProvider || 'none');
   setVal('admSupportZalo', s.supportZalo || '');
+  setVal('admResendApiKey', s.resendApiKey || '');
+  setVal('admMailFrom', s.mailFrom || '');
   setVal('admZaloGroupUrl', s.zaloGroupUrl || '');
 
   const zaloWidgetEl = document.getElementById('admZaloWidgetEnabled');
@@ -3297,6 +3457,8 @@ async function saveAdminSettings() {
       ),
       shortenerProvider: document.getElementById('admShortener')?.value || 'none',
       supportZalo: document.getElementById('admSupportZalo')?.value?.trim() || '',
+      resendApiKey: document.getElementById('admResendApiKey')?.value?.trim() || '',
+      mailFrom: document.getElementById('admMailFrom')?.value?.trim() || '',
       zaloGroupUrl,
       zaloWidgetEnabled,
       currentPassword,
@@ -4177,6 +4339,102 @@ async function initBoot() {
   });
   await Promise.all([initPublicConfig(), adminReady]);
 }
+
+// ================= MOBILE VISUAL VIEWPORT & VIRTUAL KEYBOARD MANAGER =================
+function initMobileViewportManager() {
+  if (typeof window === 'undefined' || typeof document === 'undefined' || !document.documentElement) return;
+  const root = document.documentElement;
+  const vv = window.visualViewport;
+  let rafId = 0;
+  let lastWidth = Math.round(vv ? vv.width : window.innerWidth);
+  let baselineHeight = Math.round(vv ? vv.height : window.innerHeight);
+
+  const isEditable = (el) => {
+    if (!el || !el.tagName) return false;
+    const tag = el.tagName.toUpperCase();
+    if (tag === 'TEXTAREA') return true;
+    if (tag === 'INPUT') {
+      const t = String(el.type || 'text').toLowerCase();
+      return !['checkbox', 'radio', 'hidden', 'button', 'submit', 'reset', 'file'].includes(t);
+    }
+    return Boolean(el.isContentEditable);
+  };
+
+  const sync = () => {
+    rafId = 0;
+    const width = Math.round(vv ? vv.width : window.innerWidth);
+    const height = Math.round(vv ? vv.height : window.innerHeight);
+    const offsetTop = Math.max(0, Math.round(vv ? vv.offsetTop : 0));
+    const isMobile = width <= 640;
+
+    if (!isMobile) {
+      root.classList.remove('kb-open');
+      root.style.removeProperty('--vvh');
+      root.style.removeProperty('--vv-top');
+      root.style.removeProperty('--kb-height');
+      return;
+    }
+
+    // Reset baseline height on orientation change
+    if (Math.abs(width - lastWidth) > 80) {
+      lastWidth = width;
+      baselineHeight = Math.max(height, window.innerHeight);
+    }
+
+    const active = document.activeElement;
+    if (!isEditable(active)) {
+      baselineHeight = Math.max(baselineHeight, height, window.innerHeight);
+    } else if (height > baselineHeight) {
+      baselineHeight = height;
+    }
+
+    const kbDelta = Math.max(0, Math.max(baselineHeight, window.innerHeight) - height - offsetTop);
+    const kbOpen = kbDelta > 110 || (isEditable(active) && baselineHeight - height > 110);
+
+    root.style.setProperty('--vvh', `${height}px`);
+    root.style.setProperty('--vv-top', `${offsetTop}px`);
+    root.style.setProperty('--kb-height', `${kbDelta}px`);
+    root.classList.toggle('kb-open', kbOpen);
+
+    if (kbOpen && isEditable(active) && active.closest?.('.modal-box')) {
+      active.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
+    }
+  };
+
+  const scheduleSync = () => {
+    if (!rafId) rafId = window.requestAnimationFrame(sync);
+  };
+
+  if (vv) {
+    vv.addEventListener('resize', scheduleSync, { passive: true });
+    vv.addEventListener('scroll', scheduleSync, { passive: true });
+  }
+  window.addEventListener('resize', scheduleSync, { passive: true });
+  window.addEventListener('orientationchange', () => {
+    setTimeout(scheduleSync, 120);
+  }, { passive: true });
+
+  document.addEventListener('focusin', (e) => {
+    if (!isEditable(e.target)) return;
+    scheduleSync();
+    if (e.target.closest?.('.modal-box')) {
+      setTimeout(() => {
+        scheduleSync();
+        if (document.activeElement === e.target) {
+          e.target.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
+        }
+      }, 220);
+    }
+  });
+
+  document.addEventListener('focusout', () => {
+    setTimeout(scheduleSync, 140);
+  });
+
+  sync();
+}
+
+initMobileViewportManager();
 
 // Multi-tab session sync + silent refresh when returning to backgrounded mobile/desktop tab
 if (typeof window !== 'undefined' && typeof document !== 'undefined') {

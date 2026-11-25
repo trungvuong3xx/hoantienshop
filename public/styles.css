@@ -5459,3 +5459,312 @@ table.orders-card-table tbody tr,
     animation: none;
   }
 }
+
+/* ================= MẪU 1A (BRAND HERO + FLOATING CARD) & MẪU 3 (EMERALD RESULT CARD) ================= */
+:root {
+  --bg-page: #e6ecf3;
+}
+
+.hero-card {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+  gap: 0;
+  overflow: visible;
+}
+
+.hero-brand-banner {
+  width: 100%;
+  background: linear-gradient(135deg, #dc2626 0%, #ee4d2d 55%, #f97316 100%);
+  color: #ffffff;
+  border-radius: 24px;
+  padding: 28px 24px 80px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  box-shadow: 0 10px 24px rgba(238, 77, 45, 0.22);
+}
+
+.hero-brand-banner .hero-pill {
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.36);
+  color: #ffffff;
+}
+
+.hero-brand-banner .hero-title,
+.hero-brand-banner .hero-title .text-shopee,
+.hero-brand-banner .hero-title .text-tiktok {
+  color: #ffffff;
+}
+
+.hero-brand-banner .hero-desc {
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.hero-brand-banner .plat-label {
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.hero-brand-banner .plat-pill.shopee {
+  background: #ffffff;
+  color: #ee4d2d;
+  border-color: #ffffff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.14);
+}
+
+.hero-brand-banner .plat-pill.tiktok {
+  background: #0f172a;
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.22);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+}
+
+.hero-action-card {
+  width: calc(100% - 36px);
+  max-width: 780px;
+  margin: -58px auto 0;
+  background: #ffffff;
+  border: 2px solid #fb923c;
+  border-radius: 20px;
+  padding: 18px 20px;
+  box-shadow: 0 16px 32px -6px rgba(15, 23, 42, 0.22), 0 4px 10px rgba(238, 77, 45, 0.14);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  position: relative;
+  z-index: 2;
+}
+
+.hero-paste-label {
+  width: 100%;
+  max-width: 760px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #334155;
+  text-align: left;
+  margin-bottom: -2px;
+}
+
+/* Flex Input Box — prevents X / Paste buttons from ever overlapping URL text */
+.hero-action-card .search-bar-wrap {
+  margin-top: 2px;
+}
+
+.hero-action-card .search-input-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #f8fafc;
+  border: 2px solid #cbd5e1;
+  border-radius: 14px;
+  padding: 0 8px 0 14px;
+  min-height: 52px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.hero-action-card .search-input-group:focus-within {
+  border-color: #ee4d2d;
+  background: #ffffff;
+  box-shadow: 0 0 0 4px rgba(238, 77, 45, 0.12);
+}
+
+.hero-action-card .search-input-group input {
+  flex: 1;
+  min-width: 0;
+  height: 48px;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  font-size: 14.5px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.hero-action-card .search-input-group input:focus {
+  outline: none;
+  border: none;
+  box-shadow: none;
+}
+
+.hero-action-card .search-input-actions {
+  position: static;
+  transform: none;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.hero-action-card .btn-paste-inline {
+  background: #0f172a;
+  border: 1px solid #0f172a;
+  color: #ffffff;
+  font-weight: 700;
+  padding: 6px 12px;
+  min-height: 36px;
+  border-radius: 10px;
+}
+
+@media (hover: hover) {
+  .hero-action-card .btn-paste-inline:hover {
+    background: #1e293b;
+    border-color: #1e293b;
+    color: #ffffff;
+  }
+}
+
+.hero-action-card .btn-paste-inline:active {
+  background: #020617;
+  color: #ffffff;
+}
+
+/* Soften Hero CTA when Result Card is open so "Mở Shopee/TikTok (Mua ngay)" stays dominant */
+body:has(#conversionResultSection:not(.hidden)) #getCashbackLinkBtn {
+  background: #fff5f2;
+  color: #ee4d2d;
+  border: 1.5px solid #fb923c;
+  box-shadow: none;
+  min-height: 44px;
+  height: 44px;
+  font-size: 13.5px;
+}
+
+/* Hide Floating Zalo while Result Card is active so it never covers "Sao chép" */
+body:has(#conversionResultSection:not(.hidden)) .floating-zalo {
+  display: none !important;
+}
+
+/* Mẫu 3: High-contrast Emerald Header Result Card + Dark Navy Copy Button */
+.cashback-product-card {
+  background: #ffffff;
+  border: 2px solid #059669;
+  border-radius: 20px;
+  padding: 0;
+  overflow: hidden;
+  box-shadow: 0 14px 30px -6px rgba(15, 23, 42, 0.16);
+  gap: 0;
+}
+
+.cashback-product-card .cp-top {
+  background: #059669;
+  color: #ffffff;
+  padding: 11px 16px;
+  border-bottom: none;
+}
+
+.cashback-product-card .cp-top .valid-badge {
+  background: transparent;
+  border: none;
+  color: #ffffff;
+  padding: 0;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.cashback-product-card .cp-top .plat-badge-inline {
+  background: rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.28);
+}
+
+.cashback-product-card .cp-body {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.cashback-product-card .product-meta-row {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.cp-cashback-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+}
+
+.cp-cashback-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #065f46;
+}
+
+.cp-cashback-value {
+  font-size: 16px;
+  font-weight: 800;
+  color: #047857;
+  font-variant-numeric: tabular-nums;
+}
+
+.cashback-product-card .btn-copy-inline {
+  background: #0f172a;
+  border-color: #0f172a;
+  color: #ffffff;
+}
+
+@media (hover: hover) {
+  .cashback-product-card .btn-copy-inline:hover {
+    background: #1e293b;
+    border-color: #1e293b;
+    color: #ffffff;
+  }
+}
+
+.cashback-product-card .btn-copy-inline:active {
+  background: #020617;
+  color: #ffffff;
+}
+
+@media (max-width: 640px) {
+  .hero-card {
+    padding: 0;
+    gap: 0;
+  }
+  .hero-brand-banner {
+    border-radius: 20px;
+    padding: 16px 14px 70px;
+    gap: 8px;
+  }
+  .hero-action-card {
+    width: calc(100% - 16px);
+    margin: -54px auto 0;
+    padding: 14px;
+    border-radius: 18px;
+  }
+  .hero-action-card .search-input-group {
+    min-height: 52px;
+    padding: 0 6px 0 12px;
+  }
+  .hero-action-card .search-input-group input {
+    font-size: 15px;
+    height: 48px;
+  }
+  .cashback-product-card {
+    padding: 0;
+    border-radius: 18px;
+  }
+  .cashback-product-card .cp-top {
+    padding: 10px 12px;
+  }
+  .cashback-product-card .cp-body {
+    padding: 12px;
+    gap: 10px;
+  }
+}
