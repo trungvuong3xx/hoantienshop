@@ -144,8 +144,23 @@ const UI_ICONS = {
   confirmAlert: '<svg class="svg-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
   confirmCheck: '<svg class="svg-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',
   lock: '<svg class="svg-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>',
-  unlock: '<svg class="svg-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>'
+  unlock: '<svg class="svg-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>',
+  trophy: '<svg class="svg-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>',
+  award: '<svg class="svg-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/></svg>'
 };
+
+function renderVipBadgeSvg(tierCodeOrIcon, onDark = false) {
+  const key = String(tierCodeOrIcon || '').toLowerCase();
+  let color = onDark ? '#fde047' : '#b45309';
+  if (key.includes('silver') || key.includes('bạc') || key.includes('🥈')) {
+    color = onDark ? '#e2e8f0' : '#475569';
+  } else if (key.includes('gold') || key.includes('vàng') || key.includes('🥇')) {
+    color = onDark ? '#fde047' : '#d97706';
+  } else if (key.includes('diamond') || key.includes('kim') || key.includes('💎')) {
+    color = onDark ? '#93c5fd' : '#2563eb';
+  }
+  return `<svg class="svg-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/></svg>`;
+}
 
 const STATUS_CLASS_MAP = {
   pending: 'st-pending',
@@ -1998,28 +2013,39 @@ function renderUserOrdersTable(orders, serverCounts = null) {
   ordBody.innerHTML = filteredOrders
     .map((o) => {
       const stCls = getStatusClass(o.status);
-      const stLabel =
-        o.status === 'approved'
-          ? 'Đã cộng vào ví'
-          : o.status === 'cancelled'
-          ? 'Đã huỷ'
-          : 'Đang đối soát';
+      const isApproved = o.status === 'approved';
+      const isCancelled = o.status === 'cancelled';
+      const stLabel = isApproved
+        ? 'Đã cộng vào ví'
+        : isCancelled
+        ? 'Đã huỷ'
+        : 'Đang đối soát';
       const plat = String(o.platform || '').toLowerCase();
       const platBadge =
         plat === 'tiktok'
-          ? '<span class="plat-badge-inline tiktok" style="font-size:10.5px;padding:1px 6px;">TikTok</span>'
-          : '<span class="plat-badge-inline shopee" style="font-size:10.5px;padding:1px 6px;">Shopee</span>';
+          ? '<span class="plat-badge-inline tiktok">TikTok</span>'
+          : '<span class="plat-badge-inline shopee">Shopee</span>';
       const dt = o.createdAt ? new Date(o.createdAt).toLocaleDateString('vi-VN') : '—';
-      const orderAmtStr = Number(o.orderAmount) > 0 ? ` • Giá đơn: ${fmtVnd(o.orderAmount)}` : '';
+      const orderAmtStr = Number(o.orderAmount) > 0 ? ` • Đơn ${fmtVnd(o.orderAmount)}` : '';
+      const cbToneCls = isApproved ? 'is-approved' : isCancelled ? 'is-cancelled' : 'is-pending';
+      const cbPrefix = isCancelled ? '' : '+';
+      const contextNote = isCancelled
+        ? `<div class="ord-context-note is-cancelled">${escapeHtml(o.rejectReason || 'Đơn hàng đã bị huỷ hoặc hoàn trả')}</div>`
+        : !isApproved
+        ? '<div class="ord-context-note is-pending">Dự kiến duyệt sau 7–14 ngày kể từ khi nhận hàng</div>'
+        : '';
       return `
-        <tr>
-          <td data-label="Mã đơn">
-            <div><strong>${escapeHtml(o.orderSn)}</strong> ${platBadge}</div>
-            <div style="font-size:11.5px;color:#64748b;margin-top:2px;">${dt}${orderAmtStr}</div>
+        <tr class="order-row-${stCls}">
+          <td class="ord-col-id" data-label="Mã đơn">
+            <div class="ord-id-wrap">${platBadge} <strong>#${escapeHtml(o.orderSn)}</strong></div>
+            <div class="ord-meta-sub">${dt}${orderAmtStr}</div>
           </td>
-          <td data-label="Sản phẩm">${escapeHtml(o.productName)}</td>
-          <td data-label="Tiền hoàn"><strong style="color:#059669;">+${fmtVnd(o.userCashbackAmount)}</strong></td>
-          <td data-label="Trạng thái"><span class="status-badge ${stCls}">${stLabel}</span></td>
+          <td class="ord-col-product" data-label="Sản phẩm">
+            <div class="ord-product-name">${escapeHtml(o.productName || 'Sản phẩm')}</div>
+            ${contextNote}
+          </td>
+          <td class="ord-col-cashback" data-label="Tiền hoàn"><strong class="ord-cashback-val ${cbToneCls}">${cbPrefix}${fmtVnd(o.userCashbackAmount)}</strong></td>
+          <td class="ord-col-status" data-label="Trạng thái"><span class="status-badge ${stCls}">${stLabel}</span></td>
         </tr>
       `;
     })
@@ -4243,6 +4269,10 @@ on('notifBellBtn', 'click', async (e) => {
   const willOpen = dd.classList.contains('hidden');
   setNotifDrawerOpen(willOpen);
   if (willOpen) {
+    const listEl = document.getElementById('notifList');
+    if (listEl) {
+      listEl.innerHTML = '<div class="notif-skeleton"><div class="skeleton-line w-70"></div><div class="skeleton-line w-90"></div></div>'.repeat(3);
+    }
     await fetchAndRenderNotifications();
   }
 });
@@ -4404,12 +4434,12 @@ function renderUserVipProgress(vipInfo, effectiveRate) {
   const fillEl = document.getElementById('userVipProgressFill');
   const noteEl = document.getElementById('userVipProgressNote');
 
-  const cur = vipInfo.currentTier || { icon: '🥉', name: 'Thành viên Đồng', minSpend: 0, cashbackPercent: 70 };
+  const cur = vipInfo.currentTier || { code: 'bronze', name: 'Thành viên Đồng', minSpend: 0, cashbackPercent: 70 };
   const next = vipInfo.nextTier || null;
   const spend = Math.max(0, Number(vipInfo.totalApprovedSpend || 0));
   const shownRate = Number.isFinite(Number(effectiveRate)) ? Number(effectiveRate) : cur.cashbackPercent;
 
-  if (badgeEl) badgeEl.textContent = `${cur.icon || '🏅'} ${cur.name}`;
+  if (badgeEl) badgeEl.innerHTML = `${renderVipBadgeSvg(cur.code || cur.icon, true)}<span>${escapeHtml(cur.name)}</span>`;
   if (rateEl) rateEl.textContent = `Hoàn ${shownRate}%`;
 
   if (!next) {
@@ -4428,7 +4458,7 @@ function renderUserVipProgress(vipInfo, effectiveRate) {
 
   if (fillEl) fillEl.style.width = `${pct}%`;
   if (noteEl) {
-    noteEl.textContent = `Đã tích lũy ${fmtVnd(spend)} / ${fmtVnd(nextMin)} — Còn ${fmtVnd(remaining)} để lên ${next.icon || '🏆'} ${next.name} (${next.cashbackPercent}%)`;
+    noteEl.textContent = `Đã tích lũy ${fmtVnd(spend)} / ${fmtVnd(nextMin)} — Còn ${fmtVnd(remaining)} để lên ${next.name} (${next.cashbackPercent}%)`;
   }
 }
 
@@ -4543,7 +4573,7 @@ function renderLeaderboardTable(mode = 'spend') {
             <strong>${escapeHtml(item.displayName)}${isMe ? ' (Bạn)' : ''}</strong>
             <div class="lb-user-code" style="font-size:12px;color:#64748b;">${escapeHtml(item.code)}</div>
           </td>
-          <td class="lb-col-tier"><span class="lb-tier-pill">${escapeHtml(item.vipTierIcon || '🏅')} ${escapeHtml(shortTier || item.vipTierName || '')}</span></td>
+          <td class="lb-col-tier"><span class="lb-tier-pill">${renderVipBadgeSvg(item.vipTier || item.vipTierIcon, false)}<span>${escapeHtml(shortTier || item.vipTierName || '')}</span></span></td>
           <td class="lb-col-metric"><strong class="lb-metric-val">${fmtVnd(metricVal)}</strong></td>
         </tr>`;
     })
@@ -4628,5 +4658,20 @@ function saveRecentConvertedLink(entry) {
     // Ignore storage quota errors
   }
 }
+
+on('walletQuickWithdrawBtn', 'click', () => {
+  const panel = document.getElementById('withdrawPanel');
+  if (panel) {
+    panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setTimeout(() => document.getElementById('withdrawAmountInput')?.focus(), 320);
+  }
+});
+
+on('walletQuickHistoryBtn', 'click', () => {
+  const panel = document.getElementById('walletHistoryPanel');
+  if (panel) {
+    panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+});
 
 renderRecentConvertedLinks();

@@ -2479,6 +2479,20 @@ body:has(#view-admin.active) .floating-zalo {
   display: none !important;
 }
 
+/* Trên Mobile: chỉ hiện nút Zalo nổi ở Trang chủ & Hướng dẫn để không đè nút CTA ở Đơn hàng/Ví/Xếp hạng/Tôi */
+@media (max-width: 768px) {
+  body:has(#view-orders.active) .floating-zalo,
+  body:has(#view-wallet.active) .floating-zalo,
+  body:has(#view-leaderboard.active) .floating-zalo,
+  body:has(#view-account.active) .floating-zalo {
+    display: none !important;
+  }
+
+  .toast {
+    top: calc(68px + env(safe-area-inset-top, 0px)) !important;
+  }
+}
+
 /* Responsive: Ẩn nhãn chữ trên màn hình nhỏ dưới 480px */
 @media (max-width: 480px) {
   .floating-zalo {
@@ -2532,10 +2546,23 @@ body:has(#view-admin.active) .floating-zalo {
 
   /* Search Input & Action Buttons sizing on Mobile (Wins over base rules) */
   .search-input-group input {
-    height: 48px;
+    height: 54px;
     padding: 0 96px 0 14px;
-    border-radius: 12px;
+    border-radius: 14px;
+    border-color: #cbd5e1;
+    box-shadow: 0 4px 14px rgba(15, 23, 42, 0.05);
     text-overflow: ellipsis;
+  }
+
+  .btn-cta {
+    height: 52px;
+    font-size: 16px;
+    border-radius: 14px;
+    box-shadow: 0 8px 20px rgba(238, 77, 45, 0.28);
+  }
+
+  body.is-authenticated .quick-guide-strip {
+    display: none;
   }
 
   .nav-auth .btn {
@@ -3192,8 +3219,8 @@ body:has(#view-admin.active) .floating-zalo {
   font-family: inherit;
   font-size: 12px;
   font-weight: 600;
-  padding: 5px 10px;
-  min-height: 32px;
+  padding: 6px 12px;
+  min-height: 40px;
   border-radius: 999px;
   cursor: pointer;
   white-space: nowrap;
@@ -4656,27 +4683,71 @@ body:has(#view-admin.active) .floating-zalo {
   box-shadow: 0 2px 6px rgba(239, 68, 68, 0.35);
 }
 
+.notif-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1190;
+  background: transparent;
+}
+
 .notif-dropdown {
-  position: absolute;
-  top: calc(100% + 10px);
-  right: 0;
-  width: 340px;
+  position: fixed;
+  top: 68px;
+  right: 20px;
+  width: 360px;
   max-width: calc(100vw - 24px);
   background: #ffffff;
   border: 1px solid #e2e8f0;
-  border-radius: 14px;
-  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.14);
+  border-radius: 16px;
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.16);
   z-index: 1200;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.notif-sheet-handle {
+  display: none;
+  width: 40px;
+  height: 4px;
+  border-radius: 999px;
+  background: #cbd5e1;
+  margin: 10px auto 4px;
+  flex-shrink: 0;
 }
 
 .notif-dropdown-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
   padding: 12px 14px;
   border-bottom: 1px solid #f1f5f9;
   background: #f8fafc;
+}
+
+.notif-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.notif-close-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #64748b;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.notif-close-btn:hover {
+  background: #e2e8f0;
+  color: #0f172a;
 }
 
 .notif-list {
@@ -4746,7 +4817,12 @@ body:has(#view-admin.active) .floating-zalo {
   color: #64748b;
 }
 
-@media (max-width: 640px) {
+@media (max-width: 768px) {
+  .notif-backdrop {
+    background: rgba(15, 23, 42, 0.45);
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
+  }
   .notif-dropdown {
     position: fixed;
     top: auto;
@@ -4755,11 +4831,24 @@ body:has(#view-admin.active) .floating-zalo {
     right: 0;
     width: 100%;
     max-width: 100%;
-    border-radius: 18px 18px 0 0;
-    box-shadow: 0 -10px 35px rgba(15, 23, 42, 0.22);
+    max-height: 78dvh;
+    border-radius: 20px 20px 0 0;
+    border-left: none;
+    border-right: none;
+    border-bottom: none;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    box-shadow: 0 -10px 35px rgba(15, 23, 42, 0.24);
+  }
+  .notif-sheet-handle {
+    display: block;
+  }
+  .notif-close-btn {
+    width: 40px;
+    height: 40px;
   }
   .notif-list {
-    max-height: 60vh;
+    max-height: calc(78dvh - 76px);
+    flex: 1;
   }
 }
 
@@ -4846,3 +4935,425 @@ body:has(#view-admin.active) .floating-zalo {
 .lb-rank-1 { background: #fef08a; color: #854d0e; }
 .lb-rank-2 { background: #e2e8f0; color: #334155; }
 .lb-rank-3 { background: #fed7aa; color: #9a3412; }
+
+.lb-metric-val {
+  color: #059669;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.lb-tier-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  background: #fff7ed;
+  color: #c2410c;
+}
+
+#view-leaderboard tr.is-me {
+  background: #fff7ed;
+}
+
+@media (max-width: 640px) {
+  .lb-tabs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    width: 100%;
+    gap: 6px;
+    background: #f1f5f9;
+    padding: 4px;
+    border-radius: 12px;
+  }
+  .lb-tabs .lb-tab-btn {
+    width: 100%;
+    min-height: 40px;
+    border-radius: 9px;
+    border: none;
+    justify-content: center;
+  }
+  .lb-tabs .lb-tab-btn.btn-outline {
+    background: transparent;
+    color: #475569;
+  }
+  #view-leaderboard .table-responsive {
+    overflow: visible;
+  }
+  #view-leaderboard .data-table {
+    border-collapse: separate;
+    border-spacing: 0;
+    width: 100%;
+  }
+  #view-leaderboard .data-table thead {
+    display: none;
+  }
+  #view-leaderboard .data-table tbody {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  #view-leaderboard .data-table tbody tr {
+    display: grid;
+    grid-template-columns: 36px minmax(0, 1fr) auto;
+    grid-template-rows: auto auto;
+    column-gap: 10px;
+    row-gap: 4px;
+    align-items: center;
+    padding: 12px;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    background: #ffffff;
+  }
+  #view-leaderboard .data-table tbody tr.is-me {
+    border-color: #fdba74;
+    background: #fff7ed;
+  }
+  #view-leaderboard .data-table tbody tr td {
+    padding: 0;
+    border: none;
+  }
+  #view-leaderboard .data-table tbody tr td.lb-col-rank {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+    display: flex;
+    justify-content: center;
+  }
+  #view-leaderboard .data-table tbody tr td.lb-col-user {
+    grid-column: 2;
+    grid-row: 1;
+    min-width: 0;
+  }
+  #view-leaderboard .data-table tbody tr td.lb-col-user strong {
+    display: block;
+    font-size: 14px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  #view-leaderboard .data-table tbody tr td.lb-col-user .lb-user-code {
+    display: none;
+  }
+  #view-leaderboard .data-table tbody tr td.lb-col-tier {
+    grid-column: 2;
+    grid-row: 2;
+  }
+  #view-leaderboard .data-table tbody tr td.lb-col-tier .lb-tier-pill {
+    padding: 2px 8px;
+    font-size: 12px;
+  }
+  #view-leaderboard .data-table tbody tr td.lb-col-metric {
+    grid-column: 3;
+    grid-row: 1 / span 2;
+    text-align: right;
+  }
+  #view-leaderboard .data-table tbody tr td.lb-col-metric .lb-metric-val {
+    font-size: 15px;
+  }
+  #view-leaderboard .data-table tbody tr td[colspan] {
+    grid-column: 1 / -1;
+    padding: 16px 8px;
+    text-align: center;
+  }
+}
+
+/* ================= HERO RECENT LINKS STRIP & ACCOUNT ZALO ICON ================= */
+.recent-links-strip {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.recent-links-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.recent-link-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 190px;
+  min-height: 34px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.recent-link-chip:hover {
+  border-color: #fdba74;
+  background: #fff7ed;
+  color: #c2410c;
+}
+
+.menu-ico-blue {
+  background: #eff6ff;
+  color: #0068ff;
+}
+
+/* ================= STAGE 2: MOBILE ORDER CARDS, WALLET HUB & FINTECH ROWS ================= */
+.stat-value,
+.ord-cashback-val {
+  font-variant-numeric: tabular-nums;
+}
+
+.ord-cashback-val.is-approved { color: #059669; }
+.ord-cashback-val.is-pending { color: #d97706; }
+.ord-cashback-val.is-cancelled { color: #94a3b8; text-decoration: line-through; }
+
+.ord-context-note {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.ord-context-note.is-pending { color: #b45309; }
+.ord-context-note.is-cancelled { color: #dc2626; }
+
+.wallet-quick-actions {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .wallet-quick-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+  .wallet-quick-actions .btn {
+    min-height: 46px;
+    border-radius: 12px;
+    font-size: 13.5px;
+    justify-content: center;
+  }
+  .wallet-two-col {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .wallet-history-panel {
+    order: 1;
+  }
+  .withdraw-panel {
+    order: 2;
+  }
+  .orders-banner {
+    display: flex;
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 12px;
+  }
+  .orders-banner .btn {
+    flex-shrink: 0;
+    min-height: 40px;
+  }
+}
+
+@media (max-width: 640px) {
+  /* 3-Tier Left-Aligned Mobile Order Card */
+table.orders-card-table tbody tr,
+#view-orders table.mobile-card-table tbody tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: auto auto auto;
+    column-gap: 10px;
+    row-gap: 8px;
+    padding: 14px;
+    border-radius: 14px;
+  }
+  #view-orders table.mobile-card-table tbody td {
+    display: block;
+    padding: 0;
+    border-bottom: none;
+    text-align: left;
+  }
+  #view-orders table.mobile-card-table tbody td::before {
+    display: none !important;
+  }
+  #view-orders table.mobile-card-table tbody td.ord-col-id {
+    grid-column: 1;
+    grid-row: 1;
+    min-width: 0;
+  }
+  #view-orders table.mobile-card-table tbody td.ord-col-id .ord-id-wrap {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    font-size: 13.5px;
+  }
+  #view-orders table.mobile-card-table tbody td.ord-col-id .ord-meta-sub {
+    display: none;
+  }
+  #view-orders table.mobile-card-table tbody td.ord-col-status {
+    grid-column: 2;
+    grid-row: 1;
+    align-self: start;
+    text-align: right;
+  }
+  #view-orders table.mobile-card-table tbody td.ord-col-product {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    padding-bottom: 8px;
+    border-bottom: 1px dashed #e2e8f0;
+  }
+  #view-orders table.mobile-card-table tbody td.ord-col-product .ord-product-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: #0f172a;
+    line-height: 1.45;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  #view-orders table.mobile-card-table tbody td.ord-col-cashback {
+    grid-column: 1 / -1;
+    grid-row: 3;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  #view-orders table.mobile-card-table tbody td.ord-col-cashback::before {
+    display: inline !important;
+    content: 'Tiền hoàn dự kiến';
+    font-size: 12.5px;
+    color: #64748b;
+    font-weight: 500;
+  }
+  #view-orders table.mobile-card-table tbody tr.order-row-approved td.ord-col-cashback::before {
+    content: 'Tiền hoàn đã nhận';
+  }
+  #view-orders table.mobile-card-table tbody tr.order-row-cancelled td.ord-col-cashback::before {
+    content: 'Tiền hoàn';
+  }
+  #view-orders table.mobile-card-table tbody td.ord-col-cashback .ord-cashback-val {
+    font-size: 16px;
+    font-weight: 800;
+  }
+  #view-orders table.mobile-card-table tbody td[colspan] {
+    grid-column: 1 / -1;
+    text-align: center;
+  }
+
+  /* Fintech 2-Column Transaction Rows for Wallet History */
+  #walletHistoryPanel table.mobile-card-table tbody tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: auto auto;
+    column-gap: 10px;
+    row-gap: 4px;
+    padding: 12px 14px;
+    border-radius: 12px;
+  }
+  #walletHistoryPanel table.mobile-card-table tbody td {
+    display: block;
+    padding: 0;
+    border-bottom: none;
+    text-align: left;
+  }
+  #walletHistoryPanel table.mobile-card-table tbody td::before {
+    display: none !important;
+  }
+  #walletHistoryPanel table.mobile-card-table tbody td[data-label="Nội dung"],
+  #walletHistoryPanel table.mobile-card-table tbody td[data-label="Tài khoản"] {
+    grid-column: 1;
+    grid-row: 1;
+    font-size: 13.5px;
+    font-weight: 600;
+    color: #0f172a;
+    min-width: 0;
+  }
+  #walletHistoryPanel table.mobile-card-table tbody td[data-label="Thời gian"],
+  #walletHistoryPanel table.mobile-card-table tbody td[data-label="Ngày"] {
+    grid-column: 1;
+    grid-row: 2;
+    font-size: 12px;
+    color: #64748b;
+  }
+  #walletHistoryPanel table.mobile-card-table tbody td[data-label="Số tiền"] {
+    grid-column: 2;
+    grid-row: 1;
+    text-align: right;
+    font-size: 14.5px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  #walletHistoryPanel table.mobile-card-table tbody td[data-label="Trạng thái"] {
+    grid-column: 2;
+    grid-row: 2;
+    text-align: right;
+  }
+  #walletHistoryPanel table.mobile-card-table tbody td[colspan] {
+    grid-column: 1 / -1;
+    text-align: center;
+  }
+}
+
+/* ================= STAGE 3 & 4: TYPOGRAPHY (>=12px), SKELETON SHIMMER & SVG CONSISTENCY ================= */
+.plat-badge-inline,
+.status-badge,
+.pill-count,
+.notif-item-time {
+  font-size: 12px !important;
+}
+
+.skeleton-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 4px;
+}
+
+.notif-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.skeleton-line {
+  height: 12px;
+  border-radius: 6px;
+  background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+  background-size: 200% 100%;
+  animation: skeletonShimmer 1.3s ease-in-out infinite;
+}
+
+.skeleton-line.w-30 { width: 30%; }
+.skeleton-line.w-40 { width: 40%; }
+.skeleton-line.w-50 { width: 50%; }
+.skeleton-line.w-60 { width: 60%; }
+.skeleton-line.w-70 { width: 70%; }
+.skeleton-line.w-90 { width: 90%; }
+
+@keyframes skeletonShimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-line {
+    animation: none;
+  }
+}

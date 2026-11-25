@@ -27,6 +27,10 @@ const {
   auditLedgerIntegrity,
   createToken,
   verifyToken,
+  getSessionPolicy,
+  createRefreshSession,
+  rotateRefreshSession,
+  revokeSessionByRefreshToken,
   sanitizeUser,
   getDatabaseStatus,
   getPgPool,
@@ -144,9 +148,10 @@ async function acquireResolveSlot() {
   });
 }
 
-function parseCookieToken(req) {
+function parseCookieNamed(req, name) {
   const raw = req.headers.cookie || '';
-  const match = raw.match(/(?:^|;\s*)hts_auth=([^;]+)/);
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const match = raw.match(new RegExp(`(?:^|;\\s*)${escaped}=([^;]+)`));
   if (!match) return '';
   try {
     return decodeURIComponent(match[1].trim());
@@ -155,22 +160,43 @@ function parseCookieToken(req) {
   }
 }
 
-function setAuthCookie(res, token) {
+function parseCookieToken(req) {
+  return parseCookieNamed(req, 'hts_auth');
+}
+
+function parseRefreshCookieToken(req) {
+  return parseCookieNamed(req, 'hts_refresh');
+}
+
+function appendSetCookie(res, cookieStr) {
+  const prev = res.getHeader('Set-Cookie');
+  const next = Array.isArray(prev) ? [...prev, cookieStr] : prev ? [String(prev), cookieStr] : [cookieStr];
+  res.setHeader('Set-Cookie', next);
+}
+
+function setAuthCookie(res, token, maxAgeSec = 3600) {
   const isProd = Boolean(process.env.VERCEL || process.env.NODE_ENV === 'production');
   const securePart = isProd ? '; Secure' : '';
-  res.setHeader(
-    'Set-Cookie',
-    `hts_auth=${encodeURIComponent(token)}; HttpOnly; Path=/; Max-Age=${3600 * 6}; SameSite=Lax${securePart}`
+  appendSetCookie(
+    res,
+    `hts_auth=${encodeURIComponent(token)}; HttpOnly; Path=/; Max-Age=${Math.max(1, Math.floor(maxAgeSec))}; SameSite=Lax${securePart}`
+  );
+}
+
+function setRefreshCookie(res, rawRefreshToken, maxAgeSec = 30 * 24 * 3600) {
+  const isProd = Boolean(process.env.VERCEL || process.env.NODE_ENV === 'production');
+  const securePart = isProd ? '; Secure' : '';
+  appendSetCookie(
+    res,
+    `hts_refresh=${encodeURIComponent(rawRefreshToken)}; HttpOnly; Path=/api/auth; Max-Age=${Math.max(1, Math.floor(maxAgeSec))}; SameSite=Lax${securePart}`
   );
 }
 
 function clearAuthCookie(res) {
   const isProd = Boolean(process.env.VERCEL || process.env.NODE_ENV === 'production');
   const securePart = isProd ? '; Secure' : '';
-  res.setHeader(
-    'Set-Cookie',
-    `hts_auth=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax${securePart}`
-  );
+  appendSetCookie(res, `hts_auth=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax${securePart}`);
+  appendSetCookie(res, `hts_refresh=; HttpOnly; Path=/api/auth; Max-Age=0; SameSite=Lax${securePart}`);
 }
 
 function getAuthUser(req) {
@@ -1064,7 +1090,9 @@ function registerCashbackRoutes(app) {
       await saveDb(db);
 
       const token = createToken(newUser);
-      setAuthCookie(res, token);
+      const refreshSession = await createRefreshSession(newUser, { userAgent: req.headers['user-agent'] });
+      setAuthCookie(res, token, refreshSession.policy.accessTtlSec);
+      setRefreshCookie(res, refreshSession.rawRefreshToken, refreshSession.policy.idleTtlSec);
       logger.logLeave('POST /api/auth/register', { userCode: newUser.code });
       const isBrowserXhr = Boolean(req.headers['x-requested-with']);
       return res.json(isBrowserXhr ? { user: sanitizeUser(newUser) } : { token, user: sanitizeUser(newUser) });
@@ -1133,7 +1161,9 @@ function registerCashbackRoutes(app) {
 
       recalculateUserWallet(user.id);
       const token = createToken(user);
-      setAuthCookie(res, token);
+      const refreshSession = await createRefreshSession(user, { userAgent: req.headers['user-agent'] });
+      setAuthCookie(res, token, refreshSession.policy.accessTtlSec);
+      setRefreshCookie(res, refreshSession.rawRefreshToken, refreshSession.policy.idleTtlSec);
       logger.logLeave('POST /api/auth/login', { userCode: user.code, role: user.role });
       const isBrowserXhr = Boolean(req.headers['x-requested-with']);
       return res.json(isBrowserXhr ? { user: sanitizeUser(user) } : { token, user: sanitizeUser(user) });
@@ -1143,6 +1173,44 @@ function registerCashbackRoutes(app) {
     }
   });
 
+  const refreshLimiter = createRateLimiter({
+    windowMs: 60000,
+    max: 60,
+    keyPrefix: 'refresh',
+    failClosed: false
+  });
+  app.post('/api/auth/refresh', refreshLimiter, asyncHandler(async (req, res) => {
+    logger.logEnter('POST /api/auth/refresh');
+    const rawRefresh = parseRefreshCookieToken(req);
+    if (!rawRefresh) {
+      clearAuthCookie(res);
+      logger.logLeave('POST /api/auth/refresh', { ok: false, reason: 'MISSING' });
+      return res.status(401).json({ error: 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.' });
+    }
+
+    const rotated = await rotateRefreshSession(rawRefresh, { userAgent: req.headers['user-agent'] });
+    if (!rotated.ok) {
+      clearAuthCookie(res);
+      if (rotated.reason === 'REUSE_DETECTED') {
+        logger.warning('POST /api/auth/refresh', 'Refresh token reuse detected; session family revoked');
+      }
+      logger.logLeave('POST /api/auth/refresh', { ok: false, reason: rotated.reason });
+      return res.status(401).json({ error: 'Phiên đăng nhập đã hết hạn hoặc bị thu hồi. Vui lòng đăng nhập lại.' });
+    }
+
+    const token = createToken(rotated.user, rotated.policy.accessTtlSec);
+    setAuthCookie(res, token, rotated.policy.accessTtlSec);
+    if (!rotated.graceReuse && rotated.rawRefreshToken) {
+      setRefreshCookie(res, rotated.rawRefreshToken, rotated.maxAgeSec);
+    }
+    logger.logLeave('POST /api/auth/refresh', {
+      ok: true,
+      userCode: rotated.user.code,
+      graceReuse: Boolean(rotated.graceReuse)
+    });
+    return res.json({ user: sanitizeUser(rotated.user) });
+  }));
+
   const logoutLimiter = createRateLimiter({
     windowMs: 60000,
     max: 20,
@@ -1151,13 +1219,38 @@ function registerCashbackRoutes(app) {
   });
   app.post('/api/auth/logout', logoutLimiter, asyncHandler(async (req, res) => {
     logger.logEnter('POST /api/auth/logout');
-    const user = getAuthUser(req);
-    if (user) {
-      await revokeUserSessions(user.id);
+    const rawRefresh = parseRefreshCookieToken(req);
+    if (rawRefresh) {
+      await revokeSessionByRefreshToken(rawRefresh);
+    } else {
+      const user = getAuthUser(req);
+      if (user) {
+        await revokeUserSessions(user.id);
+      }
     }
     clearAuthCookie(res);
     logger.logLeave('POST /api/auth/logout');
     return res.json({ status: 'ok' });
+  }));
+
+  app.post('/api/auth/logout-all', logoutLimiter, asyncHandler(async (req, res) => {
+    logger.logEnter('POST /api/auth/logout-all');
+    let user = getAuthUser(req);
+    if (!user) {
+      const rawRefresh = parseRefreshCookieToken(req);
+      if (rawRefresh) {
+        const rotated = await rotateRefreshSession(rawRefresh, { userAgent: req.headers['user-agent'] });
+        if (rotated.ok) user = rotated.user;
+      }
+    }
+    if (!user) {
+      clearAuthCookie(res);
+      return res.status(401).json({ error: 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.' });
+    }
+    await revokeUserSessions(user.id);
+    clearAuthCookie(res);
+    logger.logLeave('POST /api/auth/logout-all', { userCode: user.code });
+    return res.json({ status: 'ok', message: 'Đã đăng xuất khỏi tất cả thiết bị.' });
   }));
 
   // 4. Current User Dashboard (Includes Orders, Withdrawals, Immutable Ledger & Referral Count)
@@ -1549,9 +1642,12 @@ function registerCashbackRoutes(app) {
 
     const db = ensureDbLoaded();
     await saveDb(db);
+    await revokeUserSessions(user.id);
 
     const token = createToken(user);
-    setAuthCookie(res, token);
+    const refreshSession = await createRefreshSession(user, { userAgent: req.headers['user-agent'] });
+    setAuthCookie(res, token, refreshSession.policy.accessTtlSec);
+    setRefreshCookie(res, refreshSession.rawRefreshToken, refreshSession.policy.idleTtlSec);
     logger.logLeave('POST /api/user/change-password', { userCode: user.code, tokenVersion: user.tokenVersion });
     return res.json({
       message: 'Đổi mật khẩu thành công! Các phiên đăng nhập cũ trên thiết bị khác đã được đăng xuất.',

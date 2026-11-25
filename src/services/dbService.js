@@ -252,13 +252,34 @@ if (IS_PROD) {
   if (!process.env.ADMIN_PASSWORD) throw new Error('ADMIN_PASSWORD is required for secure bootstrap');
 }
 
-function createToken(user, ttlSeconds = 3600 * 6) {
+const REFRESH_MULTI_TAB_GRACE_MS = 15 * 1000;
+
+function getSessionPolicy(user) {
+  const isAdmin = String(user?.role || '').toLowerCase() === 'admin';
+  if (isAdmin) {
+    return {
+      accessTtlSec: 1800,           // 30 minutes
+      idleTtlSec: 7 * 24 * 3600,    // 7 days sliding idle window
+      absTtlSec: 14 * 24 * 3600     // 14 days absolute max lifetime
+    };
+  }
+  return {
+    accessTtlSec: 3600,             // 1 hour
+    idleTtlSec: 30 * 24 * 3600,     // 30 days sliding idle window
+    absTtlSec: 90 * 24 * 3600       // 90 days absolute max lifetime
+  };
+}
+
+function createToken(user, ttlSeconds) {
+  const effectiveTtl = Number.isFinite(Number(ttlSeconds)) && Number(ttlSeconds) > 0
+    ? Number(ttlSeconds)
+    : getSessionPolicy(user).accessTtlSec;
   const payload = {
     id: user.id,
     code: user.code,
     role: user.role,
     ver: Number(user.tokenVersion || 1),
-    exp: Math.floor(Date.now() / 1000) + ttlSeconds
+    exp: Math.floor(Date.now() / 1000) + effectiveTtl
   };
   const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
   const sig = crypto.createHmac('sha256', getJwtSecret()).update(body).digest('base64url');
@@ -1038,6 +1059,23 @@ async function initPostgresIfConfigured() {
           read_at TIMESTAMPTZ DEFAULT NOW(),
           PRIMARY KEY (notification_id, user_id)
         );
+        CREATE TABLE IF NOT EXISTS user_sessions (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL,
+          family_id TEXT NOT NULL,
+          token_hash TEXT UNIQUE NOT NULL,
+          prev_token_hash TEXT NULL,
+          prev_grace_until TIMESTAMPTZ NULL,
+          user_agent TEXT DEFAULT '',
+          expires_at TIMESTAMPTZ NOT NULL,
+          absolute_expires_at TIMESTAMPTZ NOT NULL,
+          revoked_at TIMESTAMPTZ NULL,
+          last_used_at TIMESTAMPTZ DEFAULT NOW(),
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_user_sessions_user_id ON user_sessions(user_id);
+        CREATE INDEX IF NOT EXISTS idx_user_sessions_family_id ON user_sessions(family_id);
+        CREATE INDEX IF NOT EXISTS idx_user_sessions_expires_at ON user_sessions(expires_at);
 
         -- Safe idempotent schema migrations for OCC, orders, users, withdrawals & audit_logs
         ALTER TABLE hoantienshop_state ADD COLUMN IF NOT EXISTS version BIGINT DEFAULT 1;
@@ -2228,7 +2266,265 @@ async function reloadStateFromPostgres({ strict = false } = {}) {
   return ensureDbLoaded();
 }
 
+const memorySessions = new Map();
+
+function hashRefreshToken(rawToken) {
+  return crypto.createHash('sha256').update(String(rawToken || '')).digest('hex');
+}
+
+function resolveSessionUser(userId) {
+  const db = ensureDbLoaded();
+  return db.users.find((u) => u.id === userId) || null;
+}
+
+async function createRefreshSession(user, { userAgent = '', nowMs = Date.now() } = {}) {
+  const policy = getSessionPolicy(user);
+  const rawRefreshToken = crypto.randomBytes(48).toString('base64url');
+  const tokenHash = hashRefreshToken(rawRefreshToken);
+  const id = `sess_${crypto.randomUUID()}`;
+  const familyId = `fam_${crypto.randomUUID()}`;
+  const absoluteExpiresAt = nowMs + policy.absTtlSec * 1000;
+  const expiresAt = Math.min(absoluteExpiresAt, nowMs + policy.idleTtlSec * 1000);
+  const cleanUa = String(userAgent || '').slice(0, 240);
+
+  if (!pgPool) {
+    memorySessions.set(id, {
+      id,
+      userId: user.id,
+      familyId,
+      tokenHash,
+      prevTokenHash: null,
+      prevGraceUntil: null,
+      userAgent: cleanUa,
+      expiresAt,
+      absoluteExpiresAt,
+      revokedAt: null,
+      lastUsedAt: nowMs,
+      createdAt: nowMs
+    });
+    return { sessionId: id, familyId, rawRefreshToken, expiresAt, absoluteExpiresAt, policy };
+  }
+
+  await pgPool.query(
+    `INSERT INTO user_sessions (
+      id, user_id, family_id, token_hash, user_agent, expires_at, absolute_expires_at, last_used_at, created_at
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)`,
+    [id, user.id, familyId, tokenHash, cleanUa, new Date(expiresAt), new Date(absoluteExpiresAt), new Date(nowMs)]
+  );
+  return { sessionId: id, familyId, rawRefreshToken, expiresAt, absoluteExpiresAt, policy };
+}
+
+function mapPgSessionRow(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    userId: row.user_id,
+    familyId: row.family_id,
+    tokenHash: row.token_hash,
+    prevTokenHash: row.prev_token_hash || null,
+    prevGraceUntil: row.prev_grace_until ? new Date(row.prev_grace_until).getTime() : null,
+    userAgent: row.user_agent || '',
+    expiresAt: new Date(row.expires_at).getTime(),
+    absoluteExpiresAt: new Date(row.absolute_expires_at).getTime(),
+    revokedAt: row.revoked_at ? new Date(row.revoked_at).getTime() : null,
+    lastUsedAt: row.last_used_at ? new Date(row.last_used_at).getTime() : null
+  };
+}
+
+async function revokeSessionFamily(familyId, nowMs = Date.now()) {
+  if (!familyId) return;
+  if (!pgPool) {
+    for (const s of memorySessions.values()) {
+      if (s.familyId === familyId && !s.revokedAt) s.revokedAt = nowMs;
+    }
+    return;
+  }
+  await pgPool.query('UPDATE user_sessions SET revoked_at = COALESCE(revoked_at, $2) WHERE family_id = $1', [
+    familyId,
+    new Date(nowMs)
+  ]);
+}
+
+async function rotateRefreshSession(rawToken, { nowMs = Date.now(), userAgent = '' } = {}) {
+  if (!rawToken || typeof rawToken !== 'string') return { ok: false, reason: 'MISSING' };
+  const presentedHash = hashRefreshToken(rawToken);
+  const cleanUa = String(userAgent || '').slice(0, 240);
+
+  let session = null;
+  let user = null;
+
+  if (!pgPool) {
+    for (const s of memorySessions.values()) {
+      if (s.tokenHash === presentedHash || s.prevTokenHash === presentedHash) {
+        session = s;
+        break;
+      }
+    }
+    if (!session) return { ok: false, reason: 'NOT_FOUND' };
+    if (session.revokedAt) return { ok: false, reason: 'REVOKED' };
+    if (nowMs >= session.absoluteExpiresAt || nowMs >= session.expiresAt) {
+      session.revokedAt = nowMs;
+      return { ok: false, reason: 'EXPIRED' };
+    }
+    user = resolveSessionUser(session.userId);
+    if (!user || user.accountLocked || user.isDeleted) {
+      await revokeSessionFamily(session.familyId, nowMs);
+      return { ok: false, reason: 'USER_INVALID' };
+    }
+    const policy = getSessionPolicy(user);
+    if (session.prevTokenHash === presentedHash) {
+      if (session.prevGraceUntil && nowMs <= session.prevGraceUntil) {
+        return {
+          ok: true,
+          graceReuse: true,
+          user,
+          policy,
+          sessionId: session.id,
+          maxAgeSec: Math.max(1, Math.floor((session.expiresAt - nowMs) / 1000))
+        };
+      }
+      await revokeSessionFamily(session.familyId, nowMs);
+      return { ok: false, reason: 'REUSE_DETECTED' };
+    }
+
+    const nextRawToken = crypto.randomBytes(48).toString('base64url');
+    const nextHash = hashRefreshToken(nextRawToken);
+    const nextExpiresAt = Math.min(session.absoluteExpiresAt, nowMs + policy.idleTtlSec * 1000);
+    session.prevTokenHash = session.tokenHash;
+    session.prevGraceUntil = nowMs + REFRESH_MULTI_TAB_GRACE_MS;
+    session.tokenHash = nextHash;
+    session.expiresAt = nextExpiresAt;
+    session.lastUsedAt = nowMs;
+    if (cleanUa) session.userAgent = cleanUa;
+    return {
+      ok: true,
+      graceReuse: false,
+      user,
+      policy,
+      sessionId: session.id,
+      rawRefreshToken: nextRawToken,
+      maxAgeSec: Math.max(1, Math.floor((nextExpiresAt - nowMs) / 1000))
+    };
+  }
+
+  const client = await pgPool.connect();
+  try {
+    await client.query('BEGIN');
+    const foundRes = await client.query(
+      'SELECT * FROM user_sessions WHERE token_hash = $1 OR prev_token_hash = $1 LIMIT 1 FOR UPDATE',
+      [presentedHash]
+    );
+    session = mapPgSessionRow(foundRes.rows[0]);
+    if (!session) {
+      await client.query('ROLLBACK');
+      return { ok: false, reason: 'NOT_FOUND' };
+    }
+    if (session.revokedAt) {
+      await client.query('ROLLBACK');
+      return { ok: false, reason: 'REVOKED' };
+    }
+    if (nowMs >= session.absoluteExpiresAt || nowMs >= session.expiresAt) {
+      await client.query('UPDATE user_sessions SET revoked_at = $2 WHERE id = $1', [session.id, new Date(nowMs)]);
+      await client.query('COMMIT');
+      return { ok: false, reason: 'EXPIRED' };
+    }
+
+    const userRes = await client.query('SELECT * FROM users WHERE id = $1 LIMIT 1', [session.userId]);
+    const userRow = userRes.rows[0];
+    if (!userRow || userRow.account_locked || userRow.is_deleted) {
+      await client.query('UPDATE user_sessions SET revoked_at = COALESCE(revoked_at, $2) WHERE family_id = $1', [
+        session.familyId,
+        new Date(nowMs)
+      ]);
+      await client.query('COMMIT');
+      return { ok: false, reason: 'USER_INVALID' };
+    }
+    user = mapUserRow(userRow);
+    const db = ensureDbLoaded();
+    const memIdx = db.users.findIndex((u) => u.id === user.id);
+    if (memIdx >= 0) Object.assign(db.users[memIdx], user);
+    else db.users.push(user);
+
+    const policy = getSessionPolicy(user);
+    if (session.prevTokenHash === presentedHash) {
+      if (session.prevGraceUntil && nowMs <= session.prevGraceUntil) {
+        await client.query('COMMIT');
+        return {
+          ok: true,
+          graceReuse: true,
+          user,
+          policy,
+          sessionId: session.id,
+          maxAgeSec: Math.max(1, Math.floor((session.expiresAt - nowMs) / 1000))
+        };
+      }
+      await client.query('UPDATE user_sessions SET revoked_at = COALESCE(revoked_at, $2) WHERE family_id = $1', [
+        session.familyId,
+        new Date(nowMs)
+      ]);
+      await client.query('COMMIT');
+      return { ok: false, reason: 'REUSE_DETECTED' };
+    }
+
+    const nextRawToken = crypto.randomBytes(48).toString('base64url');
+    const nextHash = hashRefreshToken(nextRawToken);
+    const nextExpiresAt = Math.min(session.absoluteExpiresAt, nowMs + policy.idleTtlSec * 1000);
+    const graceUntil = nowMs + REFRESH_MULTI_TAB_GRACE_MS;
+
+    await client.query(
+      `UPDATE user_sessions
+       SET prev_token_hash = token_hash,
+           prev_grace_until = $2,
+           token_hash = $3,
+           expires_at = $4,
+           last_used_at = $5,
+           user_agent = CASE WHEN $6 <> '' THEN $6 ELSE user_agent END
+       WHERE id = $1`,
+      [session.id, new Date(graceUntil), nextHash, new Date(nextExpiresAt), new Date(nowMs), cleanUa]
+    );
+    await client.query('COMMIT');
+    return {
+      ok: true,
+      graceReuse: false,
+      user,
+      policy,
+      sessionId: session.id,
+      rawRefreshToken: nextRawToken,
+      maxAgeSec: Math.max(1, Math.floor((nextExpiresAt - nowMs) / 1000))
+    };
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+async function revokeSessionByRefreshToken(rawToken, nowMs = Date.now()) {
+  if (!rawToken || typeof rawToken !== 'string') return false;
+  const presentedHash = hashRefreshToken(rawToken);
+  if (!pgPool) {
+    let found = false;
+    for (const s of memorySessions.values()) {
+      if (s.tokenHash === presentedHash || s.prevTokenHash === presentedHash) {
+        if (!s.revokedAt) s.revokedAt = nowMs;
+        found = true;
+      }
+    }
+    return found;
+  }
+  const res = await pgPool.query(
+    'UPDATE user_sessions SET revoked_at = COALESCE(revoked_at, $2) WHERE token_hash = $1 OR prev_token_hash = $1',
+    [presentedHash, new Date(nowMs)]
+  );
+  return res.rowCount > 0;
+}
+
 async function revokeUserSessions(userId) {
+  const nowMs = Date.now();
+  for (const s of memorySessions.values()) {
+    if (s.userId === userId && !s.revokedAt) s.revokedAt = nowMs;
+  }
   if (!pgPool) {
     const db = ensureDbLoaded();
     const user = db.users.find(u => u.id === userId);
@@ -2240,6 +2536,7 @@ async function revokeUserSessions(userId) {
     await client.query('BEGIN');
     await client.query("SELECT version FROM hoantienshop_state WHERE id='main' FOR UPDATE");
     await client.query('UPDATE users SET token_version=COALESCE(token_version,1)+1 WHERE id=$1', [userId]);
+    await client.query('UPDATE user_sessions SET revoked_at=COALESCE(revoked_at, NOW()) WHERE user_id=$1', [userId]);
     await client.query("UPDATE hoantienshop_state SET version=version+1, updated_at=NOW() WHERE id='main'");
     await client.query('COMMIT');
   } catch (error) {
@@ -3224,6 +3521,10 @@ module.exports = {
   auditLedgerIntegrity,
   createToken,
   verifyToken,
+  getSessionPolicy,
+  createRefreshSession,
+  rotateRefreshSession,
+  revokeSessionByRefreshToken,
   sanitizeUser,
   getDatabaseStatus,
   reloadStateFromPostgres,
