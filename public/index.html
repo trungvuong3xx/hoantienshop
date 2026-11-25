@@ -2,7 +2,7 @@
 <html lang="vi">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
   <meta name="referrer" content="strict-origin-when-cross-origin" />
   <title>LiLa — Hoàn Tiền Mua Sắm Shopee & TikTok Shop</title>
   <meta name="description" content="LiLa — Nền tảng nhận hoàn tiền tự động khi mua sắm trên Shopee và TikTok Shop. Minh bạch, nhanh chóng, rút tiền miễn phí." />
@@ -64,10 +64,10 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link id="webFont" media="print" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/styles.css?v=2.7.0" />
-  <link rel="stylesheet" href="/selectPopup.css?v=1" />
-  <script src="/app.js?v=2.7.1" defer></script>
-  <script src="/selectPopup.js?v=1" defer></script>
+  <link rel="stylesheet" href="/styles.css?v=2.7.1" />
+  <link rel="stylesheet" href="/selectPopup.css?v=2" />
+  <script src="/app.js?v=2.7.2" defer></script>
+  <script src="/selectPopup.js?v=2" defer></script>
 </head>
 <body>
   <a href="#mainContent" class="skip-link">Chuyển đến nội dung chính</a>
@@ -156,13 +156,15 @@
               autocomplete="off"
               aria-label="Dán link sản phẩm Shopee hoặc TikTok Shop"
             />
-            <button type="button" class="btn-paste-inline btn-icon-svg" id="pasteBtn" title="Dán link từ bộ nhớ tạm">
-              <svg class="svg-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg>
-              <span>Dán</span>
-            </button>
-            <button type="button" class="btn-clear-inline hidden" id="clearInputBtn" title="Xoá" aria-label="Xoá nội dung">
-              <svg class="svg-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-            </button>
+            <div class="search-input-actions">
+              <button type="button" class="btn-clear-inline hidden" id="clearInputBtn" title="Xoá" aria-label="Xoá nội dung">
+                <svg class="svg-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+              <button type="button" class="btn-paste-inline btn-icon-svg" id="pasteBtn" title="Dán link từ bộ nhớ tạm">
+                <svg class="svg-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg>
+                <span>Dán</span>
+              </button>
+            </div>
           </div>
           <button type="button" class="btn btn-cta btn-icon-svg" id="getCashbackLinkBtn">
             <svg class="svg-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
