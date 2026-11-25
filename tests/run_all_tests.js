@@ -43,7 +43,8 @@ const TEST_SUITES = [
   'test_accesstrade_resilience.js',
   'test_stage1_notifications_and_custom_rate.js',
   'test_stage2_vip_and_leaderboard.js',
-  'test_security_audit_remediation.js'
+  'test_security_audit_remediation.js',
+  'test_persistent_auth.js'
 ];
 
 async function runAllTests() {

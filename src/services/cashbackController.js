@@ -1638,20 +1638,20 @@ function registerCashbackRoutes(app) {
     }
 
     user.passwordHash = await hashPasswordAsync(nextPwd);
-    user.tokenVersion = Number(user.tokenVersion || 1) + 1;
 
     const db = ensureDbLoaded();
     await saveDb(db);
     await revokeUserSessions(user.id);
 
-    const token = createToken(user);
-    const refreshSession = await createRefreshSession(user, { userAgent: req.headers['user-agent'] });
+    const freshUser = ensureDbLoaded().users.find((u) => u.id === user.id) || user;
+    const token = createToken(freshUser);
+    const refreshSession = await createRefreshSession(freshUser, { userAgent: req.headers['user-agent'] });
     setAuthCookie(res, token, refreshSession.policy.accessTtlSec);
     setRefreshCookie(res, refreshSession.rawRefreshToken, refreshSession.policy.idleTtlSec);
-    logger.logLeave('POST /api/user/change-password', { userCode: user.code, tokenVersion: user.tokenVersion });
+    logger.logLeave('POST /api/user/change-password', { userCode: freshUser.code, tokenVersion: freshUser.tokenVersion });
     return res.json({
       message: 'Đổi mật khẩu thành công! Các phiên đăng nhập cũ trên thiết bị khác đã được đăng xuất.',
-      user: sanitizeUser(user)
+      user: sanitizeUser(freshUser)
     });
   }));
 

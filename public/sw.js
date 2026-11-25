@@ -2,7 +2,7 @@
 const CACHE_NAME = 'lila-pwa-v17';
 const OFFLINE_URL = '/offline.html';
 // Lean customer shell assets; admin assets are lazy-loaded and cached on demand.
-const SHELL_ASSETS = ["/","/styles.css?v=2.7.0","/selectPopup.css?v=1","/app.js?v=2.7.0","/selectPopup.js?v=1"];
+const SHELL_ASSETS = ["/","/styles.css?v=2.7.0","/selectPopup.css?v=1","/app.js?v=2.7.1","/selectPopup.js?v=1"];
 const LAZY_ADMIN_PATHS = ['/adminMobile.css', '/csvImport.js', '/tiktokReply.js', '/adminMobile.js'];
 
 self.addEventListener('install', (event) => {

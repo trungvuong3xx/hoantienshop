@@ -258,6 +258,47 @@ function showConnectionNotice(message) {
   notice.firstChild.textContent = message;
 }
 
+let refreshInFlight = null;
+
+async function refreshAuthSession() {
+  if (refreshInFlight) return refreshInFlight;
+  refreshInFlight = (async () => {
+    try {
+      const res = await fetch('/api/auth/refresh', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Requested-With': 'XMLHttpRequest'
+        },
+        body: '{}'
+      });
+      if (!res.ok) return null;
+      const data = await res.json().catch(() => null);
+      if (data && data.user) {
+        authToken = 'httponly_cookie_session';
+        currentUser = data.user;
+        safeStorage.set(
+          USER_KEY,
+          JSON.stringify({
+            code: data.user.code,
+            name: data.user.name,
+            role: data.user.role
+          })
+        );
+        syncAuthUi();
+        return data.user;
+      }
+      return null;
+    } catch {
+      return null;
+    } finally {
+      refreshInFlight = null;
+    }
+  })();
+  return refreshInFlight;
+}
+
 async function apiFetch(url, options = {}) {
   const headers = {
     'Content-Type': 'application/json',
@@ -299,8 +340,17 @@ async function apiFetch(url, options = {}) {
       if (err.name === 'AbortError' || timedOut) throw err;
       return {};
     });
-    if (res.status === 401 && authToken && !url.includes('/api/auth/')) {
-      clearSession();
+    if (res.status === 401 && !url.includes('/api/auth/') && !options._retriedAfterRefresh) {
+      const refreshedUser = await refreshAuthSession();
+      if (refreshedUser) {
+        clearTimeout(timeoutId);
+        return apiFetch(url, { ...options, _retriedAfterRefresh: true });
+      }
+      if (authToken) {
+        await clearSession({ skipLogoutApi: true });
+      }
+    } else if (res.status === 401 && authToken && !url.includes('/api/auth/')) {
+      await clearSession({ skipLogoutApi: true });
     }
     if (!res.ok) {
       if (res.status >= 500) {
@@ -893,7 +943,7 @@ function setSession(_token, user) {
   refreshGuestConversionAfterAuth(user);
 }
 
-async function clearSession() {
+async function clearSession({ skipLogoutApi = false } = {}) {
   authToken = '';
   currentUser = null;
   lastConvertedGuestText = '';
@@ -912,14 +962,16 @@ async function clearSession() {
   document.getElementById('accPasswordPanel')?.classList.add('hidden');
   document.getElementById('toggleAccProfileBtn')?.classList.remove('active');
   document.getElementById('toggleAccPasswordBtn')?.classList.remove('active');
-  try {
-    await fetch('/api/auth/logout', {
-      method: 'POST',
-      credentials: 'same-origin',
-      headers: { 'X-Requested-With': 'XMLHttpRequest' }
-    });
-  } catch (err) {
-    console.warn('Logout network notice:', err);
+  if (!skipLogoutApi) {
+    try {
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+      });
+    } catch (err) {
+      console.warn('Logout network notice:', err);
+    }
   }
   syncAuthUi();
   switchView('home');
@@ -4099,7 +4151,9 @@ async function initBoot() {
   if (['home', 'wallet', 'admin', 'guide', 'faq', 'terms'].includes(initialHash) || ['orders', 'account'].includes(initialHash)) {
     switchView(initialHash, false, { skipReload: true });
   }
-  const userReady = authToken ? loadUserDashboard() : Promise.resolve();
+  const userReady = authToken
+    ? loadUserDashboard()
+    : refreshAuthSession().then((restored) => (restored ? loadUserDashboard() : null));
   const adminReady = userReady.then(() => {
     if (document.getElementById('view-admin')?.classList.contains('active')) {
       if (authToken && currentUser?.role === 'admin') return loadAdminDashboard();
@@ -4108,6 +4162,35 @@ async function initBoot() {
   });
   await Promise.all([initPublicConfig(), adminReady]);
 }
+
+// Multi-tab session sync + silent refresh when returning to backgrounded mobile/desktop tab
+if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+  window.addEventListener('storage', (e) => {
+    if (e.key === USER_KEY && !e.newValue && authToken) {
+      clearSession({ skipLogoutApi: true });
+    }
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && authToken) {
+      loadUserDashboard();
+    }
+  });
+}
+
+on('logoutAllDevicesBtn', 'click', async () => {
+  const confirmed = await askUserConfirm(
+    'Đăng xuất khỏi tất cả điện thoại và trình duyệt đang đăng nhập tài khoản này?',
+    'Đăng Xuất Mọi Thiết Bị'
+  );
+  if (!confirmed) return;
+  try {
+    await apiFetch('/api/auth/logout-all', { method: 'POST', body: '{}' });
+    await clearSession({ skipLogoutApi: true });
+    showToast('Đã đăng xuất khỏi tất cả thiết bị.');
+  } catch (err) {
+    showToast(err.message);
+  }
+});
 
 // Global Escape key listener fallback (closes topmost modal without closing stacked base modals)
 if (typeof document !== 'undefined') {

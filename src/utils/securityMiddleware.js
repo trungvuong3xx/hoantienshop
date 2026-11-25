@@ -291,7 +291,7 @@ function createCsrfGuard({ allowedOrigins = [] } = {}) {
     }
 
     const rawCookie = req.headers.cookie || '';
-    const hasAuthCookie = /(?:^|;\s*)hts_auth=([^;]+)/.test(rawCookie);
+    const hasAuthCookie = /(?:^|;\s*)(?:hts_auth|hts_refresh)=([^;]+)/.test(rawCookie);
     if (!hasAuthCookie) {
       return next();
     }
