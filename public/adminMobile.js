@@ -88,7 +88,7 @@
   new MutationObserver(() => { if (!document.getElementById('userManageModal').classList.contains('hidden')) updatePreview(); }).observe(document.getElementById('userManageModal'), { attributes: true, attributeFilter: ['class'] });
   // Collapse settings into named sections without changing field IDs or save payloads.
   root.querySelectorAll('.admin-settings-grid > .admin-card').forEach(card => {
-    const section = document.createElement('details'); section.className = card.className; section.open = true;
+    const section = document.createElement('details'); section.className = card.className; section.open = !mobile.matches;
     const summary = document.createElement('summary'); summary.className = 'admin-settings-summary';
     const head = card.querySelector('.admin-card-head'); summary.append(head);
     section.append(summary); while (card.firstChild) section.append(card.firstChild);
