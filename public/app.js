@@ -4613,36 +4613,289 @@ if ('serviceWorker' in navigator) {
 
 function isPwaStandalone() {
   return (
-    window.matchMedia('(display-mode: standalone)').matches ||
+    (typeof window.matchMedia === 'function' &&
+      (window.matchMedia('(display-mode: standalone)').matches ||
+        window.matchMedia('(display-mode: fullscreen)').matches)) ||
     window.navigator.standalone === true ||
-    document.referrer.includes('android-app://')
+    (document.referrer || '').includes('android-app://')
   );
 }
 
 function isIosDevice() {
   const ua = navigator.userAgent || '';
+  const platform = navigator.platform || '';
   const isIosUa = /iphone|ipad|ipod/i.test(ua);
-  const isIpadOs = navigator.maxTouchPoints > 1 && /Macintosh/.test(ua);
+  const isIpadOs = (platform === 'MacIntel' || /Macintosh/i.test(ua)) && navigator.maxTouchPoints > 1;
   return (isIosUa || isIpadOs) && !window.MSStream;
+}
+
+function getIosInstallContext() {
+  const ua = navigator.userAgent || '';
+  const isIos = isIosDevice();
+  const isAndroid = /Android/i.test(ua);
+  const standalone = isPwaStandalone();
+
+  if (!isIos) {
+    return { isIos: false, isAndroid, standalone, browser: isAndroid ? 'android' : 'desktop' };
+  }
+
+  if (/\bZalo\b/i.test(ua)) {
+    return { isIos: true, isAndroid: false, standalone, browser: 'zalo' };
+  }
+  if (/\b(FBAN|FBAV|FB_IAB|FBIOS|Messenger|FBMD)\b/i.test(ua)) {
+    return { isIos: true, isAndroid: false, standalone, browser: 'facebook' };
+  }
+  if (/\b(Instagram|Line|MicroMessenger|BytedanceWebview|musical_ly|TikTok|Twitter|Snapchat)\b/i.test(ua)) {
+    return { isIos: true, isAndroid: false, standalone, browser: 'other_inapp' };
+  }
+  if (/\b(CriOS|FxiOS|EdgiOS|OPiOS|DuckDuckGo|GSA)\b/i.test(ua)) {
+    return { isIos: true, isAndroid: false, standalone, browser: 'ios_other_browser' };
+  }
+  if (/AppleWebKit/i.test(ua) && /Safari/i.test(ua)) {
+    return { isIos: true, isAndroid: false, standalone, browser: 'safari' };
+  }
+  return { isIos: true, isAndroid: false, standalone, browser: 'unknown_ios' };
+}
+
+const IOS_A2HS_STORAGE_KEY = 'hts_ios_a2hs_state';
+const IOS_A2HS_COOLDOWN_MS = 7 * 86400 * 1000;
+let iosA2hsShownThisSession = false;
+
+const IOS_A2HS_ICONS = {
+  share: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>',
+  shareSm: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>',
+  plusSquare: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>',
+  plusSquareSm: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>',
+  dots: '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="2.2"/><circle cx="12" cy="12" r="2.2"/><circle cx="19" cy="12" r="2.2"/></svg>',
+  compass: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>',
+  arrowRight: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>'
+};
+
+function readIosA2hsState() {
+  try {
+    const raw = safeStorage.get(IOS_A2HS_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveIosA2hsDismissed(browser) {
+  try {
+    const prev = readIosA2hsState() || {};
+    safeStorage.set(
+      IOS_A2HS_STORAGE_KEY,
+      JSON.stringify({
+        dismissedAt: Date.now(),
+        browser: browser || 'safari',
+        dismissCount: Number(prev.dismissCount || 0) + 1
+      })
+    );
+  } catch {}
+}
+
+function shouldAutoShowIosA2hs() {
+  const ctx = getIosInstallContext();
+  if (!ctx.isIos || ctx.standalone) return false;
+  if (ctx.browser === 'unknown_ios') return false;
+  if (iosA2hsShownThisSession) return false;
+
+  // Do not interrupt active modals or update banner
+  const busyIds = ['pwaUpdateBanner', 'authModal', 'confirmActionModal', 'pwaGuideModal'];
+  if (busyIds.some((id) => {
+    const el = document.getElementById(id);
+    return el && !el.classList.contains('hidden');
+  })) {
+    return false;
+  }
+
+  const saved = readIosA2hsState();
+  if (saved && saved.dismissedAt) {
+    // If user dismissed in Zalo/Facebook and then switched to Safari, show the Safari guide!
+    const switchedToSafari = saved.browser !== 'safari' && ctx.browser === 'safari';
+    if (!switchedToSafari && Date.now() - Number(saved.dismissedAt) < IOS_A2HS_COOLDOWN_MS) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function renderIosA2hsSheet(ctx) {
+  const sheet = document.getElementById('iosA2hsSheet');
+  const titleEl = document.getElementById('iosA2hsTitle');
+  const subEl = document.getElementById('iosA2hsSubtitle');
+  const bodyEl = document.getElementById('iosA2hsBody');
+  if (!sheet || !titleEl || !subEl || !bodyEl) return;
+
+  if (ctx.browser === 'safari') {
+    titleEl.textContent = 'Cài LiLa lên màn hình chính';
+    subEl.textContent = 'Trải nghiệm LiLa nhanh chóng như một ứng dụng thực thụ!';
+    bodyEl.innerHTML = `
+      <div class="ios-a2hs-visual" aria-hidden="true">
+        <div class="ios-a2hs-tile">
+          <span class="ios-a2hs-icon-pill is-pulse">${IOS_A2HS_ICONS.share}</span>
+          <span>1. Chia sẻ</span>
+        </div>
+        <span class="ios-a2hs-arrow">${IOS_A2HS_ICONS.arrowRight}</span>
+        <div class="ios-a2hs-tile">
+          <span class="ios-a2hs-icon-pill is-brand">${IOS_A2HS_ICONS.plusSquare}</span>
+          <span>2. Thêm vào MH chính</span>
+        </div>
+      </div>
+      <div class="ios-a2hs-steps">
+        <div class="ios-a2hs-step">
+          <span class="ios-a2hs-step-num">1</span>
+          <div>Nhấn nút <span class="ios-a2hs-inline-chip">${IOS_A2HS_ICONS.shareSm} Chia sẻ</span> trên thanh công cụ Safari.</div>
+        </div>
+        <div class="ios-a2hs-step">
+          <span class="ios-a2hs-step-num">2</span>
+          <div>Cuộn xuống chọn <span class="ios-a2hs-inline-chip">${IOS_A2HS_ICONS.plusSquareSm} Thêm vào MH chính</span>, sau đó nhấn <strong>Thêm</strong>.</div>
+        </div>
+      </div>
+      <div class="ios-a2hs-note">Vị trí nút Chia sẻ có thể nằm ở thanh dưới hoặc trên cùng tùy cài đặt Safari của bạn.</div>
+      <div class="ios-a2hs-footer">
+        <button type="button" class="btn btn-primary" id="iosA2hsAckBtn">Đã hiểu</button>
+      </div>
+    `;
+  } else if (ctx.browser === 'zalo' || ctx.browser === 'facebook') {
+    const appName = ctx.browser === 'zalo' ? 'Zalo' : 'Facebook';
+    titleEl.textContent = 'Mở LiLa bằng Safari để cài đặt';
+    subEl.textContent = `Trình duyệt trong ${appName} chưa hỗ trợ thêm trực tiếp ra màn hình chính.`;
+    bodyEl.innerHTML = `
+      <div class="ios-a2hs-visual is-inapp" aria-hidden="true">
+        <div class="ios-a2hs-tile">
+          <span class="ios-a2hs-icon-pill is-dark is-pulse">${IOS_A2HS_ICONS.dots}</span>
+          <span>1. Menu góc</span>
+        </div>
+        <span class="ios-a2hs-arrow">${IOS_A2HS_ICONS.arrowRight}</span>
+        <div class="ios-a2hs-tile">
+          <span class="ios-a2hs-icon-pill">${IOS_A2HS_ICONS.compass}</span>
+          <span>2. Mở bằng Safari</span>
+        </div>
+      </div>
+      <div class="ios-a2hs-steps">
+        <div class="ios-a2hs-step">
+          <span class="ios-a2hs-step-num">1</span>
+          <div>Nhấn nút menu <strong>•••</strong> ở góc trình duyệt ${appName}.</div>
+        </div>
+        <div class="ios-a2hs-step">
+          <span class="ios-a2hs-step-num">2</span>
+          <div>Chọn <strong>Mở bằng Safari</strong> (hoặc Mở bằng trình duyệt ngoài).</div>
+        </div>
+        <div class="ios-a2hs-step">
+          <span class="ios-a2hs-step-num">3</span>
+          <div>Sau khi mở bằng Safari, nhấn <strong>Chia sẻ</strong> → <strong>Thêm vào MH chính</strong>.</div>
+        </div>
+      </div>
+      <div class="ios-a2hs-footer">
+        <button type="button" class="btn btn-outline" id="iosA2hsCopyUrlBtn">Sao chép link</button>
+        <button type="button" class="btn btn-primary" id="iosA2hsAckBtn">Đã hiểu</button>
+      </div>
+    `;
+  } else {
+    titleEl.textContent = 'Mở LiLa bằng Safari để cài đặt';
+    subEl.textContent = 'Dùng trình duyệt Safari mặc định trên iPhone/iPad để ghim LiLa ra màn hình chính.';
+    bodyEl.innerHTML = `
+      <div class="ios-a2hs-visual is-inapp" aria-hidden="true">
+        <div class="ios-a2hs-tile">
+          <span class="ios-a2hs-icon-pill is-pulse">${IOS_A2HS_ICONS.compass}</span>
+          <span>1. Mở Safari</span>
+        </div>
+        <span class="ios-a2hs-arrow">${IOS_A2HS_ICONS.arrowRight}</span>
+        <div class="ios-a2hs-tile">
+          <span class="ios-a2hs-icon-pill is-brand">${IOS_A2HS_ICONS.plusSquare}</span>
+          <span>2. Thêm vào MH chính</span>
+        </div>
+      </div>
+      <div class="ios-a2hs-steps">
+        <div class="ios-a2hs-step">
+          <span class="ios-a2hs-step-num">1</span>
+          <div>Mở trang LiLa bằng trình duyệt <strong>Safari</strong> trên thiết bị của bạn.</div>
+        </div>
+        <div class="ios-a2hs-step">
+          <span class="ios-a2hs-step-num">2</span>
+          <div>Nhấn nút <strong>Chia sẻ</strong> trên Safari và chọn <strong>Thêm vào MH chính</strong>.</div>
+        </div>
+      </div>
+      <div class="ios-a2hs-footer">
+        <button type="button" class="btn btn-outline" id="iosA2hsCopyUrlBtn">Sao chép link</button>
+        <button type="button" class="btn btn-primary" id="iosA2hsAckBtn">Đã hiểu</button>
+      </div>
+    `;
+  }
+}
+
+function showIosA2hsSheet({ manual = false } = {}) {
+  const ctx = getIosInstallContext();
+  if (ctx.standalone) {
+    if (manual) showToast('LiLa đã được cài đặt trên màn hình chính của bạn!');
+    return;
+  }
+  if (!ctx.isIos) return;
+  if (!manual && !shouldAutoShowIosA2hs()) return;
+
+  const sheet = document.getElementById('iosA2hsSheet');
+  if (!sheet) return;
+  renderIosA2hsSheet(ctx);
+  sheet.classList.remove('hidden');
+  iosA2hsShownThisSession = true;
+}
+
+function hideIosA2hsSheet(rememberDismiss = false) {
+  const sheet = document.getElementById('iosA2hsSheet');
+  if (!sheet) return;
+  sheet.classList.add('hidden');
+  if (rememberDismiss) {
+    const ctx = getIosInstallContext();
+    saveIosA2hsDismissed(ctx.browser);
+  }
+}
+
+function handleManualInstallGuideTrigger() {
+  const ctx = getIosInstallContext();
+  if (ctx.standalone) {
+    showToast('LiLa đã được cài đặt trên màn hình chính của bạn!');
+    return;
+  }
+  if (ctx.isIos) {
+    showIosA2hsSheet({ manual: true });
+    return;
+  }
+  if (deferredInstallPrompt) {
+    deferredInstallPrompt.prompt();
+    deferredInstallPrompt.userChoice
+      .then((choice) => {
+        if (choice && choice.outcome === 'accepted') {
+          hidePwaBanner();
+          showToast('Đang cài đặt LiLa ra màn hình chính...');
+        }
+      })
+      .catch(() => openPwaGuideModal('android'))
+      .finally(() => {
+        deferredInstallPrompt = null;
+      });
+    return;
+  }
+  openPwaGuideModal('android');
 }
 
 function showPwaBanner() {
   if (isPwaStandalone()) return;
+  // iOS uses the dedicated compact iOS Bottom Sheet instead of the Android banner
+  if (isIosDevice()) {
+    showIosA2hsSheet({ manual: false });
+    return;
+  }
   const dismissedTime = safeStorage.get('hts_pwa_dismissed');
   if (dismissedTime && Date.now() - Number(dismissedTime) < 2 * 86400 * 1000) {
     return;
   }
   if (!pwaInstallBanner) return;
 
-  if (isIosDevice()) {
-    if (pwaBannerDesc) {
-      pwaBannerDesc.textContent =
-        'Thêm LiLa ra màn hình chính iPhone để mở nhanh như App.';
-    }
-  } else {
-    if (pwaBannerDesc) {
-      pwaBannerDesc.textContent = 'Thêm LiLa ra màn hình chính để truy cập nhanh.';
-    }
+  if (pwaBannerDesc) {
+    pwaBannerDesc.textContent = 'Thêm LiLa ra màn hình chính để truy cập nhanh.';
   }
 
   pwaInstallBanner.classList.remove('hidden');
@@ -4745,13 +4998,50 @@ if (pwaDismissBtn) {
 
 on('closePwaGuideBtn', 'click', closePwaGuideModal);
 on('ackPwaGuideBtn', 'click', closePwaGuideModal);
+on('iosA2hsCloseBtn', 'click', () => hideIosA2hsSheet(true));
 
-// Auto-trigger banner after initial page load only on iOS or when prompt is available
+document.addEventListener('click', (e) => {
+  if (e.target.closest('#iosA2hsAckBtn')) {
+    hideIosA2hsSheet(true);
+    return;
+  }
+  if (e.target.closest('#iosA2hsCopyUrlBtn')) {
+    copyText(window.location.origin + '/', 'Đã sao chép link LiLa! Hãy mở Safari và dán vào thanh địa chỉ.');
+    return;
+  }
+  if (e.target.closest('[data-open-install-guide]')) {
+    handleManualInstallGuideTrigger();
+  }
+});
+
+// Swipe-down-to-close on iOS A2HS sheet
+(function bindIosA2hsSwipeClose() {
+  const sheet = document.getElementById('iosA2hsSheet');
+  const card = sheet?.querySelector('.ios-a2hs-card');
+  if (!sheet || !card) return;
+  let startY = 0;
+  let dragging = false;
+  card.addEventListener('touchstart', (e) => {
+    if (card.scrollTop > 0 || sheet.classList.contains('hidden')) return;
+    startY = e.touches[0].clientY;
+    dragging = true;
+  }, { passive: true });
+  card.addEventListener('touchend', (e) => {
+    if (!dragging) return;
+    dragging = false;
+    const dy = (e.changedTouches?.[0]?.clientY || startY) - startY;
+    if (dy > 60) hideIosA2hsSheet(true);
+  }, { passive: true });
+})();
+
+// Auto-trigger banner after initial page load only on iOS or when Android install prompt is available
 setTimeout(() => {
-  if (isIosDevice() || deferredInstallPrompt) {
+  if (isIosDevice()) {
+    showIosA2hsSheet({ manual: false });
+  } else if (deferredInstallPrompt) {
     showPwaBanner();
   }
-}, 1500);
+}, 2200);
 
 // ================= BOOTSTRAP INITIALIZATION =================
 const PASSWORD_EYE_SVG = '<svg class="svg-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>';
