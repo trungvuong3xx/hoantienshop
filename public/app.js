@@ -4239,11 +4239,14 @@ if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     let pendingWorker = null;
     let reloadingForUpdate = false;
+    let updateDismissed = false;
 
     const showUpdateBanner = (worker) => {
       pendingWorker = worker || pendingWorker;
+      if (updateDismissed) return;
       const banner = document.getElementById('pwaUpdateBanner');
       const reloadBtn = document.getElementById('pwaReloadUpdateBtn');
+      const dismissBtn = document.getElementById('pwaDismissUpdateBtn');
       if (!banner) return;
       banner.classList.remove('hidden');
       if (reloadBtn && !reloadBtn.dataset.bound) {
@@ -4258,6 +4261,22 @@ if ('serviceWorker' in navigator) {
               window.location.reload();
             }
           }, 700);
+        });
+      }
+      if (dismissBtn && !dismissBtn.dataset.bound) {
+        dismissBtn.dataset.bound = '1';
+        dismissBtn.addEventListener('click', () => {
+          updateDismissed = true;
+          banner.classList.add('hidden');
+        });
+      }
+      if (!banner.dataset.backdropBound) {
+        banner.dataset.backdropBound = '1';
+        banner.addEventListener('click', (e) => {
+          if (e.target === banner) {
+            updateDismissed = true;
+            banner.classList.add('hidden');
+          }
         });
       }
     };
