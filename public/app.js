@@ -2610,6 +2610,34 @@ on('toggleRefFriendsBtn', 'click', () => {
   panel.classList.toggle('hidden');
 });
 
+function setReferralSheetOpen(isOpen) {
+  const overlay = document.getElementById('referralSheetOverlay');
+  const trigger = document.getElementById('openReferralSheetBtn');
+  if (!overlay) return;
+  overlay.classList.toggle('is-open', Boolean(isOpen));
+  overlay.setAttribute('aria-modal', isOpen ? 'true' : 'false');
+  if (trigger) {
+    trigger.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+  }
+  document.body.style.overflow = isOpen ? 'hidden' : '';
+}
+
+on('openReferralSheetBtn', 'click', () => setReferralSheetOpen(true));
+on('closeReferralSheetBtn', 'click', () => setReferralSheetOpen(false));
+on('referralSheetOverlay', 'click', (e) => {
+  if (e.target && e.target.id === 'referralSheetOverlay') {
+    setReferralSheetOpen(false);
+  }
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    const overlay = document.getElementById('referralSheetOverlay');
+    if (overlay && overlay.classList.contains('is-open')) {
+      setReferralSheetOpen(false);
+    }
+  }
+});
+
 on('refreshWalletBtn', 'click', () => { userLedgerPage = 1; loadUserDashboard(); });
 on('userLedgerPrevBtn', 'click', () => { userLedgerPage = Math.max(1, userLedgerPage - 1); loadUserDashboard(); });
 on('userLedgerNextBtn', 'click', () => { userLedgerPage++; loadUserDashboard(); });

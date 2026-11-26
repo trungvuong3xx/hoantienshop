@@ -759,8 +759,27 @@
           </div>
         </div>
 
-        <!-- Referral Program Card -->
+        <!-- Mobile Mini-Banner Trigger for Referral Bottom Sheet (PA3) -->
+        <button type="button" class="ref-mobile-banner" id="openReferralSheetBtn" aria-controls="referralSheetOverlay" aria-expanded="false">
+          <span class="ref-mobile-banner-icon" aria-hidden="true">
+            <svg class="svg-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg>
+          </span>
+          <span class="ref-mobile-banner-text">
+            <strong>Mời bạn bè — Nhận <span data-config="referralBountyAmount">10.000đ</span>/lượt</strong>
+            <small>Chạm để lấy link, mã QR &amp; xem thống kê</small>
+          </span>
+          <span class="ref-mobile-banner-cta">Mở ›</span>
+        </button>
+
+        <!-- Referral Program Card (Inline on Desktop, Bottom Sheet on Mobile) -->
+        <div id="referralSheetOverlay" class="ref-sheet-overlay" role="dialog" aria-modal="false" aria-label="Thưởng giới thiệu bạn bè">
         <div class="panel referral-card">
+          <div class="ref-sheet-topbar">
+            <span class="ref-sheet-handle" aria-hidden="true"></span>
+            <button type="button" class="ref-sheet-close" id="closeReferralSheetBtn" aria-label="Đóng">
+              <svg class="svg-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
           <div class="ref-header-row">
             <div>
               <div class="ref-kicker-badge">
@@ -851,6 +870,7 @@
               </table>
             </div>
           </div>
+        </div>
         </div>
 
         <!-- App Utility & Support Menu -->
