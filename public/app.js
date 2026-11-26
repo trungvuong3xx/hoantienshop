@@ -5127,7 +5127,7 @@ async function initBoot() {
 
   // Show the requested screen immediately; refresh authoritative data in parallel.
   const initialHash = window.location.hash.replace('#', '');
-  if (['home', 'wallet', 'admin', 'guide', 'faq', 'terms'].includes(initialHash) || ['orders', 'account'].includes(initialHash)) {
+  if (['home', 'wallet', 'admin', 'guide', 'faq', 'terms', 'leaderboard'].includes(initialHash) || ['orders', 'account'].includes(initialHash)) {
     switchView(initialHash, false, { skipReload: true });
   }
   const userReady = authToken

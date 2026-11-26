@@ -37,6 +37,7 @@ const {
   pruneExpiredAuthRecords,
   sanitizeUser,
   getDatabaseStatus,
+  getCurrentDbVersion,
   getPgPool,
   appendClickRecords,
   findClickById,
@@ -961,7 +962,7 @@ function registerCashbackRoutes(app) {
       const activeDb = ensureDbLoaded();
       migrateZaloSettings(activeDb);
       next();
-      }, { incrementalOnly: Boolean(getPgPool()) && (req.path.startsWith('/go/') || ['/api/convert', '/api/preview', '/api/settings', '/api/public-config', '/api/notifications', '/api/leaderboard'].includes(req.path) || !req.path.startsWith('/api/')) });
+      }, { incrementalOnly: Boolean(getPgPool()) && (req.path.startsWith('/go/') || ['/api/convert', '/api/preview', '/api/settings', '/api/public-config', '/api/notifications'].includes(req.path) || !req.path.startsWith('/api/')) });
     } catch (err) {
       logger.error('initMiddleware', 'Postgres startup error', { error: err.message });
       if (process.env.DATABASE_URL || process.env.POSTGRES_URL) {
@@ -1520,7 +1521,7 @@ function registerCashbackRoutes(app) {
 
   // 4.06. Public Leaderboard (Top Approved Spend & Top Approved Cashback, 5-min cache, PII masked)
   const LEADERBOARD_CACHE_TTL_MS = 5 * 60 * 1000;
-  let leaderboardCache = { expiresAt: 0, rankedSpend: [], rankedCashback: [] };
+  let leaderboardCache = { version: -1, expiresAt: 0, rankedSpend: [], rankedCashback: [] };
 
   function maskLeaderboardDisplay(user) {
     const rawName = String(user?.name || '').trim();
@@ -1593,10 +1594,12 @@ function registerCashbackRoutes(app) {
   app.get('/api/leaderboard', leaderboardLimiter, (req, res) => {
     const db = ensureDbLoaded();
     const now = Date.now();
-    const forceFresh = process.env.NODE_ENV === 'test';
+    const currentVer = getCurrentDbVersion();
+    const forceFresh = process.env.NODE_ENV === 'test' || leaderboardCache.version !== currentVer;
     if (forceFresh || now > leaderboardCache.expiresAt) {
       const computed = computeLeaderboardData(db);
       leaderboardCache = {
+        version: currentVer,
         expiresAt: now + LEADERBOARD_CACHE_TTL_MS,
         rankedSpend: computed.rankedSpend,
         rankedCashback: computed.rankedCashback
