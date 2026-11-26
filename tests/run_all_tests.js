@@ -46,7 +46,8 @@ const TEST_SUITES = [
   'test_security_audit_remediation.js',
   'test_persistent_auth.js',
   'test_mobile_keyboard_popups.js',
-  'test_forgot_password.js'
+  'test_forgot_password.js',
+  'test_shiba_companion.js'
 ];
 
 async function runAllTests() {

@@ -453,8 +453,16 @@ function syncUserActivityNotifications(data) {
     safeStorage.set(ordKey, JSON.stringify({ ordTotal, ordApproved }));
     ordDot?.classList.add('hidden');
   } else {
-    const hasNewOrders = ordTotal > Number(seenOrders.ordTotal || 0) || ordApproved > Number(seenOrders.ordApproved || 0);
+    const hasNewApproved = ordApproved > Number(seenOrders.ordApproved || 0);
+    const hasNewOrders = ordTotal > Number(seenOrders.ordTotal || 0) || hasNewApproved;
     ordDot?.classList.toggle('hidden', !hasNewOrders);
+    if (hasNewOrders && typeof window !== 'undefined' && typeof CustomEvent === 'function') {
+      const shibaNotifySig = `${uid}:${ordTotal}:${ordApproved}`;
+      if (window.__lilaLastShibaOrderSig !== shibaNotifySig) {
+        window.__lilaLastShibaOrderSig = shibaNotifySig;
+        window.dispatchEvent(new CustomEvent(hasNewApproved ? 'lila:cashback-confirmed' : 'lila:order-update'));
+      }
+    }
   }
 
   const walDot = document.getElementById('mobileWalletNotifyDot');
@@ -1770,6 +1778,9 @@ async function handleGetCashbackLink(rawOptions) {
         renderAuthRefreshRetryNote();
       }
       showToast(firstErr || 'Không tìm thấy link sản phẩm Shopee hoặc TikTok Shop hợp lệ.');
+      if (!isRefreshAfterAuth && typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('lila:convert-error'));
+      }
       return;
     }
 
@@ -1935,10 +1946,15 @@ async function handleGetCashbackLink(rawOptions) {
 
     if (isRefreshAfterAuth) {
       showToast('Đã tự động gắn tài khoản hoàn tiền vào liên kết mua sắm!');
+    } else if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('lila:convert-success', { detail: { count: items.length } }));
     }
   } catch (err) {
     if (isRefreshAfterAuth) {
       renderAuthRefreshRetryNote();
+    }
+    if (!isRefreshAfterAuth && typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('lila:convert-error'));
     }
     showToast(err.message);
   } finally {
@@ -5250,6 +5266,71 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
       loadUserDashboard();
     }
   });
+}
+
+function syncShibaToggleButton() {
+  const btn = document.getElementById('toggleShibaCompanionBtn');
+  const label = document.getElementById('toggleShibaCompanionLabel');
+  if (!btn || !label) return;
+  const mode = window.LilaShiba?.getMode?.() || 'active';
+  const isHidden = mode === 'hidden';
+  btn.setAttribute('aria-pressed', isHidden ? 'false' : 'true');
+  label.textContent = isHidden
+    ? 'Bé Shiba: Đang ẩn'
+    : mode === 'sleep'
+      ? 'Bé Shiba: Đang ngủ'
+      : 'Bé Shiba: Đang bật';
+}
+
+on('toggleShibaCompanionBtn', 'click', () => {
+  if (!window.LilaShiba) return;
+  const mode = window.LilaShiba.getMode();
+  if (mode === 'hidden') {
+    window.LilaShiba.show();
+    showToast('Đã gọi bé Shiba LiLa quay lại!');
+  } else {
+    window.LilaShiba.hide();
+    showToast('Đã ẩn bé Shiba. Bạn có thể gọi lại bất cứ lúc nào tại mục Tôi.');
+  }
+  syncShibaToggleButton();
+});
+
+let shibaAssetsLoaded = false;
+function loadShibaCompanionAssets() {
+  if (shibaAssetsLoaded) return;
+  if (typeof window === 'undefined' || typeof document === 'undefined' || !document.head || typeof document.createElement !== 'function') {
+    return;
+  }
+  shibaAssetsLoaded = true;
+  if (!document.querySelector('link[href="/shibaCompanion.css?v=5"]')) {
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = '/shibaCompanion.css?v=5';
+    document.head.appendChild(link);
+  }
+  if (!document.querySelector('script[src="/shibaCompanion.js?v=5"]')) {
+    const script = document.createElement('script');
+    script.src = '/shibaCompanion.js?v=5';
+    script.defer = true;
+    script.onload = () => syncShibaToggleButton();
+    document.head.appendChild(script);
+  }
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('lila:shiba-mode-changed', syncShibaToggleButton);
+  const scheduleShibaBoot = () => {
+    if (typeof window.requestIdleCallback === 'function') {
+      window.requestIdleCallback(loadShibaCompanionAssets, { timeout: 600 });
+    } else {
+      setTimeout(loadShibaCompanionAssets, 250);
+    }
+  };
+  if (typeof document !== 'undefined' && document.readyState === 'loading') {
+    window.addEventListener('DOMContentLoaded', scheduleShibaBoot, { once: true });
+  } else {
+    scheduleShibaBoot();
+  }
 }
 
 on('logoutAllDevicesBtn', 'click', async () => {

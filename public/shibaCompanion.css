@@ -1,0 +1,479 @@
+/* LiLa Shiba Companion (Mẫu B: Shiba Mochi) — Lightweight GPU-only animations */
+.shiba-companion-layer {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 12px;
+  height: 112px;
+  pointer-events: none;
+  z-index: 75;
+  overflow-x: clip;
+  overflow-y: visible;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+.shiba-companion-layer.is-hidden-by-user,
+.shiba-companion-layer.is-auto-hidden {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(18px);
+}
+
+/* Auto-hide when modals, sheets, dialogs, virtual keyboard, or Admin view are active */
+html.kb-open .shiba-companion-layer,
+body:has(#view-admin.active) .shiba-companion-layer,
+body:has(.modal-backdrop:not(.hidden)) .shiba-companion-layer,
+body:has(dialog.app-choice-dialog[open]) .shiba-companion-layer,
+body:has(.notif-dropdown:not(.hidden)) .shiba-companion-layer,
+body:has(.order-detail-overlay.is-open) .shiba-companion-layer,
+body:has(.referral-sheet-overlay.is-open) .shiba-companion-layer,
+body:has(.withdraw-sheet-overlay.is-open) .shiba-companion-layer,
+body:has(#pwaInstallBanner:not(.hidden)) .shiba-companion-layer {
+  opacity: 0 !important;
+  pointer-events: none !important;
+  transform: translateY(20px) !important;
+}
+
+.shiba-actor {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 66px;
+  height: 66px;
+  pointer-events: auto;
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  will-change: transform;
+  transform: translate3d(18px, 0, 0);
+  transition: transform 2.8s linear;
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
+
+.shiba-actor:focus-visible {
+  outline: 2px solid #ee4d2d;
+  outline-offset: 4px;
+  border-radius: 50%;
+}
+
+.shiba-sprite-flip {
+  width: 100%;
+  height: 100%;
+  transform-origin: bottom center;
+  transition: transform 0.2s ease;
+}
+
+.shiba-actor.facing-left .shiba-sprite-flip {
+  transform: scaleX(-1);
+}
+
+.shiba-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  overflow: visible;
+  transform-origin: bottom center;
+}
+
+/* Eye expressions per state */
+.shiba-eyes-happy,
+.shiba-eyes-sleep,
+.shiba-eyes-surprised,
+.shiba-eyes-sad {
+  display: none;
+}
+
+.shiba-actor[data-state="happy"] .shiba-eyes-normal,
+.shiba-actor[data-state="sleep"] .shiba-eyes-normal,
+.shiba-actor[data-state="surprised"] .shiba-eyes-normal,
+.shiba-actor[data-state="sad"] .shiba-eyes-normal {
+  display: none;
+}
+
+.shiba-actor[data-state="happy"] .shiba-eyes-happy { display: block; }
+.shiba-actor[data-state="sleep"] .shiba-eyes-sleep { display: block; }
+.shiba-actor[data-state="surprised"] .shiba-eyes-surprised { display: block; }
+.shiba-actor[data-state="sad"] .shiba-eyes-sad { display: block; }
+
+/* Blinking in idle, sit & curious */
+.shiba-actor[data-state="idle"] .shiba-eyes-normal,
+.shiba-actor[data-state="sit"] .shiba-eyes-normal,
+.shiba-actor[data-state="curious"] .shiba-eyes-normal {
+  transform-origin: 57px 51px;
+  animation: shibaBlink 4.4s ease-in-out infinite;
+}
+
+/* Ears, belly, tail & paws */
+.shiba-ear-l {
+  transform-origin: 40px 34px;
+  transition: transform 0.28s ease;
+}
+.shiba-ear-r {
+  transform-origin: 70px 34px;
+  transition: transform 0.28s ease;
+}
+.shiba-belly {
+  transform-origin: 55px 72px;
+}
+.shiba-tail {
+  transform-origin: 20px 68px;
+  animation: shibaTailWag 0.9s ease-in-out infinite alternate;
+}
+
+.shiba-paw-l,
+.shiba-paw-r {
+  transform-origin: 50% 15%;
+}
+
+/* State animations */
+.shiba-actor[data-state="idle"] .shiba-svg {
+  animation: shibaIdleBreathe 2.4s ease-in-out infinite;
+}
+.shiba-actor[data-state="idle"] .shiba-ear-r {
+  animation: shibaEarTwitch 5.2s ease-in-out infinite;
+}
+
+.shiba-actor[data-state="walk"] .shiba-svg {
+  animation: shibaWalkBounce 0.36s ease-in-out infinite;
+}
+.shiba-actor[data-state="walk"] .shiba-paw-l {
+  animation: shibaPawA 0.36s ease-in-out infinite;
+}
+.shiba-actor[data-state="walk"] .shiba-paw-r {
+  animation: shibaPawB 0.36s ease-in-out infinite;
+}
+.shiba-actor[data-state="walk"] .shiba-tail {
+  animation-duration: 0.42s;
+}
+
+/* Smooth deceleration brake settle when stopping from walk */
+.shiba-actor.is-braking .shiba-svg {
+  animation: shibaBrakeSettle 0.28s cubic-bezier(0.22, 1, 0.36, 1) 1 !important;
+}
+
+.shiba-actor[data-state="sit"] .shiba-svg {
+  animation: shibaSitSquish 2.6s ease-in-out infinite;
+}
+.shiba-actor[data-state="sit"] .shiba-tail {
+  animation-duration: 0.72s;
+}
+
+.shiba-actor[data-state="sleep"] .shiba-svg {
+  animation: shibaSleepBreath 2.8s ease-in-out infinite;
+}
+.shiba-actor[data-state="sleep"] .shiba-belly {
+  animation: shibaBellyBreath 2.8s ease-in-out infinite;
+}
+.shiba-actor[data-state="sleep"] .shiba-ear-l {
+  transform: rotate(-10deg);
+}
+.shiba-actor[data-state="sleep"] .shiba-ear-r {
+  transform: rotate(10deg);
+}
+.shiba-actor[data-state="sleep"] .shiba-tail {
+  animation-duration: 2.6s;
+}
+
+.shiba-actor[data-state="happy"] .shiba-svg {
+  animation: shibaHappySpinHop 0.72s cubic-bezier(0.22, 1, 0.36, 1) 2;
+}
+.shiba-actor[data-state="happy"] .shiba-ear-l {
+  transform: rotate(8deg) translateY(-1px);
+}
+.shiba-actor[data-state="happy"] .shiba-ear-r {
+  transform: rotate(-8deg) translateY(-1px);
+}
+.shiba-actor[data-state="happy"] .shiba-tail {
+  animation-duration: 0.2s;
+}
+
+.shiba-actor[data-state="curious"] .shiba-svg {
+  animation: shibaCuriousObserve 2.2s ease-in-out infinite;
+}
+.shiba-actor[data-state="curious"] .shiba-ear-r {
+  transform: rotate(-10deg) translateY(-1.5px);
+}
+.shiba-actor[data-state="curious"] .shiba-tail {
+  animation-duration: 0.45s;
+}
+
+.shiba-actor[data-state="surprised"] .shiba-svg {
+  animation: shibaTilt 0.52s ease-in-out;
+}
+.shiba-actor[data-state="sad"] .shiba-svg {
+  animation: shibaSadDroop 1.8s ease-in-out infinite;
+}
+.shiba-actor[data-state="sad"] .shiba-ear-l {
+  transform: rotate(-20deg) translateY(3px);
+}
+.shiba-actor[data-state="sad"] .shiba-ear-r {
+  transform: rotate(20deg) translateY(3px);
+}
+.shiba-actor[data-state="sad"] .shiba-tail {
+  animation-duration: 2.2s;
+}
+
+/* Peek from side edge: lean sideways & look curiously */
+.shiba-actor[data-state="peek"] .shiba-svg {
+  transform-origin: 18% 82%;
+  animation: shibaPeekSide 2.6s ease-in-out infinite;
+}
+.shiba-actor[data-state="peek"] .shiba-eyes-normal {
+  transform-origin: 57px 51px;
+  animation: shibaPeekEyes 2.6s ease-in-out infinite;
+}
+.shiba-actor[data-state="peek"] .shiba-tail {
+  animation-duration: 0.55s;
+}
+
+/* Sleep Zzz */
+.shiba-zzz {
+  position: absolute;
+  top: -6px;
+  right: 0;
+  font-size: 11px;
+  font-weight: 800;
+  color: #64748b;
+  opacity: 0;
+  pointer-events: none;
+}
+.shiba-actor[data-state="sleep"] .shiba-zzz {
+  opacity: 1;
+  animation: shibaZzz 1.8s ease-in-out infinite;
+}
+
+/* Speech bubble */
+.shiba-bubble {
+  position: fixed;
+  bottom: 84px;
+  left: 16px;
+  max-width: min(268px, calc(100vw - 24px));
+  background: rgba(15, 23, 42, 0.94);
+  color: #ffffff;
+  font-family: 'Be Vietnam Pro', system-ui, sans-serif;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.45;
+  padding: 9px 12px;
+  border-radius: 14px;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.26);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  opacity: 0;
+  transform: translateY(6px) scale(0.95);
+  pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  z-index: 76;
+}
+
+.shiba-bubble.is-visible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
+
+.shiba-bubble-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.shiba-mini-btn {
+  border: 0;
+  background: rgba(255, 255, 255, 0.12);
+  color: #e2e8f0;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.shiba-mini-btn:hover {
+  background: rgba(255, 255, 255, 0.22);
+  color: #ffffff;
+}
+
+/* Floating coin / heart particles */
+.shiba-particle {
+  position: fixed;
+  font-size: 17px;
+  pointer-events: none;
+  z-index: 77;
+  will-change: transform, opacity;
+  animation: shibaFloatUp 1.15s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+/* Subtle pawprint & stop-dust micro-effects */
+.shiba-pawprint {
+  position: fixed;
+  font-size: 10px;
+  pointer-events: none;
+  z-index: 74;
+  opacity: 0.55;
+  will-change: transform, opacity;
+  animation: shibaPawFade 0.85s ease-out forwards;
+}
+
+.shiba-dust {
+  position: fixed;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(148, 163, 184, 0.45);
+  pointer-events: none;
+  z-index: 74;
+  will-change: transform, opacity;
+  animation: shibaDustPuff 0.52s ease-out forwards;
+}
+
+/* Mobile placement: directly above the mobile bottom navigation bar */
+@media (max-width: 640px) {
+  .shiba-companion-layer {
+    bottom: calc(66px + env(safe-area-inset-bottom, 0px));
+    height: 76px;
+  }
+  .shiba-actor {
+    width: 56px;
+    height: 56px;
+  }
+  .shiba-bubble {
+    bottom: calc(128px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/* Respect reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  .shiba-actor {
+    transition: none !important;
+  }
+  .shiba-svg,
+  .shiba-tail,
+  .shiba-ear-l,
+  .shiba-ear-r,
+  .shiba-belly,
+  .shiba-paw-l,
+  .shiba-paw-r,
+  .shiba-eyes-normal,
+  .shiba-zzz,
+  .shiba-particle,
+  .shiba-pawprint,
+  .shiba-dust {
+    animation: none !important;
+  }
+}
+
+/* Pause animations cleanly when tab is hidden */
+.shiba-companion-layer.is-paused * {
+  animation-play-state: paused !important;
+}
+
+@keyframes shibaIdleBreathe {
+  0%, 100% { transform: scaleY(1); }
+  50% { transform: scaleX(1.03) scaleY(0.96); }
+}
+@keyframes shibaEarTwitch {
+  0%, 84%, 100% { transform: rotate(0deg); }
+  89% { transform: rotate(-11deg); }
+  94% { transform: rotate(4deg); }
+}
+@keyframes shibaWalkBounce {
+  0%, 100% { transform: translateY(0) rotate(-2.5deg); }
+  50% { transform: translateY(-6px) rotate(2.5deg); }
+}
+@keyframes shibaBrakeSettle {
+  0% { transform: translateX(3px) scaleX(1.08) scaleY(0.9); }
+  55% { transform: translateX(-1px) scaleX(0.97) scaleY(1.04); }
+  100% { transform: translateX(0) scale(1); }
+}
+@keyframes shibaSitSquish {
+  0%, 100% { transform: translateY(3px) scaleX(1.05) scaleY(0.92) rotate(0deg); }
+  45% { transform: translateY(4px) scaleX(1.07) scaleY(0.9) rotate(-3.5deg); }
+  75% { transform: translateY(3.5px) scaleX(1.06) scaleY(0.91) rotate(2deg); }
+}
+@keyframes shibaSleepBreath {
+  0%, 100% { transform: translateY(6px) scaleX(1.1) scaleY(0.84); }
+  50% { transform: translateY(7px) scaleX(1.13) scaleY(0.8); }
+}
+@keyframes shibaBellyBreath {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05, 1.07); }
+}
+@keyframes shibaHappySpinHop {
+  0%, 100% { transform: translateY(0) scale(1) rotate(0deg); }
+  30% { transform: translateY(-21px) scale(0.95, 1.08) rotate(-8deg); }
+  55% { transform: translateY(-16px) scale(1.02, 1.02) rotate(9deg); }
+  80% { transform: translateY(2px) scale(1.07, 0.92) rotate(0deg); }
+}
+@keyframes shibaCuriousObserve {
+  0%, 100% { transform: rotate(0deg) translateY(0); }
+  30%, 55% { transform: rotate(-9deg) translateY(-2px); }
+  75%, 88% { transform: rotate(6deg) translateY(-1px); }
+}
+@keyframes shibaSadDroop {
+  0%, 100% { transform: translateY(3px) scaleX(1.03) scaleY(0.95) rotate(-2deg); }
+  50% { transform: translateY(5px) scaleX(1.05) scaleY(0.93) rotate(-4deg); }
+}
+@keyframes shibaPawFade {
+  0% { opacity: 0.55; transform: scale(0.85) translateY(0); }
+  100% { opacity: 0; transform: scale(1.05) translateY(-4px); }
+}
+@keyframes shibaDustPuff {
+  0% { opacity: 0.65; transform: translate3d(0, 0, 0) scale(0.6); }
+  100% { opacity: 0; transform: translate3d(var(--dx, -10px), -12px, 0) scale(1.6); }
+}
+@keyframes shibaTilt {
+  0%, 100% { transform: rotate(0deg); }
+  35% { transform: rotate(-9deg) translateY(-4px); }
+  70% { transform: rotate(6deg); }
+}
+@keyframes shibaPeekSide {
+  0%, 100% { transform: translateX(-2px) rotate(18deg) scale(0.98); }
+  28%, 55% { transform: translateX(10px) rotate(28deg) scale(1.02); }
+  72% { transform: translateX(6px) rotate(21deg) scale(1); }
+}
+@keyframes shibaPeekEyes {
+  0%, 20%, 100% { transform: translateX(0); }
+  35%, 55% { transform: translateX(2.4px) translateY(-0.8px); }
+  70%, 82% { transform: translateX(-1.2px) translateY(0.4px); }
+}
+@keyframes shibaPawA {
+  0%, 100% { transform: rotate(22deg); }
+  50% { transform: rotate(-20deg); }
+}
+@keyframes shibaPawB {
+  0%, 100% { transform: rotate(-20deg); }
+  50% { transform: rotate(22deg); }
+}
+@keyframes shibaTailWag {
+  0% { transform: rotate(-16deg); }
+  100% { transform: rotate(18deg); }
+}
+@keyframes shibaBlink {
+  0%, 92%, 100% { transform: scaleY(1); }
+  96% { transform: scaleY(0.1); }
+}
+@keyframes shibaZzz {
+  0%, 100% { opacity: 0.35; transform: translateY(0); }
+  50% { opacity: 1; transform: translateY(-5px); }
+}
+@keyframes shibaFloatUp {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 4px, 0) scale(0.55) rotate(0deg);
+  }
+  18% {
+    opacity: 1;
+    transform: translate3d(calc(var(--dx, 0px) * 0.35), -14px, 0) scale(1.12) rotate(calc(var(--rot, 0deg) * 0.4));
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(var(--dx, 0px), var(--dy, -64px), 0) scale(1.05) rotate(var(--rot, 0deg));
+  }
+}
