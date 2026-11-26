@@ -64,9 +64,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link id="webFont" media="print" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/styles.css?v=2.9.3" />
+  <link rel="stylesheet" href="/styles.css?v=2.9.5" />
   <link rel="stylesheet" href="/selectPopup.css?v=3" />
-  <script src="/app.js?v=2.9.3" defer></script>
+  <script src="/app.js?v=2.9.5" defer></script>
   <script src="/selectPopup.js?v=3" defer></script>
 </head>
 <body>
@@ -340,13 +340,25 @@
       <div id="ordersAuthenticatedContent" class="hidden">
         <div class="wallet-header-banner orders-banner">
           <div>
-            <h2>Đơn Hàng &amp; Đối Soát</h2>
-            <p class="panel-sub">Đơn hàng thường đồng bộ sau 12h–24h kể từ lúc đặt mua thành công.</p>
+            <h2>Đơn hàng của tôi</h2>
+            <p class="panel-sub">Đơn hàng đặt qua LiLa tự động đồng bộ sau 12h–24h.</p>
           </div>
-          <button type="button" class="btn btn-outline btn-sm btn-icon-svg" id="refreshOrdersBtn">
-            <svg class="svg-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>
+          <button type="button" class="btn btn-outline btn-sm btn-icon-svg orders-refresh-btn" id="refreshOrdersBtn" aria-label="Đồng bộ đơn hàng" title="Đồng bộ đơn hàng">
+            <svg class="svg-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>
             <span>Đồng bộ</span>
           </button>
+        </div>
+
+        <!-- 2-Card Cashback Summary Strip -->
+        <div class="orders-summary-strip" aria-label="Tóm tắt tiền hoàn đơn hàng">
+          <div class="orders-summary-card is-pending">
+            <span class="orders-summary-label">Chờ đối soát</span>
+            <strong class="orders-summary-val" id="userOrdSummaryPending">0đ</strong>
+          </div>
+          <div class="orders-summary-card is-approved">
+            <span class="orders-summary-label">Đã cộng vào ví</span>
+            <strong class="orders-summary-val" id="userOrdSummaryApproved">0đ</strong>
+          </div>
         </div>
 
         <!-- 1-Tap Status Filter Pills -->
@@ -355,7 +367,7 @@
             Tất cả <span class="pill-count" id="ordCountAll">0</span>
           </button>
           <button type="button" class="order-filter-pill" data-order-status="pending" role="tab" aria-selected="false">
-            Đang đối soát <span class="pill-count" id="ordCountPending">0</span>
+            Chờ duyệt <span class="pill-count" id="ordCountPending">0</span>
           </button>
           <button type="button" class="order-filter-pill" data-order-status="approved" role="tab" aria-selected="false">
             Đã duyệt <span class="pill-count" id="ordCountApproved">0</span>
@@ -368,16 +380,20 @@
         <!-- Orders List & Search -->
         <div class="panel orders-list-panel">
           <div class="orders-toolbar">
-            <h3>Danh sách đơn hàng</h3>
             <div class="orders-search-box">
               <div class="orders-search-input-wrap">
                 <input type="search" id="userOrderSearchInput" enterkeyhint="search" placeholder="Tìm mã đơn, tên sản phẩm..." aria-label="Tìm kiếm đơn hàng" />
                 <button type="button" class="orders-search-clear hidden" id="clearOrderSearchBtn" aria-label="Xóa tìm kiếm">×</button>
               </div>
-              <button type="button" class="btn btn-outline btn-sm btn-icon-svg" id="userOrderSearchBtn">
-                <svg class="svg-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <button type="button" class="btn btn-outline btn-sm btn-icon-svg orders-search-btn" id="userOrderSearchBtn" aria-label="Tìm kiếm đơn hàng" title="Tìm kiếm">
+                <svg class="svg-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                 <span>Tìm</span>
               </button>
+            </div>
+            <div class="order-platform-chips" role="group" aria-label="Lọc theo sàn mua sắm">
+              <button type="button" class="order-platform-chip active" data-order-platform="all">Tất cả sàn</button>
+              <button type="button" class="order-platform-chip" data-order-platform="shopee">Shopee</button>
+              <button type="button" class="order-platform-chip" data-order-platform="tiktok">TikTok</button>
             </div>
           </div>
 
@@ -387,7 +403,7 @@
                 <tr>
                   <th>Mã đơn</th>
                   <th>Sản phẩm</th>
-                  <th>Tiền hoàn thực nhận</th>
+                  <th>Tiền hoàn</th>
                   <th>Trạng thái</th>
                 </tr>
               </thead>
@@ -397,6 +413,13 @@
             </table>
           </div>
 
+          <div class="orders-help-row">
+            <button type="button" class="orders-help-link" data-nav="guide">
+              <span>Chưa thấy đơn hàng? Xem hướng dẫn đối soát</span>
+              <svg class="svg-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+          </div>
+
           <div class="pagination-row">
             <span id="userOrdersPageInfo" style="font-size:13px;color:#64748b;">Trang 1 / 1</span>
             <div style="display:flex;gap:6px;">
@@ -404,6 +427,19 @@
               <button type="button" class="btn btn-outline btn-xs btn-icon-svg" id="userOrdersNextBtn"><span>Sau</span><svg class="svg-icon" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg></button>
             </div>
           </div>
+        </div>
+      </div>
+
+      <!-- Order Detail Bottom Sheet (Mobile) / Centered Modal (Desktop) -->
+      <div id="orderDetailSheetOverlay" class="order-detail-overlay" role="dialog" aria-modal="true" aria-label="Chi tiết đơn hàng" aria-hidden="true">
+        <div class="order-detail-sheet" id="orderDetailSheetPanel">
+          <div class="app-sheet-topbar">
+            <span class="app-sheet-handle" aria-hidden="true"></span>
+            <button type="button" class="app-sheet-close" id="closeOrderDetailSheetBtn" aria-label="Đóng chi tiết đơn hàng">
+              <svg class="svg-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+          <div class="order-detail-body" id="orderDetailSheetBody"></div>
         </div>
       </div>
     </section>
@@ -1291,6 +1327,7 @@
                   <th>Mã Đơn</th>
                   <th>Khách</th>
                   <th>Sản phẩm</th>
+                  <th>Giá trị đơn</th>
                   <th>Hoa hồng</th>
                   <th>Hoàn khách</th>
                   <th>Trạng thái</th>

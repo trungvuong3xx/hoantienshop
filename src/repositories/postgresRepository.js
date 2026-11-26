@@ -222,16 +222,21 @@ function queryWithdrawalsPaginated(db, opts = {}) {
  */
 async function countUserOrderStatuses(db, opts = {}) {
   const q = String(opts.q || '').trim().toLowerCase();
+  const platform = String(opts.platform || '').trim().toLowerCase();
   const userId = opts.userId ? String(opts.userId) : '';
   const userCode = opts.userCode ? String(opts.userCode).toUpperCase() : '';
 
-  logger.logEnter('countUserOrderStatuses', { hasQuery: Boolean(q) });
+  logger.logEnter('countUserOrderStatuses', { hasQuery: Boolean(q), platform });
 
   const pool = opts.preferSql ? getPgPool() : null;
   if (pool && userId) {
     try {
       const params = [userId];
       let whereClause = 'WHERE user_id = $1';
+      if (platform && ['shopee', 'tiktok'].includes(platform)) {
+        params.push(platform);
+        whereClause += ` AND platform = $${params.length}`;
+      }
       if (q) {
         params.push(`%${q}%`);
         const pIdx = params.length;
@@ -263,6 +268,10 @@ async function countUserOrderStatuses(db, opts = {}) {
       (userId && o.userId === userId) ||
       (!o.userId && userCode && o.userCode && String(o.userCode).toUpperCase() === userCode);
     if (!belongsToUser) continue;
+
+    if (platform && ['shopee', 'tiktok'].includes(platform)) {
+      if (String(o.platform || '').toLowerCase() !== platform) continue;
+    }
 
     if (q) {
       const sn = String(o.orderSn || '').toLowerCase();

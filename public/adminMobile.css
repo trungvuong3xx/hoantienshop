@@ -380,13 +380,13 @@
   /* ===== 7. ORDERS LIST CARD (4 clear zones, scannable hierarchy, icon-only More) ===== */
   #view-admin .admin-data-table #admOrdersTableBody tr {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    gap: 8px 12px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px 8px;
     align-items: center;
   }
   /* Row 1: Order SN + Platform Badge | Reconciliation Status */
   #view-admin .admin-data-table #admOrdersTableBody td:nth-child(2) {
-    grid-column: 1;
+    grid-column: 1 / 3;
     grid-row: 1;
     display: flex;
     flex-wrap: wrap;
@@ -397,12 +397,12 @@
     color: #0f172a;
   }
   #view-admin .admin-data-table #admOrdersTableBody td:nth-child(2) br { display: none; }
-  #view-admin .admin-data-table #admOrdersTableBody td:nth-child(7) {
-    grid-column: 2;
+  #view-admin .admin-data-table #admOrdersTableBody td:nth-child(8) {
+    grid-column: 3;
     grid-row: 1;
     justify-self: end;
   }
-  #view-admin .admin-data-table #admOrdersTableBody td:nth-child(7) .status-badge {
+  #view-admin .admin-data-table #admOrdersTableBody td:nth-child(8) .status-badge {
     display: inline-block;
     white-space: nowrap;
     font-size: 11px;
@@ -411,13 +411,13 @@
   }
   /* Row 2: Customer Code | Order Date */
   #view-admin .admin-data-table #admOrdersTableBody td:nth-child(3) {
-    grid-column: 1;
+    grid-column: 1 / 3;
     grid-row: 2;
     font-size: 12.5px;
     font-weight: 700;
   }
   #view-admin .admin-data-table #admOrdersTableBody td:nth-child(1) {
-    grid-column: 2;
+    grid-column: 3;
     grid-row: 2;
     justify-self: end;
     font-size: 12px;
@@ -436,29 +436,38 @@
     -webkit-box-orient: vertical;
     overflow: hidden;
   }
-  /* Row 4: Commission | Cashback (generous 2-column financial strip for large amounts) */
+  /* Row 4: Order Value | Commission | Cashback (3-column financial strip) */
   #view-admin .admin-data-table #admOrdersTableBody td:nth-child(5),
-  #view-admin .admin-data-table #admOrdersTableBody td:nth-child(6) {
+  #view-admin .admin-data-table #admOrdersTableBody td:nth-child(6),
+  #view-admin .admin-data-table #admOrdersTableBody td:nth-child(7) {
     grid-row: 4;
     padding-top: 10px;
     border-top: 1px solid #f1f5f9;
     display: flex;
     flex-direction: column;
     gap: 2px;
-    font-size: 14.5px;
+    font-size: 13.5px;
     font-weight: 700;
     font-variant-numeric: tabular-nums;
   }
-  #view-admin .admin-data-table #admOrdersTableBody td:nth-child(5) { grid-column: 1; color: #0f172a; }
+  #view-admin .admin-data-table #admOrdersTableBody td:nth-child(5) { grid-column: 1; color: #334155; }
   #view-admin .admin-data-table #admOrdersTableBody td:nth-child(5)::before {
+    display: block;
+    content: 'Giá trị đơn';
+    font-size: 11px;
+    font-weight: 600;
+    color: #64748b;
+  }
+  #view-admin .admin-data-table #admOrdersTableBody td:nth-child(6) { grid-column: 2; color: #0f172a; }
+  #view-admin .admin-data-table #admOrdersTableBody td:nth-child(6)::before {
     display: block;
     content: 'Hoa hồng';
     font-size: 11px;
     font-weight: 600;
     color: #64748b;
   }
-  #view-admin .admin-data-table #admOrdersTableBody td:nth-child(6) { grid-column: 2; }
-  #view-admin .admin-data-table #admOrdersTableBody td:nth-child(6)::before {
+  #view-admin .admin-data-table #admOrdersTableBody td:nth-child(7) { grid-column: 3; }
+  #view-admin .admin-data-table #admOrdersTableBody td:nth-child(7)::before {
     display: block;
     content: 'Hoàn khách';
     font-size: 11px;
@@ -466,15 +475,15 @@
     color: #64748b;
   }
   /* Row 5: Primary Approve + Icon-only More Actions */
-  #view-admin .admin-data-table #admOrdersTableBody td:nth-child(8) {
+  #view-admin .admin-data-table #admOrdersTableBody td:nth-child(9) {
     grid-column: 1 / -1;
     grid-row: 5;
     padding-top: 4px;
   }
-  #view-admin .admin-data-table #admOrdersTableBody td:nth-child(8) .admin-action-group {
+  #view-admin .admin-data-table #admOrdersTableBody td:nth-child(9) .admin-action-group {
     justify-content: flex-end;
   }
-  #view-admin .admin-data-table #admOrdersTableBody td:nth-child(8) [data-ord-action="approve"] {
+  #view-admin .admin-data-table #admOrdersTableBody td:nth-child(9) [data-ord-action="approve"] {
     flex: 1 1 auto;
     justify-content: center;
   }

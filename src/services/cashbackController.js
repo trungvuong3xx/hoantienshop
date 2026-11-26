@@ -1426,18 +1426,22 @@ function registerCashbackRoutes(app) {
 
     const rawOrderStatus = String(req.query.orderStatus || req.query.status || '').trim().toLowerCase();
     const effectiveOrderStatus = rawOrderStatus === 'all' ? '' : rawOrderStatus;
+    const rawOrderPlatform = String(req.query.orderPlatform || req.query.platform || '').trim().toLowerCase();
+    const effectiveOrderPlatform = ['shopee', 'tiktok'].includes(rawOrderPlatform) ? rawOrderPlatform : '';
     const { items: userOrders, pagination: ordersPagination } = await queryOrdersPaginated(db, {
       userId: user.id,
       userCode: user.code,
       page: req.query.orderPage || req.query.page || 1,
       limit: req.query.orderLimit || req.query.limit || 200,
       q: req.query.q || '',
-      status: effectiveOrderStatus
+      status: effectiveOrderStatus,
+      platform: effectiveOrderPlatform
     });
     const orderStatusCounts = await countUserOrderStatuses(db, {
       userId: user.id,
       userCode: user.code,
-      q: req.query.q || ''
+      q: req.query.q || '',
+      platform: effectiveOrderPlatform
     });
 
     const userWithdrawals = db.withdrawals

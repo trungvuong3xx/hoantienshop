@@ -319,8 +319,8 @@ async function runTests() {
       const ordersTableMatch = indexHtml.match(/<thead>((?:(?!<\/thead>)[\s\S])*)<\/thead>\s*<tbody id="admOrdersTableBody"/i);
       assert.ok(ordersTableMatch, 'Could not locate admOrdersTableBody table header in public/index.html');
       const ordersThCount = (ordersTableMatch[1].match(/<th\b/gi) || []).length;
-      assert.strictEqual(ordersThCount, 8, `Admin orders table must have 8 <th> columns, found ${ordersThCount}`);
-      assert.ok(appJs.includes('colspan="8"'), 'public/app.js must use colspan="8" for empty admin orders state');
+      assert.strictEqual(ordersThCount, 9, `Admin orders table must have 9 <th> columns, found ${ordersThCount}`);
+      assert.ok(appJs.includes('colspan="9"'), 'public/app.js must use colspan="9" for empty admin orders state');
 
       const withdrawTableMatch = indexHtml.match(/<thead>((?:(?!<\/thead>)[\s\S])*)<\/thead>\s*<tbody id="admWithdrawalsTableBody"/i);
       assert.ok(withdrawTableMatch, 'Could not locate admWithdrawalsTableBody table header in public/index.html');

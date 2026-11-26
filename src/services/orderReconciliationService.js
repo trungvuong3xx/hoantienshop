@@ -68,6 +68,7 @@ function sanitizeOrderForUser(o) {
     cashbackRate: o.cashbackRate,
     userCashbackAmount: o.userCashbackAmount,
     status: o.status,
+    rejectReason: o.rejectReason || null,
     claimPending: Boolean(o.claimPending),
     claimVerified: Boolean(o.claimVerified),
     claimRejected: Boolean(o.claimRejected),

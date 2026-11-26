@@ -589,6 +589,58 @@ document.body.addEventListener('click', (e) => {
     return;
   }
 
+  const orderPlatBtn = e.target.closest('[data-order-platform]');
+  if (orderPlatBtn) {
+    activeOrderPlatformFilter = orderPlatBtn.getAttribute('data-order-platform') || 'all';
+    document.querySelectorAll('[data-order-platform]').forEach((btn) => {
+      btn.classList.toggle('active', btn.getAttribute('data-order-platform') === activeOrderPlatformFilter);
+    });
+    if (authToken) {
+      userOrdersPage = 1;
+      loadUserOrdersPage(1);
+    } else {
+      renderUserOrdersTable(userOrdersCache);
+    }
+    return;
+  }
+
+  const copyOrdSnBtn = e.target.closest('[data-copy-order-sn]');
+  if (copyOrdSnBtn) {
+    e.stopPropagation();
+    const sn = copyOrdSnBtn.getAttribute('data-copy-order-sn') || '';
+    if (sn) {
+      copyText(sn, `Đã sao chép mã đơn #${sn}`);
+    }
+    return;
+  }
+
+  if (e.target.closest('#resetOrderFiltersBtn')) {
+    resetUserOrderFilters();
+    return;
+  }
+
+  if (e.target.closest('#retryOrdersLoadBtn')) {
+    loadUserOrdersPage(userOrdersPage || 1);
+    return;
+  }
+
+  if (e.target.closest('#closeOrderDetailSheetBtn') || e.target === document.getElementById('orderDetailSheetOverlay')) {
+    closeOrderDetailSheet();
+    return;
+  }
+
+  const detailNavBtn = e.target.closest('#orderDetailSheetOverlay [data-nav]');
+  if (detailNavBtn) {
+    closeOrderDetailSheet();
+    // let the normal [data-nav] handler switch views right below
+  }
+
+  const detailRow = e.target.closest('[data-order-detail-id]');
+  if (detailRow) {
+    openOrderDetailSheet(detailRow.getAttribute('data-order-detail-id'));
+    return;
+  }
+
   const copyBtn = e.target.closest('[data-copy]');
   if (copyBtn) {
     const copyMsg = copyBtn.getAttribute('data-copy-msg') || 'Đã sao chép thành công!';
@@ -710,6 +762,8 @@ function updateBalancePrivacyDisplay() {
   setTxt('statPending', isBalanceHidden ? maskText : pend);
   setTxt('statTotalEarned', isBalanceHidden ? maskText : earned);
   setTxt('statWithdrawn', isBalanceHidden ? maskText : withdrawn);
+  setTxt('userOrdSummaryPending', isBalanceHidden ? maskText : pend);
+  setTxt('userOrdSummaryApproved', isBalanceHidden ? maskText : earned);
 
   const privacyBtn = document.getElementById('toggleBalancePrivacyBtn');
   if (privacyBtn) {
@@ -959,6 +1013,7 @@ async function clearSession({ skipLogoutApi = false } = {}) {
   userOrderStatusCountsCache = null;
   latestUserActivitySnapshot = null;
   activeOrderStatusFilter = 'all';
+  activeOrderPlatformFilter = 'all';
   safeStorage.remove(TOKEN_KEY);
   safeStorage.remove(USER_KEY);
   if (conversionResultSection) conversionResultSection.classList.add('hidden');
@@ -2169,7 +2224,192 @@ let userLedgerPage = 1;
 let userOrdersTotalPages = 1;
 let userOrdersCache = [];
 let activeOrderStatusFilter = 'all';
+let activeOrderPlatformFilter = 'all';
 let userOrderStatusCountsCache = null;
+
+const ORD_COPY_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+const ORD_CHEVRON_SVG = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>';
+const ORD_STATUS_ICONS = {
+  pending: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>',
+  approved: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>',
+  cancelled: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>'
+};
+
+function renderUserOrdersSkeleton() {
+  const ordBody = document.getElementById('userOrdersTableBody');
+  if (!ordBody) return;
+  const rowHtml = `
+    <tr class="ord-skeleton-row">
+      <td colspan="4">
+        <div class="ord-skeleton-box">
+          <div class="ord-skel-line w-40"></div>
+          <div class="ord-skel-line w-85"></div>
+          <div class="ord-skel-line w-55"></div>
+        </div>
+      </td>
+    </tr>`;
+  ordBody.innerHTML = rowHtml + rowHtml + rowHtml;
+}
+
+function renderUserOrdersError(message) {
+  const ordBody = document.getElementById('userOrdersTableBody');
+  if (!ordBody) return;
+  ordBody.innerHTML = `
+    <tr>
+      <td colspan="4" class="text-center">
+        <div class="orders-error-box">
+          <strong>Không thể tải danh sách đơn hàng</strong>
+          <p>${escapeHtml(message || 'Kết nối đang gián đoạn. Vui lòng thử lại sau giây lát.')}</p>
+          <button type="button" class="btn btn-primary btn-sm" id="retryOrdersLoadBtn">Thử lại</button>
+        </div>
+      </td>
+    </tr>`;
+}
+
+function resetUserOrderFilters() {
+  activeOrderStatusFilter = 'all';
+  activeOrderPlatformFilter = 'all';
+  const searchInp = document.getElementById('userOrderSearchInput');
+  if (searchInp) searchInp.value = '';
+  document.getElementById('clearOrderSearchBtn')?.classList.add('hidden');
+  document.querySelectorAll('[data-order-status]').forEach((btn) => {
+    const isAll = btn.getAttribute('data-order-status') === 'all';
+    btn.classList.toggle('active', isAll);
+    btn.setAttribute('aria-selected', isAll ? 'true' : 'false');
+  });
+  document.querySelectorAll('[data-order-platform]').forEach((btn) => {
+    btn.classList.toggle('active', btn.getAttribute('data-order-platform') === 'all');
+  });
+  if (authToken) {
+    userOrdersPage = 1;
+    loadUserOrdersPage(1);
+  } else {
+    renderUserOrdersTable(userOrdersCache);
+  }
+}
+
+function closeOrderDetailSheet() {
+  const overlay = document.getElementById('orderDetailSheetOverlay');
+  if (!overlay) return;
+  overlay.classList.remove('is-open');
+  overlay.setAttribute('aria-hidden', 'true');
+  document.body.classList.remove('sheet-lock');
+}
+
+function openOrderDetailSheet(orderIdOrSn) {
+  const overlay = document.getElementById('orderDetailSheetOverlay');
+  const body = document.getElementById('orderDetailSheetBody');
+  if (!overlay || !body) return;
+  const order = (userOrdersCache || []).find(
+    (o) => String(o.id || '') === String(orderIdOrSn) || String(o.orderSn || '') === String(orderIdOrSn)
+  );
+  if (!order) return;
+
+  const isApproved = order.status === 'approved';
+  const isCancelled = order.status === 'cancelled';
+  const stCls = getStatusClass(order.status);
+  const stIcon = isApproved ? ORD_STATUS_ICONS.approved : isCancelled ? ORD_STATUS_ICONS.cancelled : ORD_STATUS_ICONS.pending;
+  const stLabel = isApproved ? 'Đã cộng vào ví' : isCancelled ? 'Đã huỷ' : 'Đang đối soát';
+  const plat = String(order.platform || '').toLowerCase();
+  const platBadge = plat === 'tiktok'
+    ? '<span class="plat-badge-inline tiktok">TikTok Shop</span>'
+    : '<span class="plat-badge-inline shopee">Shopee</span>';
+  const cbToneCls = isApproved ? 'is-approved' : isCancelled ? 'is-cancelled' : 'is-pending';
+  const cbPrefix = isCancelled ? '' : '+';
+  const cbSubLabel = isApproved
+    ? 'Tiền hoàn đã cộng vào số dư khả dụng'
+    : isCancelled
+    ? 'Đơn không đủ điều kiện nhận hoàn tiền'
+    : 'Tiền hoàn dự kiến (chờ sàn xác nhận)';
+
+  const createdShort = order.createdAt ? new Date(order.createdAt).toLocaleDateString('vi-VN') : '—';
+  const createdFull = order.createdAt ? new Date(order.createdAt).toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' }) : '—';
+  const updatedFull = order.updatedAt ? new Date(order.updatedAt).toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' }) : createdFull;
+  const updatedShort = order.updatedAt ? new Date(order.updatedAt).toLocaleDateString('vi-VN') : '';
+
+  const step2Cls = isApproved ? 'is-done' : isCancelled ? 'is-cancelled' : 'is-active';
+  const step2Dot = isApproved ? '✓' : isCancelled ? '×' : '2';
+  const step2Label = isCancelled ? 'Đơn bị huỷ' : 'Sàn đối soát';
+  const step3Cls = isApproved ? 'is-done' : '';
+  const step3Dot = isApproved ? '✓' : '3';
+
+  const noteCls = isApproved ? 'is-approved' : isCancelled ? 'is-cancelled' : 'is-pending';
+  const noteText = isApproved
+    ? 'Tiền hoàn đã được cộng vào số dư khả dụng trong Ví LiLa. Bạn có thể kiểm tra biến động số dư hoặc tạo lệnh rút khi đủ hạn mức.'
+    : isCancelled
+    ? escapeHtml(order.rejectReason || order.claimRejectReason || 'Đơn hàng bị hủy, hoàn trả hoặc không đủ điều kiện đối soát từ sàn.')
+    : 'Đơn hàng đã được ghi nhận thành công. Sàn đang xác nhận đơn hoàn tất và không phát sinh trả hàng trước khi cộng tiền vào ví.';
+
+  const orderAmtRow = Number(order.orderAmount) > 0
+    ? `<div class="ord-detail-row"><span>Giá trị đơn hàng</span><strong>${fmtVnd(order.orderAmount)}</strong></div>`
+    : '';
+  const rateRow = Number(order.cashbackRate) > 0
+    ? `<div class="ord-detail-row"><span>Tỷ lệ chia sẻ hoàn</span><strong>${Math.round(Number(order.cashbackRate))}% hoa hồng sàn</strong></div>`
+    : '';
+
+  const actionBtn = isApproved
+    ? '<button type="button" class="btn btn-primary" data-nav="wallet">Đi tới Ví của tôi</button>'
+    : '<button type="button" class="btn btn-outline" data-nav="guide">Xem quy trình đối soát</button>';
+
+  const snEsc = escapeHtml(order.orderSn || '');
+  body.innerHTML = `
+    <div class="ord-detail-hero">
+      <div class="ord-detail-hero-top">
+        ${platBadge}
+        <span class="status-badge ${stCls}"><span class="ord-status-icon">${stIcon}</span>${stLabel}</span>
+      </div>
+      <div class="ord-detail-amount ${cbToneCls}">${cbPrefix}${fmtVnd(order.userCashbackAmount)}</div>
+      <div class="ord-detail-amount-sub">${cbSubLabel}</div>
+    </div>
+
+    <div class="ord-timeline" aria-label="Tiến trình đối soát">
+      <div class="ord-step is-done">
+        <span class="ord-step-dot">✓</span>
+        <span class="ord-step-label">Ghi nhận đơn</span>
+        <span class="ord-step-date">${createdShort}</span>
+      </div>
+      <div class="ord-step ${step2Cls}">
+        <span class="ord-step-dot">${step2Dot}</span>
+        <span class="ord-step-label">${step2Label}</span>
+        <span class="ord-step-date">${isCancelled && updatedShort ? updatedShort : ''}</span>
+      </div>
+      <div class="ord-step ${step3Cls}">
+        <span class="ord-step-dot">${step3Dot}</span>
+        <span class="ord-step-label">Cộng vào ví</span>
+        <span class="ord-step-date">${isApproved && updatedShort ? updatedShort : ''}</span>
+      </div>
+    </div>
+
+    <div>
+      <div class="ord-detail-section-title">Sản phẩm</div>
+      <div class="ord-detail-product">${escapeHtml(order.productName || 'Đơn hàng mua sắm')}</div>
+    </div>
+
+    <div class="ord-detail-meta">
+      <div class="ord-detail-row">
+        <span>Mã đơn hàng</span>
+        <strong class="ord-detail-sn-val">
+          <span>#${snEsc}</span>
+          <button type="button" class="ord-copy-sn-btn" data-copy-order-sn="${snEsc}" aria-label="Sao chép mã đơn ${snEsc}" title="Sao chép mã đơn">${ORD_COPY_SVG}</button>
+        </strong>
+      </div>
+      <div class="ord-detail-row"><span>Ngày ghi nhận</span><strong>${createdFull}</strong></div>
+      <div class="ord-detail-row"><span>Cập nhật gần nhất</span><strong>${updatedFull}</strong></div>
+      ${orderAmtRow}
+      ${rateRow}
+    </div>
+
+    <div class="ord-detail-note-box ${noteCls}">${noteText}</div>
+
+    <div class="ord-detail-actions">
+      ${actionBtn}
+    </div>
+  `;
+
+  overlay.classList.add('is-open');
+  overlay.setAttribute('aria-hidden', 'false');
+  document.body.classList.add('sheet-lock');
+}
 
 function syncOrderStatusCounts(orders, serverCounts = null) {
   let counts;
@@ -2211,23 +2451,36 @@ function renderUserOrdersTable(orders, serverCounts = null) {
   syncOrderStatusCounts(sourceOrders, serverCounts);
 
   const filteredOrders =
-    serverCounts || activeOrderStatusFilter === 'all'
+    serverCounts || (activeOrderStatusFilter === 'all' && activeOrderPlatformFilter === 'all')
       ? sourceOrders
       : sourceOrders.filter((o) => {
           const st = String(o.status || 'pending').toLowerCase();
-          return activeOrderStatusFilter === 'pending'
-            ? st !== 'approved' && st !== 'cancelled'
-            : st === activeOrderStatusFilter;
+          const stOk =
+            activeOrderStatusFilter === 'all'
+              ? true
+              : activeOrderStatusFilter === 'pending'
+              ? st !== 'approved' && st !== 'cancelled'
+              : st === activeOrderStatusFilter;
+          const plat = String(o.platform || 'shopee').toLowerCase();
+          const platOk = activeOrderPlatformFilter === 'all' || plat === activeOrderPlatformFilter;
+          return stOk && platOk;
         });
 
   if (filteredOrders.length === 0) {
-    const isFilterEmpty = activeOrderStatusFilter !== 'all';
+    const searchQuery = document.getElementById('userOrderSearchInput')?.value?.trim() || '';
+    const isFilterEmpty =
+      activeOrderStatusFilter !== 'all' || activeOrderPlatformFilter !== 'all' || Boolean(searchQuery);
     const emptyTitle = isFilterEmpty
-      ? 'Không có đơn hàng nào ở trạng thái này'
+      ? 'Không tìm thấy đơn hàng phù hợp'
       : 'Chưa có đơn hàng nào được ghi nhận';
     const emptyDesc = isFilterEmpty
-      ? 'Hãy chọn tab "Tất cả" hoặc thử từ khóa tìm kiếm khác.'
+      ? searchQuery
+        ? `Không có đơn nào khớp với "${escapeHtml(searchQuery)}". Thử từ khóa khác hoặc xóa bộ lọc.`
+        : 'Không có đơn hàng nào ở bộ lọc hiện tại.'
       : 'Đơn hàng đặt qua liên kết LiLa sẽ tự động đồng bộ lên hệ thống sau 12h–24h.';
+    const emptyCta = isFilterEmpty
+      ? '<button type="button" class="btn btn-outline btn-sm" id="resetOrderFiltersBtn">Xóa bộ lọc</button>'
+      : '<button type="button" class="btn btn-primary btn-sm" data-nav="home">Dán link mua sắm ngay</button>';
     ordBody.innerHTML = `
       <tr>
         <td colspan="4" class="text-center">
@@ -2235,7 +2488,7 @@ function renderUserOrdersTable(orders, serverCounts = null) {
             <span class="table-empty-icon" aria-hidden="true">${UI_ICONS.shoppingBagLg}</span>
             <strong>${emptyTitle}</strong>
             <p>${emptyDesc}</p>
-            <button type="button" class="btn btn-primary btn-sm" data-nav="home">Dán link mua sắm ngay</button>
+            ${emptyCta}
           </div>
         </td>
       </tr>`;
@@ -2246,8 +2499,13 @@ function renderUserOrdersTable(orders, serverCounts = null) {
       const stCls = getStatusClass(o.status);
       const isApproved = o.status === 'approved';
       const isCancelled = o.status === 'cancelled';
+      const stIcon = isApproved
+        ? ORD_STATUS_ICONS.approved
+        : isCancelled
+        ? ORD_STATUS_ICONS.cancelled
+        : ORD_STATUS_ICONS.pending;
       const stLabel = isApproved
-        ? 'Đã cộng vào ví'
+        ? 'Đã cộng ví'
         : isCancelled
         ? 'Đã huỷ'
         : 'Đang đối soát';
@@ -2257,26 +2515,43 @@ function renderUserOrdersTable(orders, serverCounts = null) {
           ? '<span class="plat-badge-inline tiktok">TikTok</span>'
           : '<span class="plat-badge-inline shopee">Shopee</span>';
       const dt = o.createdAt ? new Date(o.createdAt).toLocaleDateString('vi-VN') : '—';
-      const orderAmtStr = Number(o.orderAmount) > 0 ? ` • Đơn ${fmtVnd(o.orderAmount)}` : '';
+      const orderAmtStr = Number(o.orderAmount) > 0 ? ` • ${fmtVnd(o.orderAmount)}` : '';
       const cbToneCls = isApproved ? 'is-approved' : isCancelled ? 'is-cancelled' : 'is-pending';
       const cbPrefix = isCancelled ? '' : '+';
-      const contextNote = isCancelled
-        ? `<div class="ord-context-note is-cancelled">${escapeHtml(o.rejectReason || 'Đơn hàng đã bị huỷ hoặc hoàn trả')}</div>`
-        : !isApproved
-        ? '<div class="ord-context-note is-pending">Dự kiến duyệt sau 7–14 ngày kể từ khi nhận hàng</div>'
+      const snEsc = escapeHtml(o.orderSn || '');
+      const ordIdEsc = escapeHtml(o.id || o.orderSn || '');
+      const rejectNote = isCancelled && (o.rejectReason || o.claimRejectReason)
+        ? `<div class="ord-context-note is-cancelled">${escapeHtml(o.rejectReason || o.claimRejectReason)}</div>`
         : '';
       return `
-        <tr class="order-row-${stCls}">
+        <tr class="order-row-${stCls} order-card-clickable" data-order-detail-id="${ordIdEsc}">
           <td class="ord-col-id" data-label="Mã đơn">
-            <div class="ord-id-wrap">${platBadge} <strong>#${escapeHtml(o.orderSn)}</strong></div>
-            <div class="ord-meta-sub">${dt}${orderAmtStr}</div>
+            <div class="ord-top-meta">
+              ${platBadge}
+              <span class="ord-meta-sub">${dt}${orderAmtStr}</span>
+            </div>
+            <div class="ord-id-row">
+              <strong>#${snEsc}</strong>
+              <button type="button" class="ord-copy-sn-btn" data-copy-order-sn="${snEsc}" aria-label="Sao chép mã đơn ${snEsc}" title="Sao chép mã đơn">${ORD_COPY_SVG}</button>
+            </div>
           </td>
           <td class="ord-col-product" data-label="Sản phẩm">
-            <div class="ord-product-name">${escapeHtml(o.productName || 'Sản phẩm')}</div>
-            ${contextNote}
+            <div class="ord-product-name">${escapeHtml(o.productName || 'Đơn hàng mua sắm')}</div>
+            <div class="ord-sn-bar">
+              <span class="ord-sn-code">#${snEsc}</span>
+              <button type="button" class="ord-copy-sn-btn" data-copy-order-sn="${snEsc}" aria-label="Sao chép mã đơn ${snEsc}" title="Sao chép mã đơn">${ORD_COPY_SVG}</button>
+            </div>
+            ${rejectNote}
           </td>
-          <td class="ord-col-cashback" data-label="Tiền hoàn"><strong class="ord-cashback-val ${cbToneCls}">${cbPrefix}${fmtVnd(o.userCashbackAmount)}</strong></td>
-          <td class="ord-col-status" data-label="Trạng thái"><span class="status-badge ${stCls}">${stLabel}</span></td>
+          <td class="ord-col-cashback" data-label="Tiền hoàn">
+            <span class="ord-cashback-right">
+              <strong class="ord-cashback-val ${cbToneCls}">${cbPrefix}${fmtVnd(o.userCashbackAmount)}</strong>
+              <span class="ord-chevron" aria-hidden="true">${ORD_CHEVRON_SVG}</span>
+            </span>
+          </td>
+          <td class="ord-col-status" data-label="Trạng thái">
+            <span class="status-badge ${stCls}"><span class="ord-status-icon">${stIcon}</span>${stLabel}</span>
+          </td>
         </tr>
       `;
     })
@@ -2285,6 +2560,7 @@ function renderUserOrdersTable(orders, serverCounts = null) {
 
 async function loadUserOrdersPage(page = 1) {
   if (!authToken) return;
+  renderUserOrdersSkeleton();
   try {
     const q = document.getElementById('userOrderSearchInput')?.value?.trim() || '';
     const params = new URLSearchParams({
@@ -2295,7 +2571,14 @@ async function loadUserOrdersPage(page = 1) {
     if (activeOrderStatusFilter && activeOrderStatusFilter !== 'all') {
       params.set('orderStatus', activeOrderStatusFilter);
     }
+    if (activeOrderPlatformFilter && activeOrderPlatformFilter !== 'all') {
+      params.set('orderPlatform', activeOrderPlatformFilter);
+    }
     const data = await apiFetch('/api/user/me?' + params.toString());
+    if (data.user) {
+      currentUser = data.user;
+      updateBalancePrivacyDisplay();
+    }
     const orders = data.orders || [];
     renderUserOrdersTable(orders, data.orderStatusCounts || null);
     const state = updateAdminPaginationUi({
@@ -2309,6 +2592,7 @@ async function loadUserOrdersPage(page = 1) {
     userOrdersPage = state.page;
     userOrdersTotalPages = state.totalPages;
   } catch (err) {
+    renderUserOrdersError(err.message);
     showToast(err.message);
   }
 }
@@ -2323,7 +2607,7 @@ async function loadUserDashboard(prefetchedData = null) {
   }
   if (refreshOrdersBtn) {
     refreshOrdersBtn.disabled = true;
-    refreshOrdersBtn.textContent = 'Đang đồng bộ...';
+    refreshOrdersBtn.classList.add('is-spinning');
   }
   try {
     const q = document.getElementById('userOrderSearchInput')?.value?.trim() || '';
@@ -2335,6 +2619,9 @@ async function loadUserDashboard(prefetchedData = null) {
     if (q) params.set('q', q);
     if (activeOrderStatusFilter && activeOrderStatusFilter !== 'all') {
       params.set('orderStatus', activeOrderStatusFilter);
+    }
+    if (activeOrderPlatformFilter && activeOrderPlatformFilter !== 'all') {
+      params.set('orderPlatform', activeOrderPlatformFilter);
     }
     const data =
       prefetchedData && prefetchedData.user
@@ -2485,7 +2772,7 @@ async function loadUserDashboard(prefetchedData = null) {
     }
     if (refreshOrdersBtn) {
       refreshOrdersBtn.disabled = false;
-      refreshOrdersBtn.innerHTML = `${UI_ICONS.refresh}<span>Đồng bộ</span>`;
+      refreshOrdersBtn.classList.remove('is-spinning');
     }
   }
 }
@@ -2642,16 +2929,28 @@ document.addEventListener('keydown', (e) => {
     if (wdOverlay && wdOverlay.classList.contains('is-open')) {
       setWithdrawSheetOpen(false);
     }
+    const ordDetailOverlay = document.getElementById('orderDetailSheetOverlay');
+    if (ordDetailOverlay && ordDetailOverlay.classList.contains('is-open')) {
+      closeOrderDetailSheet();
+    }
   }
 });
 
 on('refreshWalletBtn', 'click', () => { userLedgerPage = 1; loadUserDashboard(); });
 on('userLedgerPrevBtn', 'click', () => { userLedgerPage = Math.max(1, userLedgerPage - 1); loadUserDashboard(); });
 on('userLedgerNextBtn', 'click', () => { userLedgerPage++; loadUserDashboard(); });
-on('userOrderSearchBtn', 'click', () => loadUserOrdersPage(1));
+on('userOrderSearchBtn', 'click', () => {
+  if (typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 640px)').matches) {
+    document.getElementById('userOrderSearchInput')?.blur();
+  }
+  loadUserOrdersPage(1);
+});
 on('userOrderSearchInput', 'keydown', (e) => {
   if (e.key === 'Enter') {
     e.preventDefault();
+    if (typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 640px)').matches) {
+      e.target?.blur?.();
+    }
     loadUserOrdersPage(1);
   }
 });
@@ -3006,7 +3305,7 @@ function renderAdminOrdersTable(orders) {
   if (!ordTbody) return;
   if (!Array.isArray(orders) || orders.length === 0) {
     ordTbody.innerHTML =
-      '<tr><td colspan="8" class="text-center">Chưa có đơn hàng nào.</td></tr>';
+      '<tr><td colspan="9" class="text-center">Chưa có đơn hàng nào.</td></tr>';
     return;
   }
   ordTbody.innerHTML = orders
@@ -3044,6 +3343,7 @@ function renderAdminOrdersTable(orders) {
             o.userCode || 'GUEST'
           )}</span></td>
           <td>${escapeHtml(o.productName)}</td>
+          <td><strong>${Number(o.orderAmount) > 0 ? fmtVnd(o.orderAmount) : '—'}</strong></td>
           <td><strong>${fmtVnd(o.grossCommission || o.totalCommission)}</strong></td>
           <td><strong style="color:#059669;">${fmtVnd(o.userCashbackAmount)}</strong></td>
           <td><span class="status-badge ${stCls}">${escapeHtml(o.status)}</span></td>
@@ -5343,6 +5643,7 @@ function attachSwipeDownToClose(overlayId, panelSelector, closeFn) {
 }
 attachSwipeDownToClose('withdrawSheetOverlay', '.app-sheet-panel', () => setWithdrawSheetOpen(false));
 attachSwipeDownToClose('referralSheetOverlay', '.referral-card', () => setReferralSheetOpen(false));
+attachSwipeDownToClose('orderDetailSheetOverlay', '.order-detail-sheet', () => closeOrderDetailSheet());
 
 // Auto-blur URL input when clicking Get Cashback Link so mobile keyboard reveals result card
 on('getCashbackLinkBtn', 'click', () => {
