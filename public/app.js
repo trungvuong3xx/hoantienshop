@@ -5302,15 +5302,15 @@ function loadShibaCompanionAssets() {
     return;
   }
   shibaAssetsLoaded = true;
-  if (!document.querySelector('link[href="/shibaCompanion.css?v=5"]')) {
+  if (!document.querySelector('link[href="/shibaCompanion.css?v=6"]')) {
     const link = document.createElement('link');
     link.rel = 'stylesheet';
-    link.href = '/shibaCompanion.css?v=5';
+    link.href = '/shibaCompanion.css?v=6';
     document.head.appendChild(link);
   }
-  if (!document.querySelector('script[src="/shibaCompanion.js?v=5"]')) {
+  if (!document.querySelector('script[src="/shibaCompanion.js?v=6"]')) {
     const script = document.createElement('script');
-    script.src = '/shibaCompanion.js?v=5';
+    script.src = '/shibaCompanion.js?v=6';
     script.defer = true;
     script.onload = () => syncShibaToggleButton();
     document.head.appendChild(script);

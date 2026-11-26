@@ -298,17 +298,27 @@
     timer: null,
     getBounds() {
       const vw = window.innerWidth || 390;
-      if (IS_MOBILE()) {
-        // Leave 74px on right side so Shiba never crowds floating Zalo button
-        return { minX: 12, maxX: Math.max(24, vw - 134) };
+      const actorWidth = IS_MOBILE() ? 56 : 66;
+      const minX = IS_MOBILE() ? 10 : 14;
+      let rightReserve = 12;
+      let zaloVisible = false;
+      const zaloEl = document.querySelector('.floating-zalo:not(.hidden)');
+      if (zaloEl && typeof window.getComputedStyle === 'function' && window.getComputedStyle(zaloEl).display !== 'none') {
+        const zRect = zaloEl.getBoundingClientRect();
+        if (zRect.width > 0 && zRect.height > 0) {
+          zaloVisible = true;
+          rightReserve = Math.max(12, Math.ceil(vw - zRect.left) + 10);
+        }
       }
-      // Desktop: stay politely in bottom-left zone away from centered content
-      return { minX: 18, maxX: Math.min(260, Math.max(60, Math.floor(vw * 0.22))) };
+      const maxX = Math.max(minX + 24, vw - actorWidth - rightReserve);
+      return { minX, maxX, vw, actorWidth, zaloVisible };
     },
     setPosition(nextX, durationMs = 0, { allowEdgePeek = false, easing = 'cubic-bezier(0.25, 0.85, 0.35, 1)' } = {}) {
-      const { minX, maxX } = this.getBounds();
-      const lowerBound = allowEdgePeek ? (IS_MOBILE() ? -22 : -26) : minX;
-      const clamped = Math.max(lowerBound, Math.min(nextX, maxX));
+      const { minX, maxX, vw, actorWidth } = this.getBounds();
+      const peekInset = IS_MOBILE() ? 22 : 26;
+      const lowerBound = allowEdgePeek ? -peekInset : minX;
+      const upperBound = allowEdgePeek ? vw - actorWidth + peekInset : maxX;
+      const clamped = Math.max(lowerBound, Math.min(nextX, upperBound));
       if (durationMs > 0 && Math.abs(clamped - this.x) > 4) {
         actor.classList.toggle('facing-left', clamped < this.x);
       }
@@ -330,28 +340,18 @@
         this.scheduleNext(nextDelayMs);
       }, 260);
     },
-    startPeek() {
-      const peekX = IS_MOBILE() ? -20 : -24;
+    startPeek(preferredSide = null) {
+      const { vw, actorWidth, zaloVisible } = this.getBounds();
+      const peekInset = IS_MOBILE() ? 20 : 24;
+      const canPeekRight = !zaloVisible;
+      const side = preferredSide || (canPeekRight && (this.x > vw * 0.5 || Math.random() < 0.45) ? 'right' : 'left');
+      const peekX = side === 'right' ? vw - actorWidth + peekInset : -peekInset;
+      const faceLeftWhenPeeking = side === 'right';
       const dist = Math.abs(this.x - peekX);
-      const slideMs = Math.max(450, Math.min(1800, Math.round(dist * 14)));
-      if (dist > 10) {
-        this.setState('walk');
-        this.setPosition(peekX, slideMs, { allowEdgePeek: true });
-        this.stopTimer();
-        this.timer = setTimeout(() => {
-          if (ShibaVisibilityController.isSuppressed() || ShibaSettings.getMode() !== 'active') return;
-          actor.classList.remove('facing-left');
-          this.setState('peek');
-          if (!ShibaSpeechBubble.isVisible() && Math.random() < 0.72) {
-            const msg = PEEK_PHRASES[Math.floor(Math.random() * PEEK_PHRASES.length)];
-            ShibaSpeechBubble.show(msg, { durationMs: 3200, showActions: false });
-          }
-          spawnParticles(['👀', '✨']);
-          this.scheduleNext(3400 + Math.random() * 1800);
-        }, slideMs + 80);
-      } else {
-        actor.classList.remove('facing-left');
-        this.setPosition(peekX, 320, { allowEdgePeek: true });
+      const slideMs = Math.max(450, Math.min(2200, Math.round(dist * 12)));
+      const enterPeek = () => {
+        if (ShibaVisibilityController.isSuppressed() || ShibaSettings.getMode() !== 'active') return;
+        actor.classList.toggle('facing-left', faceLeftWhenPeeking);
         this.setState('peek');
         if (!ShibaSpeechBubble.isVisible() && Math.random() < 0.72) {
           const msg = PEEK_PHRASES[Math.floor(Math.random() * PEEK_PHRASES.length)];
@@ -359,6 +359,15 @@
         }
         spawnParticles(['👀', '✨']);
         this.scheduleNext(3400 + Math.random() * 1800);
+      };
+      if (dist > 10) {
+        this.setState('walk');
+        this.setPosition(peekX, slideMs, { allowEdgePeek: true });
+        this.stopTimer();
+        this.timer = setTimeout(enterPeek, slideMs + 80);
+      } else {
+        this.setPosition(peekX, 320, { allowEdgePeek: true });
+        enterPeek();
       }
     },
     setState(nextState) {
@@ -397,9 +406,12 @@
 
       const roll = Math.random();
       if (this.state === 'peek') {
-        // Step back out smoothly from side edge
-        const { minX, maxX } = this.getBounds();
-        const exitTarget = Math.min(maxX, minX + 16 + Math.random() * 44);
+        // Step back out smoothly from whichever side edge Shiba is peeking from
+        const { minX, maxX, vw } = this.getBounds();
+        const isRightEdge = this.x > vw * 0.5;
+        const exitTarget = isRightEdge
+          ? Math.max(minX, maxX - 20 - Math.random() * 60)
+          : Math.min(maxX, minX + 20 + Math.random() * 60);
         this.setState('walk');
         this.setPosition(exitTarget, 850);
         this.scheduleNext(870);
@@ -428,16 +440,17 @@
       }
 
       if (roll < 0.66) {
-        // Take a lively short stroll with subtle pawprints
+        // Take a lively stroll across the full bottom width with subtle pawprints
         const { minX, maxX } = this.getBounds();
         const span = maxX - minX;
         if (span > 24) {
-          const delta = (Math.random() * 0.6 + 0.26) * span * (Math.random() < 0.5 ? 1 : -1);
-          let target = this.x + delta;
-          if (target < minX) target = minX + Math.abs(delta) * 0.65;
-          if (target > maxX) target = maxX - Math.abs(delta) * 0.65;
+          const maxStep = Math.min(420, Math.max(120, span * 0.68));
+          const minStep = Math.min(110, span * 0.25);
+          const stepDist = minStep + Math.random() * Math.max(20, maxStep - minStep);
+          const dir = this.x <= minX + 40 ? 1 : this.x >= maxX - 40 ? -1 : (Math.random() < 0.5 ? 1 : -1);
+          const target = Math.max(minX, Math.min(maxX, this.x + stepDist * dir));
           const dist = Math.abs(target - this.x);
-          const walkMs = Math.max(1200, Math.min(2500, Math.round(dist * 16)));
+          const walkMs = Math.max(1150, Math.min(3000, Math.round(dist * 13)));
           this.setState('walk');
           this.setPosition(target, walkMs);
           setTimeout(() => { if (this.state === 'walk') spawnPawprint(); }, Math.round(walkMs * 0.35));
@@ -545,8 +558,9 @@
       return;
     }
     if (ShibaAnimationController.state === 'peek') {
-      const { minX } = ShibaAnimationController.getBounds();
-      ShibaAnimationController.setPosition(minX + 18, 420);
+      const { minX, maxX, vw } = ShibaAnimationController.getBounds();
+      const stepInX = ShibaAnimationController.x > vw * 0.5 ? Math.max(minX, maxX - 24) : minX + 18;
+      ShibaAnimationController.setPosition(stepInX, 420);
       tapComboCount = 1;
       lastTapAt = Date.now();
       ShibaAnimationController.react({
