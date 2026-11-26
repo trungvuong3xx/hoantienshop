@@ -480,8 +480,16 @@ function markViewActivitySeen(viewName) {
   }
 }
 
+function closeAllAppSheets() {
+  if (typeof closeOrderDetailSheet === 'function') closeOrderDetailSheet();
+  if (typeof setReferralSheetOpen === 'function') setReferralSheetOpen(false);
+  if (typeof setWithdrawSheetOpen === 'function') setWithdrawSheetOpen(false);
+  document.body?.classList?.remove('sheet-lock');
+}
+
 // Navigation & History API
 function switchView(viewName, updateHistory = true, options = {}) {
+  closeAllAppSheets();
   let targetView = viewName;
   if (targetView === 'faq') {
     targetView = 'guide';
