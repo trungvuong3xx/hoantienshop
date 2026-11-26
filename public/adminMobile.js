@@ -24,6 +24,24 @@
   // Frequent work comes before occasional import and message tools.
   const ordersPane = document.getElementById('admTabOrders');
   ordersPane.querySelectorAll(':scope > details').forEach(e => ordersPane.append(e));
+  const MORE_ICON = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>';
+  const COPY_ICON = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+
+  // Accessible labels for icon-only buttons on mobile
+  const a11yButtons = {
+    refreshAdminBtn: 'Làm mới dữ liệu quản trị',
+    admOrderSearchBtn: 'Tìm kiếm đơn hàng',
+    admWithdrawalSearchBtn: 'Lọc và tìm yêu cầu rút tiền',
+    admUserSearchBtn: 'Tìm kiếm thành viên'
+  };
+  Object.entries(a11yButtons).forEach(([id, label]) => {
+    const btn = document.getElementById(id);
+    if (btn) {
+      btn.setAttribute('aria-label', label);
+      btn.setAttribute('title', label);
+    }
+  });
+
   const labels = { pending: 'Chờ xử lý', approved: 'Đã duyệt', cancelled: 'Đã hủy', paid: 'Đã chuyển', rejected: 'Từ chối' };
   const mobile = window.matchMedia('(max-width: 640px)');
   const arrangeActions = more => {
@@ -45,6 +63,10 @@
           const status = badge.textContent.trim();
           badge.textContent = status === 'pending' ? (body.id === 'admOrdersTableBody' ? 'Chờ đối soát' : 'Chờ thanh toán') : labels[status] || status;
         });
+        row.querySelectorAll('[data-manage-user]').forEach(btn => {
+          btn.setAttribute('aria-label', 'Quản lý thành viên');
+          btn.setAttribute('title', 'Quản lý thành viên');
+        });
         const group = row.querySelector('.admin-action-group');
         if (group) {
           const secondary = [...group.children].filter(e => e.matches('button') && !e.matches('[data-ord-action="approve"], [data-wd-action="paid"]'));
@@ -52,7 +74,7 @@
             const more = document.createElement('details');
             more.className = 'admin-more-actions';
             more.open = !mobile.matches;
-            more.innerHTML = '<summary>Thao tác khác</summary><div></div>';
+            more.innerHTML = `<summary aria-label="Thao tác khác" title="Thao tác khác">${MORE_ICON}</summary><div></div>`;
             secondary.forEach(e => more.lastElementChild.append(e));
             group.append(more);
             arrangeActions(more);
@@ -62,7 +84,9 @@
           const bankCell = row.cells[3];
           const copy = document.createElement('button');
           copy.type = 'button'; copy.className = 'btn btn-outline btn-xs admin-copy-bank';
-          copy.textContent = 'Sao chép STK';
+          copy.setAttribute('aria-label', 'Sao chép số tài khoản');
+          copy.setAttribute('title', 'Sao chép STK');
+          copy.innerHTML = `${COPY_ICON}<span>Sao chép STK</span>`;
           copy.addEventListener('click', async () => {
             const account = bankCell.querySelector('strong')?.textContent || '';
             try { await navigator.clipboard.writeText(account); showToast('Đã sao chép số tài khoản'); }
