@@ -1571,7 +1571,7 @@ function renderInstantPreviewCard(data) {
     : `<div class="ip-thumb ip-thumb-fallback">${UI_ICONS.shoppingBagLg}</div>`;
 
   const cashbackPill = estCashback
-    ? `<span class="cashback-pill">Hoàn tiền ước tính: <strong>${estCashback}</strong></span>`
+    ? `<span class="cashback-pill">Hoàn tối đa: <strong>${estCashback}</strong></span>`
     : `<span class="cashback-pill" style="background:#f1f5f9;color:#475569;">Có hoàn tiền</span>`;
 
   const authNotice = !authToken
@@ -1776,7 +1776,7 @@ async function handleGetCashbackLink(rawOptions) {
           const estCashbackStripHtml =
             item.estimatedCashback > 0
               ? `<div class="cp-cashback-strip">
-                   <span class="cp-cashback-label">Hoàn tiền ước tính</span>
+                   <span class="cp-cashback-label">Hoàn tối đa</span>
                    <strong class="cp-cashback-value">+ ${fmtVnd(item.estimatedCashback)}</strong>
                  </div>`
               : `<div class="cp-cashback-strip">

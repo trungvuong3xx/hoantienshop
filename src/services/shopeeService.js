@@ -268,10 +268,51 @@ async function fetchAddlivetagProductData({ platform, itemId, url, apiKey }) {
 
     const info = json.productInfo;
     const price = Number(info.price || 0);
-    const commRate = Number(
+    const SHOPEE_ADDLIVETAG_MAX_BASE_RATE_PERCENT = 2.5;
+
+    let commRate = Number(
       info.totalRatePercent || info.commissionRatePercent || info.shopeeRatePercent || 0
     );
-    const commission = Number(info.commission || (price * commRate) / 100);
+    let commission = Number(info.commission || (price * commRate) / 100);
+
+    const hasShopeeSplit =
+      platform === 'shopee' &&
+      (info.sellerComFinal != null ||
+        info.sellerRatePercent != null ||
+        info.shopeeRatePercent != null ||
+        info.shopeeComFinal != null);
+
+    if (hasShopeeSplit) {
+      const sellerRate = Math.max(
+        0,
+        Number(info.sellerRatePercent ?? Number(info.sellerRate || 0) * 100) || 0
+      );
+      const sellerCom =
+        info.sellerComFinal != null
+          ? Math.max(0, Number(info.sellerComFinal) || 0)
+          : Math.round((price * sellerRate) / 100);
+
+      const rawShopeeRate = Math.max(
+        0,
+        Number(info.shopeeRatePercent ?? Number(info.shopeeRate || 0) * 100) || 0
+      );
+      const cappedShopeeRate = Math.min(rawShopeeRate, SHOPEE_ADDLIVETAG_MAX_BASE_RATE_PERCENT);
+
+      let shopeeCom =
+        price > 0
+          ? Math.round((price * cappedShopeeRate) / 100)
+          : Math.max(0, Number(info.shopeeComFinal) || 0);
+      const cap = Number(info.cap || info.capAfterRate || 0);
+      if (cap > 0) {
+        shopeeCom = Math.min(shopeeCom, cap);
+      }
+      if (info.shopeeComFinal != null && Number(info.shopeeComFinal) >= 0) {
+        shopeeCom = Math.min(shopeeCom, Number(info.shopeeComFinal));
+      }
+
+      commRate = Number((sellerRate + cappedShopeeRate).toFixed(2));
+      commission = Math.round(sellerCom + shopeeCom);
+    }
 
     const result = {
       itemId: String(info.itemId || info.productId || itemId || ''),
