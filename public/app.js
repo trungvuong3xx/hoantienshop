@@ -311,7 +311,7 @@ async function apiFetch(url, options = {}) {
   const timeoutId = setTimeout(() => {
     timedOut = true;
     controller.abort();
-  }, 15000);
+  }, 25000);
 
   let signal;
   if (options.signal) {
