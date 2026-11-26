@@ -4234,10 +4234,14 @@ const pwaDismissBtn = document.getElementById('pwaDismissBtn');
 const pwaGuideModal = document.getElementById('pwaGuideModal');
 const pwaGuideContent = document.getElementById('pwaGuideContent');
 
-// Register Service Worker if supported + show update banner when a new version activates
+// Register Service Worker if supported + show update banner when a new version is waiting
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
+    let pendingWorker = null;
+    let reloadingForUpdate = false;
+
     const showUpdateBanner = (worker) => {
+      pendingWorker = worker || pendingWorker;
       const banner = document.getElementById('pwaUpdateBanner');
       const reloadBtn = document.getElementById('pwaReloadUpdateBtn');
       if (!banner) return;
@@ -4245,11 +4249,25 @@ if ('serviceWorker' in navigator) {
       if (reloadBtn && !reloadBtn.dataset.bound) {
         reloadBtn.dataset.bound = '1';
         reloadBtn.addEventListener('click', () => {
-          try { worker?.postMessage?.({ type: 'SKIP_WAITING' }); } catch {}
-          window.location.reload();
+          reloadBtn.disabled = true;
+          reloadBtn.textContent = 'Đang cập nhật...';
+          try { pendingWorker?.postMessage?.({ type: 'SKIP_WAITING' }); } catch {}
+          setTimeout(() => {
+            if (!reloadingForUpdate) {
+              reloadingForUpdate = true;
+              window.location.reload();
+            }
+          }, 700);
         });
       }
     };
+
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!reloadingForUpdate) {
+        reloadingForUpdate = true;
+        window.location.reload();
+      }
+    });
 
     navigator.serviceWorker.register('/sw.js').then((reg) => {
       if (reg.waiting && navigator.serviceWorker.controller) {
@@ -4265,6 +4283,11 @@ if ('serviceWorker' in navigator) {
         });
       });
       reg.update().catch(() => {});
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+          reg.update().catch(() => {});
+        }
+      });
     }).catch(() => {});
   });
 }
