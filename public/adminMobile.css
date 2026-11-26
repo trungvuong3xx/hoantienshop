@@ -16,8 +16,9 @@
   #view-admin .admin-banner { padding: 12px; gap: 10px; margin-bottom: 10px; }
   #view-admin .admin-banner-title-row h2 { font-size: 20px; }
   #view-admin .admin-db-pill { border-radius: 8px; font-size: 12px; overflow-wrap: anywhere; }
-  #view-admin .admin-tabs-nav { position: sticky; top: var(--admin-header-height, 64px); z-index: 20; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 2px; padding: 4px; overflow: visible; margin-bottom: 12px; }
-  #view-admin .admin-tab-btn { min-width: 0; min-height: 48px; padding: 6px 2px; font-size: 12px; gap: 3px; justify-content: center; flex-wrap: wrap; }
+  #view-admin .admin-tabs-nav { position: sticky; top: var(--admin-header-height, 64px); z-index: 20; display: flex; flex-wrap: nowrap; overflow-x: auto; scroll-snap-type: x proximity; gap: 4px; padding: 4px; margin-bottom: 12px; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+  #view-admin .admin-tabs-nav::-webkit-scrollbar { display: none; }
+  #view-admin .admin-tab-btn { flex: 0 0 auto; min-width: 82px; min-height: 44px; padding: 6px 10px; font-size: 12px; gap: 4px; justify-content: center; white-space: nowrap; scroll-snap-align: start; }
   #view-admin .admin-tab-btn > svg { display: none; }
   #view-admin .admin-tab-badge { font-size: 10px; padding: 0 4px; min-width: 16px; max-width: 100%; overflow-wrap: anywhere; }
   #view-admin .stats-grid-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-bottom: 12px; }

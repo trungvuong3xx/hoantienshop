@@ -1498,9 +1498,12 @@ async function fetchInstantPreview(rawText) {
   instantPreviewArea.classList.remove('hidden');
   instantPreviewCard.classList.add('loading');
   instantPreviewCard.innerHTML = `
-    <div style="display:flex;align-items:center;gap:10px;color:#64748b;font-size:13.5px;padding:8px 4px;">
-      ${UI_ICONS.loader}
-      <span>Đang tra cứu thông tin sản phẩm và tính toán mức hoàn tiền...</span>
+    <div class="preview-skeleton" aria-label="Đang tra cứu sản phẩm">
+      <div class="preview-skeleton-thumb"></div>
+      <div class="preview-skeleton-body">
+        <div class="skeleton-line w-80"></div>
+        <div class="skeleton-line w-50"></div>
+      </div>
     </div>
   `;
 
@@ -2619,7 +2622,7 @@ function setReferralSheetOpen(isOpen) {
   if (trigger) {
     trigger.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
   }
-  document.body.style.overflow = isOpen ? 'hidden' : '';
+  document.body.classList.toggle('sheet-lock', Boolean(isOpen));
 }
 
 on('openReferralSheetBtn', 'click', () => setReferralSheetOpen(true));
@@ -2631,9 +2634,13 @@ on('referralSheetOverlay', 'click', (e) => {
 });
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
-    const overlay = document.getElementById('referralSheetOverlay');
-    if (overlay && overlay.classList.contains('is-open')) {
+    const refOverlay = document.getElementById('referralSheetOverlay');
+    if (refOverlay && refOverlay.classList.contains('is-open')) {
       setReferralSheetOpen(false);
+    }
+    const wdOverlay = document.getElementById('withdrawSheetOverlay');
+    if (wdOverlay && wdOverlay.classList.contains('is-open')) {
+      setWithdrawSheetOpen(false);
     }
   }
 });
@@ -4227,10 +4234,36 @@ const pwaDismissBtn = document.getElementById('pwaDismissBtn');
 const pwaGuideModal = document.getElementById('pwaGuideModal');
 const pwaGuideContent = document.getElementById('pwaGuideContent');
 
-// Register Service Worker if supported
+// Register Service Worker if supported + show update banner when a new version activates
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
+    const showUpdateBanner = (worker) => {
+      const banner = document.getElementById('pwaUpdateBanner');
+      const reloadBtn = document.getElementById('pwaReloadUpdateBtn');
+      if (!banner) return;
+      banner.classList.remove('hidden');
+      if (reloadBtn && !reloadBtn.dataset.bound) {
+        reloadBtn.dataset.bound = '1';
+        reloadBtn.addEventListener('click', () => {
+          try { worker?.postMessage?.({ type: 'SKIP_WAITING' }); } catch {}
+          window.location.reload();
+        });
+      }
+    };
+
     navigator.serviceWorker.register('/sw.js').then((reg) => {
+      if (reg.waiting && navigator.serviceWorker.controller) {
+        showUpdateBanner(reg.waiting);
+      }
+      reg.addEventListener('updatefound', () => {
+        const nextWorker = reg.installing;
+        if (!nextWorker) return;
+        nextWorker.addEventListener('statechange', () => {
+          if (nextWorker.state === 'installed' && navigator.serviceWorker.controller) {
+            showUpdateBanner(nextWorker);
+          }
+        });
+      });
       reg.update().catch(() => {});
     }).catch(() => {});
   });
@@ -5040,9 +5073,38 @@ function renderLeaderboardTable(mode = 'spend') {
     }
   }
 
+  const podiumEl = document.getElementById('leaderboardPodium');
   if (!Array.isArray(list) || list.length === 0) {
+    if (podiumEl) {
+      podiumEl.innerHTML = '';
+      podiumEl.classList.add('hidden');
+    }
     tbody.innerHTML = '<tr><td colspan="4" class="text-center">Chưa có dữ liệu đơn đã duyệt để xếp hạng.</td></tr>';
     return;
+  }
+
+  if (podiumEl) {
+    const top3 = list.slice(0, 3);
+    if (top3.length >= 2) {
+      const ordered = top3.length === 3 ? [top3[1], top3[0], top3[2]] : [top3[1], top3[0]];
+      podiumEl.innerHTML = ordered
+        .map((item) => {
+          const val = activeLeaderboardTab === 'cashback' ? item.totalCashback : item.totalSpend;
+          const medalLabel = item.rank === 1 ? 'TOP 1' : item.rank === 2 ? 'TOP 2' : 'TOP 3';
+          return `
+            <div class="lb-podium-card rank-${item.rank}">
+              <span class="lb-podium-medal">${medalLabel}</span>
+              <div class="lb-podium-name" title="${escapeHtml(item.displayName)}">${escapeHtml(item.displayName)}</div>
+              <div class="lb-podium-val">${fmtVnd(val)}</div>
+            </div>
+          `;
+        })
+        .join('');
+      podiumEl.classList.remove('hidden');
+    } else {
+      podiumEl.innerHTML = '';
+      podiumEl.classList.add('hidden');
+    }
   }
 
   tbody.innerHTML = list
@@ -5144,13 +5206,172 @@ function saveRecentConvertedLink(entry) {
   }
 }
 
+function setWithdrawSheetOpen(isOpen) {
+  const overlay = document.getElementById('withdrawSheetOverlay');
+  if (!overlay) return;
+  overlay.classList.toggle('is-open', Boolean(isOpen));
+  overlay.setAttribute('aria-modal', isOpen ? 'true' : 'false');
+  document.body.classList.toggle('sheet-lock', Boolean(isOpen));
+}
+
 on('walletQuickWithdrawBtn', 'click', () => {
+  if (typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 640px)').matches) {
+    setWithdrawSheetOpen(true);
+    setTimeout(() => document.getElementById('withdrawAmountInput')?.focus(), 260);
+    return;
+  }
   const panel = document.getElementById('withdrawPanel');
   if (panel) {
     panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
     setTimeout(() => document.getElementById('withdrawAmountInput')?.focus(), 320);
   }
 });
+
+on('closeWithdrawSheetBtn', 'click', () => setWithdrawSheetOpen(false));
+on('withdrawSheetOverlay', 'click', (e) => {
+  if (e.target && e.target.id === 'withdrawSheetOverlay') {
+    setWithdrawSheetOpen(false);
+  }
+});
+
+// Withdraw live VND formatted preview + quick amount chips
+function updateWithdrawAmountPreview() {
+  const inp = document.getElementById('withdrawAmountInput');
+  const prev = document.getElementById('withdrawAmountPreview');
+  if (!inp || !prev) return;
+  const val = Number(inp.value || 0);
+  if (Number.isFinite(val) && val > 0) {
+    prev.textContent = `Số tiền rút: ${fmtVnd(val)}`;
+    prev.classList.remove('hidden');
+  } else {
+    prev.textContent = '';
+    prev.classList.add('hidden');
+  }
+}
+
+on('withdrawAmountInput', 'input', updateWithdrawAmountPreview);
+document.querySelectorAll('.wd-quick-chip').forEach((chip) => {
+  chip.addEventListener('click', () => {
+    const inp = document.getElementById('withdrawAmountInput');
+    if (!inp) return;
+    const raw = chip.getAttribute('data-wd-amount');
+    if (raw === 'max') {
+      document.getElementById('btnMaxWithdraw')?.click();
+    } else {
+      const n = Number(raw);
+      if (Number.isFinite(n) && n > 0) inp.value = String(n);
+    }
+    updateWithdrawAmountPreview();
+    try { navigator.vibrate?.(10); } catch {}
+  });
+});
+
+// Order Search Clear Button
+const ordSearchInp = document.getElementById('userOrderSearchInput');
+const ordSearchClear = document.getElementById('clearOrderSearchBtn');
+if (ordSearchInp && ordSearchClear) {
+  const syncOrdClear = () => ordSearchClear.classList.toggle('hidden', !ordSearchInp.value.trim());
+  ordSearchInp.addEventListener('input', syncOrdClear);
+  ordSearchClear.addEventListener('click', () => {
+    ordSearchInp.value = '';
+    syncOrdClear();
+    loadUserOrdersPage(1);
+    ordSearchInp.focus();
+  });
+}
+
+// Swipe-down-to-close on mobile Bottom Sheets (#withdrawSheetOverlay & #referralSheetOverlay)
+function attachSwipeDownToClose(overlayId, panelSelector, closeFn) {
+  const overlay = document.getElementById(overlayId);
+  const panel = overlay?.querySelector(panelSelector);
+  if (!overlay || !panel) return;
+  let startY = 0;
+  let dragging = false;
+  panel.addEventListener('touchstart', (e) => {
+    if (panel.scrollTop > 0 || !overlay.classList.contains('is-open')) return;
+    startY = e.touches[0].clientY;
+    dragging = true;
+  }, { passive: true });
+  panel.addEventListener('touchend', (e) => {
+    if (!dragging) return;
+    dragging = false;
+    const deltaY = (e.changedTouches?.[0]?.clientY || startY) - startY;
+    if (deltaY > 75) closeFn();
+  }, { passive: true });
+}
+attachSwipeDownToClose('withdrawSheetOverlay', '.app-sheet-panel', () => setWithdrawSheetOpen(false));
+attachSwipeDownToClose('referralSheetOverlay', '.referral-card', () => setReferralSheetOpen(false));
+
+// Auto-blur URL input when clicking Get Cashback Link so mobile keyboard reveals result card
+on('getCashbackLinkBtn', 'click', () => {
+  if (typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 640px)').matches) {
+    document.getElementById('productUrlInput')?.blur();
+  }
+});
+
+// Mobile Pull-to-Refresh on Orders, Wallet & Leaderboard
+(function initMobilePullToRefresh() {
+  if (typeof window.matchMedia !== 'function' || !window.matchMedia('(max-width: 768px)').matches) return;
+  const indicator = document.createElement('div');
+  indicator.className = 'ptr-indicator';
+  indicator.textContent = 'Thả ra để làm mới...';
+  document.body.appendChild(indicator);
+  let startY = 0;
+  let pulling = false;
+  let triggered = false;
+  window.addEventListener('touchstart', (e) => {
+    if (window.scrollY > 2 || document.body.classList.contains('sheet-lock')) return;
+    startY = e.touches[0].clientY;
+    pulling = true;
+    triggered = false;
+  }, { passive: true });
+  window.addEventListener('touchmove', (e) => {
+    if (!pulling) return;
+    const dy = e.touches[0].clientY - startY;
+    if (dy > 65 && window.scrollY <= 2) {
+      indicator.classList.add('is-visible');
+      triggered = true;
+    } else if (dy < 30) {
+      indicator.classList.remove('is-visible');
+      triggered = false;
+    }
+  }, { passive: true });
+  window.addEventListener('touchend', () => {
+    if (!pulling) return;
+    pulling = false;
+    indicator.classList.remove('is-visible');
+    if (!triggered) return;
+    triggered = false;
+    const activeView = document.querySelector('.view-section.active')?.id;
+    if (activeView === 'view-orders' && typeof loadUserOrdersPage === 'function') {
+      loadUserOrdersPage(1);
+      showToast('Đang làm mới danh sách đơn hàng...');
+    } else if (activeView === 'view-wallet' && typeof loadUserDashboard === 'function') {
+      loadUserDashboard();
+      showToast('Đang cập nhật số dư ví...');
+    } else if (activeView === 'view-leaderboard' && typeof loadPublicLeaderboard === 'function') {
+      loadPublicLeaderboard();
+      showToast('Đang cập nhật bảng xếp hạng...');
+    }
+  }, { passive: true });
+})();
+
+// PWA Share Target: handle ?shared_url= / ?text= / ?url= shared from Shopee/TikTok on Android
+(function handlePwaShareTarget() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const shared = params.get('shared_url') || params.get('url') || params.get('text') || '';
+    if (!shared.trim()) return;
+    const urlInput = document.getElementById('productUrlInput');
+    if (urlInput) {
+      urlInput.value = shared.trim();
+      urlInput.dispatchEvent(new Event('input', { bubbles: true }));
+      const cleanUrl = window.location.pathname + window.location.hash;
+      window.history.replaceState({}, '', cleanUrl);
+      setTimeout(() => document.getElementById('getCashbackLinkBtn')?.click(), 300);
+    }
+  } catch {}
+})();
 
 on('walletQuickHistoryBtn', 'click', () => {
   const panel = document.getElementById('walletHistoryPanel');

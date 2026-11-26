@@ -15,6 +15,23 @@
   --emerald-light: #ecfdf5;
   --blue: #2563eb;
   --amber: #d97706;
+  --danger: #dc2626;
+  --danger-soft: #fef2f2;
+  --warning-soft: #fffbeb;
+  --info-soft: #eff6ff;
+  --brand-orange: #ea580c;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --touch-min: 44px;
+  --z-sticky: 20;
+  --z-nav: 85;
+  --z-sheet: 95;
+  --z-modal: 1000;
+  --z-toast: 2000;
   --radius-xl: 20px;
   --radius-lg: 14px;
   --radius-md: 10px;
@@ -6051,5 +6068,451 @@ body:has(#conversionResultSection:not(.hidden)) .floating-zalo {
 @media (max-width: 374px) {
   .manage-reset-result-actions {
     grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+
+/* ==================== MOBILE APP UX V2.9 UPGRADE ==================== */
+button,
+a,
+.mobile-nav-item,
+.order-filter-pill,
+.seg-btn {
+  touch-action: manipulation;
+}
+
+body.sheet-lock {
+  overflow: hidden;
+}
+
+@keyframes viewTabEnter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.view-section.active {
+  animation: viewTabEnter 0.18s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .view-section.active {
+    animation: none;
+  }
+}
+
+/* Auth: Forgot Password link below Login CTA */
+.auth-forgot-row {
+  display: flex;
+  justify-content: center;
+  margin-top: 10px;
+}
+
+.auth-forgot-link {
+  background: none;
+  border: 0;
+  padding: 6px 12px;
+  color: var(--shopee);
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: 8px;
+}
+
+.auth-forgot-link:hover {
+  background: var(--shopee-light);
+}
+
+/* Withdraw Live Amount Preview & Quick-Select Chips */
+.wd-amount-preview {
+  margin-top: 6px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--emerald);
+  font-variant-numeric: tabular-nums;
+}
+
+.wd-quick-chips {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.wd-quick-chip {
+  min-height: 36px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-soft);
+  color: var(--text-sub);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.wd-quick-chip:active {
+  transform: scale(0.96);
+}
+
+.wd-quick-chip.is-max {
+  background: var(--emerald-light);
+  border-color: #a7f3d0;
+  color: var(--emerald-dark);
+}
+
+/* Orders Search Input with Clear X */
+.orders-search-input-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+}
+
+.orders-search-input-wrap input {
+  width: 100%;
+  padding-right: 34px !important;
+}
+
+.orders-search-clear {
+  position: absolute;
+  right: 6px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 0;
+  background: #e2e8f0;
+  color: #475569;
+  font-size: 15px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.order-sn-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 3px 7px;
+  font-family: monospace;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-main);
+  cursor: pointer;
+}
+
+.order-sn-copy-btn:active {
+  transform: scale(0.96);
+  background: #e2e8f0;
+}
+
+/* Leaderboard Top 3 Podium */
+.lb-podium {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-top: 14px;
+  align-items: end;
+}
+
+.lb-podium-card {
+  background: #ffffff;
+  border: 1.5px solid var(--border);
+  border-radius: 14px;
+  padding: 12px 8px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.lb-podium-card.rank-1 {
+  background: linear-gradient(180deg, #fffbeb 0%, #ffffff 100%);
+  border-color: #fbbf24;
+  padding: 16px 8px;
+  box-shadow: 0 8px 20px rgba(245, 158, 11, 0.14);
+}
+
+.lb-podium-card.rank-2 {
+  background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);
+  border-color: #cbd5e1;
+}
+
+.lb-podium-card.rank-3 {
+  background: linear-gradient(180deg, #fff7ed 0%, #ffffff 100%);
+  border-color: #fdba74;
+}
+
+.lb-podium-medal {
+  font-size: 11px;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+.rank-1 .lb-podium-medal { background: #fef3c7; color: #b45309; }
+.rank-2 .lb-podium-medal { background: #e2e8f0; color: #334155; }
+.rank-3 .lb-podium-medal { background: #ffedd5; color: #c2410c; }
+
+.lb-podium-name {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-main);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lb-podium-val {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--shopee);
+  font-variant-numeric: tabular-nums;
+}
+
+/* FAQ Accordion */
+details.faq-accordion {
+  cursor: pointer;
+}
+
+details.faq-accordion summary {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+details.faq-accordion summary::-webkit-details-marker {
+  display: none;
+}
+
+details.faq-accordion summary h4 {
+  margin: 0;
+}
+
+details.faq-accordion summary::after {
+  content: '▾';
+  font-size: 14px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+}
+
+details.faq-accordion[open] summary::after {
+  transform: rotate(180deg);
+}
+
+details.faq-accordion[open] p {
+  margin-top: 8px;
+}
+
+/* Product Preview Skeleton */
+.preview-skeleton {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 2px;
+}
+
+.preview-skeleton-thumb {
+  width: 60px;
+  height: 60px;
+  border-radius: 12px;
+  flex-shrink: 0;
+  background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.2s infinite;
+}
+
+.preview-skeleton-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Pull-to-Refresh Indicator */
+.ptr-indicator {
+  position: fixed;
+  top: calc(64px + env(safe-area-inset-top, 0px));
+  left: 50%;
+  transform: translate(-50%, -60px);
+  background: #0f172a;
+  color: #ffffff;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 7px 14px;
+  border-radius: 999px;
+  z-index: var(--z-modal);
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 0.18s ease, opacity 0.18s ease;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.2);
+}
+
+.ptr-indicator.is-visible {
+  opacity: 1;
+  transform: translate(-50%, 8px);
+}
+
+/* PWA Update Banner */
+.pwa-update-banner {
+  position: fixed;
+  top: calc(12px + env(safe-area-inset-top, 0px));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: calc(var(--z-toast) + 10);
+  background: #0f172a;
+  color: #ffffff;
+  padding: 9px 14px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.28);
+  max-width: calc(100vw - 24px);
+}
+
+/* Unified App Bottom Sheet (Transparent wrapper on Desktop, Slide-Up Sheet on Mobile) */
+.app-sheet-topbar {
+  display: none;
+}
+
+.app-sheet-overlay {
+  display: contents;
+}
+
+@media (max-width: 640px) {
+  .app-sheet-overlay {
+    display: flex;
+    align-items: flex-end;
+    position: fixed;
+    top: var(--vv-top, 0px);
+    left: 0;
+    right: 0;
+    height: var(--vvh, 100dvh);
+    z-index: var(--z-sheet);
+    background: rgba(15, 23, 42, 0.48);
+    backdrop-filter: blur(2px);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.22s ease;
+  }
+
+  .app-sheet-overlay.is-open {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .app-sheet-overlay .app-sheet-panel {
+    width: 100%;
+    max-height: calc(var(--vvh, 100dvh) - 24px);
+    overflow-y: auto;
+    margin: 0 !important;
+    border-radius: 22px 22px 0 0 !important;
+    border-bottom: none;
+    padding: 10px 16px calc(20px + env(safe-area-inset-bottom, 0px)) !important;
+    box-shadow: 0 -12px 32px rgba(15, 23, 42, 0.22);
+    transform: translateY(100%);
+    transition: transform 0.26s cubic-bezier(0.16, 1, 0.3, 1);
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .app-sheet-overlay.is-open .app-sheet-panel {
+    transform: translateY(0);
+  }
+
+  .app-sheet-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: sticky;
+    top: -10px;
+    background: inherit;
+    padding: 4px 0 10px;
+    z-index: 3;
+  }
+
+  .app-sheet-handle {
+    width: 40px;
+    height: 4px;
+    border-radius: 999px;
+    background: #cbd5e1;
+  }
+
+  .app-sheet-close {
+    position: absolute;
+    right: 0;
+    top: 0;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: #ffffff;
+    color: var(--text-sub);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    padding: 0;
+  }
+
+  /* Upgrade Referral Sheet to use var(--vvh) too */
+  .ref-sheet-overlay {
+    top: var(--vv-top, 0px);
+    bottom: auto;
+    height: var(--vvh, 100dvh);
+  }
+
+  .ref-sheet-overlay .referral-card {
+    max-height: calc(var(--vvh, 100dvh) - 24px);
+    overscroll-behavior: contain;
+  }
+
+  /* Top Floating Toast on Mobile (never covered by keyboard or Bottom Nav) */
+  #toast.toast {
+    top: calc(14px + env(safe-area-inset-top, 0px)) !important;
+    bottom: auto !important;
+    z-index: var(--z-toast) !important;
+    max-width: calc(100vw - 28px);
+  }
+
+  /* Compact Horizontal Snap Rules Strip on Mobile Home */
+  #view-home .rules-grid {
+    display: flex;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    gap: 10px;
+    padding-bottom: 6px;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  #view-home .rules-grid > * {
+    flex: 0 0 82%;
+    scroll-snap-align: start;
   }
 }

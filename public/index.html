@@ -64,9 +64,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link id="webFont" media="print" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/styles.css?v=2.8.2" />
+  <link rel="stylesheet" href="/styles.css?v=2.9.0" />
   <link rel="stylesheet" href="/selectPopup.css?v=3" />
-  <script src="/app.js?v=2.8.1" defer></script>
+  <script src="/app.js?v=2.9.0" defer></script>
   <script src="/selectPopup.js?v=3" defer></script>
 </head>
 <body>
@@ -159,6 +159,7 @@
                 id="productUrlInput"
                 placeholder="Dán link Shopee hoặc TikTok..."
                 autocomplete="off"
+                enterkeyhint="go"
                 aria-label="Dán link sản phẩm Shopee hoặc TikTok Shop"
               />
               <div class="search-input-actions">
@@ -369,7 +370,10 @@
           <div class="orders-toolbar">
             <h3>Danh sách đơn hàng</h3>
             <div class="orders-search-box">
-              <input type="text" id="userOrderSearchInput" placeholder="Tìm mã đơn, tên sản phẩm..." aria-label="Tìm kiếm đơn hàng" />
+              <div class="orders-search-input-wrap">
+                <input type="search" id="userOrderSearchInput" enterkeyhint="search" placeholder="Tìm mã đơn, tên sản phẩm..." aria-label="Tìm kiếm đơn hàng" />
+                <button type="button" class="orders-search-clear hidden" id="clearOrderSearchBtn" aria-label="Xóa tìm kiếm">×</button>
+              </div>
               <button type="button" class="btn btn-outline btn-sm btn-icon-svg" id="userOrderSearchBtn">
                 <svg class="svg-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                 <span>Tìm</span>
@@ -483,8 +487,15 @@
         </div>
 
         <div class="wallet-two-col">
-          <!-- Left: Withdraw Form -->
-          <div class="panel withdraw-panel" id="withdrawPanel">
+          <!-- Left: Withdraw Form (Inline on Desktop, Slide-Up Bottom Sheet on Mobile) -->
+          <div id="withdrawSheetOverlay" class="app-sheet-overlay" role="dialog" aria-modal="false" aria-label="Rút tiền về tài khoản">
+          <div class="panel withdraw-panel app-sheet-panel" id="withdrawPanel">
+            <div class="app-sheet-topbar">
+              <span class="app-sheet-handle" aria-hidden="true"></span>
+              <button type="button" class="app-sheet-close" id="closeWithdrawSheetBtn" aria-label="Đóng">
+                <svg class="svg-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
             <h3>Rút Tiền Về Tài Khoản</h3>
             <p class="panel-sub">Hạn mức rút tối thiểu: <strong id="minWithdrawLabel">50.000đ</strong>. Miễn phí rút tiền qua Ngân hàng hoặc MoMo.</p>
 
@@ -538,24 +549,32 @@
               </div>
               <div class="form-group">
                 <label for="wdBankOwner" id="wdBankOwnerLabel">Tên chủ tài khoản (Không dấu)</label>
-                <input type="text" id="wdBankOwner" maxlength="60" placeholder="VD: NGUYEN VAN A" style="text-transform:uppercase;" required />
+                <input type="text" id="wdBankOwner" maxlength="60" autocapitalize="characters" enterkeyhint="next" placeholder="VD: NGUYEN VAN A" style="text-transform:uppercase;" required />
               </div>
               <div class="form-group">
                 <div style="display:flex;justify-content:space-between;align-items:center;">
                   <label for="withdrawAmountInput">Số tiền muốn rút (VNĐ)</label>
                   <button type="button" class="btn btn-ghost btn-xs" id="btnMaxWithdraw" style="color:#059669;font-weight:700;padding:0 6px;">Rút tối đa</button>
                 </div>
-                <input type="number" id="withdrawAmountInput" name="wdAmount" inputmode="numeric" min="50000" step="1000" placeholder="VD: 50000" required />
+                <input type="number" id="withdrawAmountInput" name="wdAmount" inputmode="numeric" enterkeyhint="done" min="50000" step="1000" placeholder="VD: 50000" required />
+                <div id="withdrawAmountPreview" class="wd-amount-preview hidden" aria-live="polite"></div>
+                <div class="wd-quick-chips" aria-label="Chọn nhanh số tiền rút">
+                  <button type="button" class="wd-quick-chip" data-wd-amount="50000">50k</button>
+                  <button type="button" class="wd-quick-chip" data-wd-amount="100000">100k</button>
+                  <button type="button" class="wd-quick-chip" data-wd-amount="200000">200k</button>
+                  <button type="button" class="wd-quick-chip is-max" data-wd-amount="max">Tất cả</button>
+                </div>
               </div>
               <div class="form-group hidden" id="wdPasswordConfirmGroup">
                 <label for="wdCurrentPassword" class="inline-icon-label" style="color:#d97706;">
                   <svg class="svg-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
                   <span>Xác nhận mật khẩu khi thêm hoặc đổi tài khoản nhận tiền</span>
                 </label>
-                <input type="password" id="wdCurrentPassword" autocomplete="current-password" placeholder="Nhập mật khẩu đăng nhập để xác nhận..." />
+                <input type="password" id="wdCurrentPassword" autocomplete="current-password" enterkeyhint="done" placeholder="Nhập mật khẩu đăng nhập để xác nhận..." />
               </div>
               <button type="submit" class="btn btn-success btn-full" id="submitWithdrawBtn">Gửi Yêu Cầu Rút Tiền</button>
             </form>
+          </div>
           </div>
 
           <!-- Right: Financial History with Segmented Control -->
@@ -680,11 +699,11 @@
             <form id="accProfileForm" class="form-stack">
               <div class="form-group">
                 <label for="accProfileName">Họ và tên hiển thị</label>
-                <input type="text" id="accProfileName" maxlength="60" placeholder="Nhập họ và tên của bạn..." required />
+                <input type="text" id="accProfileName" autocomplete="name" enterkeyhint="next" maxlength="60" placeholder="Nhập họ và tên của bạn..." required />
               </div>
               <div class="form-group">
                 <label for="accProfileEmail">Email khôi phục mật khẩu <span style="font-weight:400;color:#64748b;font-size:12px;">(Không bắt buộc)</span></label>
-                <input type="email" id="accProfileEmail" autocomplete="email" maxlength="80" placeholder="VD: tenban@gmail.com (dùng khi quên mật khẩu)..." />
+                <input type="email" id="accProfileEmail" autocomplete="email" enterkeyhint="next" maxlength="80" placeholder="VD: tenban@gmail.com (dùng khi quên mật khẩu)..." />
               </div>
               <div class="form-group">
                 <label for="accBankMethod">Phương thức nhận tiền mặc định</label>
@@ -724,7 +743,7 @@
               </div>
               <div class="form-group">
                 <label for="accBankOwner" id="accBankOwnerLabel">Tên chủ tài khoản (Không dấu)</label>
-                <input type="text" id="accBankOwner" maxlength="60" placeholder="VD: NGUYEN VAN A" class="uppercase-input" />
+                <input type="text" id="accBankOwner" maxlength="60" autocapitalize="characters" enterkeyhint="done" placeholder="VD: NGUYEN VAN A" class="uppercase-input" />
               </div>
               <div class="form-group hidden" id="accBankPasswordGroup">
                 <label for="accBankCurrentPassword" class="inline-icon-label warn-label">
@@ -907,7 +926,7 @@
       <div class="panel">
         <div class="panel-head-row">
           <div>
-            <h2 class="inline-icon-row"><svg class="svg-icon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#ee4d2d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg><span>Bảng Xếp Hạng Thành Viên</span></h2>
+            <h2 class="inline-icon-row"><svg class="svg-icon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#ee4d2d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg><span>Bảng Xếp Hạng</span></h2>
             <p class="panel-sub-inline">Vinh danh các thành viên có tổng giá trị đơn hàng và tổng tiền hoàn cao nhất (chỉ tính đơn đã duyệt).</p>
           </div>
           <div class="lb-tabs" role="tablist" aria-label="Chế độ xếp hạng">
@@ -917,6 +936,7 @@
         </div>
 
         <div id="leaderboardMyRank" class="lb-my-rank hidden"></div>
+        <div id="leaderboardPodium" class="lb-podium hidden" aria-label="Top 3 thành viên"></div>
 
         <div class="table-responsive" style="margin-top: 12px;">
           <table class="data-table">
@@ -980,22 +1000,22 @@
       <div class="panel">
         <h2>Câu Hỏi Thường Gặp (FAQ) — Vì Sao Đơn Hàng Không Được Ghi Nhận?</h2>
         <div class="faq-list">
-          <div class="faq-item">
-            <h4>1. Vì sao tôi đã đặt hàng nhưng chưa thấy đơn hiện trong Ví?</h4>
+          <details class="faq-item faq-accordion" open>
+            <summary><h4>1. Vì sao tôi đã đặt hàng nhưng chưa thấy đơn hiện trong Ví?</h4></summary>
             <p>Hệ thống của Shopee và TikTok Shop không gửi báo cáo tức thì ngay giây phút bạn bấm đặt hàng, mà thường tổng hợp đối soát sau <strong>12 giờ đến 24 giờ</strong> (thậm chí 48 giờ vào các ngày hội sale lớn như 11.11, 12.12). Bạn có thể nhập trước Mã đơn hàng vào mục Ví để theo dõi.</p>
-          </div>
-          <div class="faq-item">
-            <h4>2. Những nguyên nhân nào khiến đơn hàng bị sàn từ chối tính hoa hồng hoàn tiền?</h4>
+          </details>
+          <details class="faq-item faq-accordion">
+            <summary><h4>2. Những nguyên nhân nào khiến đơn hàng bị sàn từ chối tính hoa hồng hoàn tiền?</h4></summary>
             <p>Đơn hàng sẽ không phát sinh hoa hồng nếu: (a) Sản phẩm đã nằm sẵn trong giỏ hàng từ trước khi bạn bấm link hoàn tiền; (b) Bạn bấm vào link giới thiệu khác trên Facebook/Livestream/Video trước khi thanh toán; (c) Thiết bị bật trình chặn quảng cáo (Adblock/DNS chặn tracking); hoặc (d) Bạn hủy đơn cũ rồi bấm "Mua lại" trực tiếp trong ứng dụng mà không tạo lại link hoàn tiền.</p>
-          </div>
-          <div class="faq-item">
-            <h4>3. Tiền hoàn được tính như thế nào?</h4>
+          </details>
+          <details class="faq-item faq-accordion">
+            <summary><h4>3. Tiền hoàn được tính như thế nào?</h4></summary>
             <p>Hệ thống áp dụng chính sách: <strong>Chia sẻ lên đến 70% hoa hồng sàn thực nhận (tương đương ~63% sau khi trừ 10% thuế TNCN theo quy định)</strong>. Bạn có thể xem số tiền hoàn dự kiến khi tạo link và theo dõi số tiền được duyệt trong mục Đơn hàng.</p>
-          </div>
-          <div class="faq-item">
-            <h4>4. Bao lâu thì tiền hoàn từ trạng thái "Chờ đối soát" chuyển sang "Khả dụng" để rút?</h4>
+          </details>
+          <details class="faq-item faq-accordion">
+            <summary><h4>4. Bao lâu thì tiền hoàn từ trạng thái "Chờ đối soát" chuyển sang "Khả dụng" để rút?</h4></summary>
             <p>Sau khi bạn nhận hàng thành công và bấm "Đã nhận được hàng" (không phát sinh trả hàng/hoàn tiền trong vòng 7 - 14 ngày theo quy định bảo vệ người mua của sàn), sàn sẽ chốt hoa hồng và hệ thống tự động cộng vào Số dư khả dụng của bạn.</p>
-          </div>
+          </details>
           <div class="faq-item" id="faq-zalo-safety">
             <h4 class="faq-question inline-icon-heading">
               <span class="faq-shield-badge" aria-hidden="true"><svg class="svg-icon" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg></span>
@@ -1872,17 +1892,17 @@
       <form id="loginFormBox" class="modal-body-form">
         <div class="form-group">
           <label for="loginIdentifier">Số điện thoại hoặc Email</label>
-          <input type="text" id="loginIdentifier" name="username" autocomplete="username" maxlength="80" placeholder="Nhập số điện thoại hoặc email..." required />
+          <input type="text" id="loginIdentifier" name="username" autocomplete="username" enterkeyhint="next" maxlength="80" placeholder="Nhập số điện thoại hoặc email..." required />
         </div>
         <div class="form-group">
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
-            <label for="loginPassword" style="margin-bottom:0;">Mật khẩu</label>
-            <button type="button" id="openForgotPwdBtn" style="background:none;border:0;padding:2px 0;color:#ee4d2d;font-size:13px;font-weight:600;cursor:pointer;">Quên mật khẩu?</button>
-          </div>
-          <input type="password" id="loginPassword" name="password" autocomplete="current-password" maxlength="64" placeholder="Nhập mật khẩu..." required />
+          <label for="loginPassword">Mật khẩu</label>
+          <input type="password" id="loginPassword" name="password" autocomplete="current-password" enterkeyhint="done" maxlength="64" placeholder="Nhập mật khẩu..." required />
         </div>
         <div id="loginTurnstile" class="cf-turnstile" style="margin: 6px 0;"></div>
         <button type="submit" class="btn btn-primary btn-full" id="doLoginBtn">Đăng Nhập</button>
+        <div class="auth-forgot-row">
+          <button type="button" id="openForgotPwdBtn" class="auth-forgot-link">Quên mật khẩu?</button>
+        </div>
       </form>
 
       <!-- Forgot Password Form (2-step Email OTP + Zalo CSKH fallback) -->
@@ -2186,6 +2206,12 @@
     <div class="notif-list" id="notifList">
       <div class="notif-empty">Chưa có thông báo nào.</div>
     </div>
+  </div>
+
+  <!-- PWA Update Available Banner -->
+  <div id="pwaUpdateBanner" class="pwa-update-banner hidden" role="status" aria-live="polite">
+    <span>LiLa có bản cập nhật mới mượt hơn!</span>
+    <button type="button" class="btn btn-primary btn-xs" id="pwaReloadUpdateBtn">Cập nhật ngay</button>
   </div>
 
   <!-- Toast -->
