@@ -425,7 +425,7 @@ function ensureAdminAssetsLoaded() {
     });
 
   adminAssetsPromise = Promise.all([
-    loadStyle('/adminMobile.css?v=2'),
+    loadStyle('/adminMobile.css?v=3'),
     loadScript('/csvImport.js?v=2.3.3'),
     loadScript('/tiktokReply.js?v=2'),
     loadScript('/adminMobile.js?v=3')
@@ -618,6 +618,26 @@ document.body.addEventListener('click', (e) => {
     return;
   }
 
+  const wdFilterBtn = e.target.closest('[data-wd-filter]');
+  if (wdFilterBtn) {
+    activeWalletWdFilter = wdFilterBtn.getAttribute('data-wd-filter') || 'all';
+    document.querySelectorAll('[data-wd-filter]').forEach((b) => {
+      b.classList.toggle('active', b.getAttribute('data-wd-filter') === activeWalletWdFilter);
+    });
+    renderUserWithdrawalsHistory();
+    return;
+  }
+
+  const ledgerFilterBtn = e.target.closest('[data-ledger-filter]');
+  if (ledgerFilterBtn) {
+    activeWalletLedgerFilter = ledgerFilterBtn.getAttribute('data-ledger-filter') || 'all';
+    document.querySelectorAll('[data-ledger-filter]').forEach((b) => {
+      b.classList.toggle('active', b.getAttribute('data-ledger-filter') === activeWalletLedgerFilter);
+    });
+    renderUserLedgerHistory();
+    return;
+  }
+
   const orderPlatBtn = e.target.closest('[data-order-platform]');
   if (orderPlatBtn) {
     activeOrderPlatformFilter = orderPlatBtn.getAttribute('data-order-platform') || 'all';
@@ -774,12 +794,20 @@ window.addEventListener('keydown', (e) => {
 
 let isBalanceHidden = safeStorage.get('hts_hide_balance') === '1';
 
+let latestPendingWithdrawn = 0;
+let latestUserWithdrawals = [];
+let latestUserLedger = [];
+let activeWalletWdFilter = 'all';
+let activeWalletLedgerFilter = 'all';
+
 function updateBalancePrivacyDisplay() {
   const maskText = '••••••đ';
-  const avail = currentUser ? fmtVnd(currentUser.balanceAvailable) : '0đ';
+  const availNum = Number(currentUser?.balanceAvailable || 0);
+  const avail = currentUser ? fmtVnd(availNum) : '0đ';
   const pend = currentUser ? fmtVnd(currentUser.balancePending) : '0đ';
   const earned = currentUser ? fmtVnd(currentUser.totalEarned) : '0đ';
   const withdrawn = currentUser ? fmtVnd(currentUser.totalWithdrawn) : '0đ';
+  const pendWd = fmtVnd(latestPendingWithdrawn);
 
   const setTxt = (id, txt) => {
     const el = document.getElementById(id);
@@ -791,8 +819,19 @@ function updateBalancePrivacyDisplay() {
   setTxt('statPending', isBalanceHidden ? maskText : pend);
   setTxt('statTotalEarned', isBalanceHidden ? maskText : earned);
   setTxt('statWithdrawn', isBalanceHidden ? maskText : withdrawn);
+  setTxt('statPendingWithdraw', isBalanceHidden ? maskText : pendWd);
   setTxt('userOrdSummaryPending', isBalanceHidden ? maskText : pend);
   setTxt('userOrdSummaryApproved', isBalanceHidden ? maskText : earned);
+
+  const pendWdPill = document.getElementById('walletPendingWithdrawPill');
+  if (pendWdPill) pendWdPill.classList.toggle('hidden', latestPendingWithdrawn <= 0);
+
+  const negAlert = document.getElementById('walletNegativeBalanceAlert');
+  if (negAlert) negAlert.classList.toggle('hidden', !(currentUser && availNum < 0));
+
+  const amtInput = document.getElementById('withdrawAmountInput');
+  const minW = numOr(publicConfig.minWithdrawAmount, 50000);
+  if (amtInput) amtInput.setAttribute('min', String(minW));
 
   const privacyBtn = document.getElementById('toggleBalancePrivacyBtn');
   if (privacyBtn) {
@@ -950,6 +989,21 @@ function syncUserAvatarEverywhere(user) {
   }
 }
 
+function maskBankAccountNumber(raw) {
+  const clean = String(raw || '').replace(/\s+/g, '');
+  if (!clean) return '';
+  if (clean.length <= 4) return clean;
+  return `••••${clean.slice(-4)}`;
+}
+
+function getVipTierLabel(tierCode) {
+  const key = String(tierCode || 'bronze').toLowerCase();
+  if (key.includes('diamond') || key.includes('kim')) return 'Kim Cương';
+  if (key.includes('gold') || key.includes('vàng')) return 'Vàng';
+  if (key.includes('silver') || key.includes('bạc')) return 'Bạc';
+  return 'Đồng';
+}
+
 function syncAccountProfileUi({ populateForm = false } = {}) {
   if (!currentUser) return;
   const setTxt = (id, txt) => {
@@ -962,13 +1016,21 @@ function syncAccountProfileUi({ populateForm = false } = {}) {
   setTxt('accountUserPhone', currentUser.phone || 'Chưa cập nhật SĐT');
   setTxt('accountUserCode', currentUser.code || '...');
 
+  const vipBadgeEl = document.getElementById('accountUserVipBadge');
+  if (vipBadgeEl) {
+    const tierCode = currentUser.vipTier || 'bronze';
+    vipBadgeEl.innerHTML = `${renderVipBadgeSvg(tierCode, false)}<span>Hạng ${escapeHtml(getVipTierLabel(tierCode))}</span>`;
+    vipBadgeEl.classList.remove('hidden');
+  }
+
   const bankSummaryEl = document.getElementById('accountBankSummary');
   if (bankSummaryEl) {
     if (currentUser.bankName && currentUser.bankAccount) {
+      const maskedAcc = maskBankAccountNumber(currentUser.bankAccount);
       const ownerPart = currentUser.bankOwner ? ` • ${escapeHtml(currentUser.bankOwner)}` : '';
-      bankSummaryEl.innerHTML = `${UI_ICONS.landmark}<span>Tài khoản nhận tiền: ${escapeHtml(currentUser.bankName)} — ${escapeHtml(currentUser.bankAccount)}${ownerPart}</span>`;
+      bankSummaryEl.innerHTML = `${UI_ICONS.landmark}<span class="profile-bank-text">${escapeHtml(currentUser.bankName)} • ${escapeHtml(maskedAcc)}${ownerPart}</span><span class="profile-bank-edit">Sửa ›</span>`;
     } else {
-      bankSummaryEl.innerHTML = `${UI_ICONS.landmark}<span>Chưa lưu thông tin nhận tiền (bấm Hồ sơ &amp; Ngân hàng bên dưới để thiết lập)</span>`;
+      bankSummaryEl.innerHTML = `${UI_ICONS.landmark}<span class="profile-bank-text">Chưa lưu tài khoản nhận tiền</span><span class="profile-bank-edit">Thiết lập ›</span>`;
     }
   }
 
@@ -1496,9 +1558,23 @@ on('logoutBtn', 'click', () => {
   showToast('Đã đăng xuất tài khoản.');
 });
 
-on('accountLogoutBtn', 'click', () => {
+on('accountLogoutBtn', 'click', async () => {
+  const confirmed = await askUserConfirm(
+    'Bạn có chắc muốn đăng xuất khỏi tài khoản LiLa trên thiết bị này?',
+    'Đăng Xuất'
+  );
+  if (!confirmed) return;
   clearSession();
   showToast('Đã đăng xuất tài khoản.');
+});
+
+on('accountBankSummary', 'click', () => {
+  const panel = document.getElementById('accProfilePanel');
+  const toggleBtn = document.getElementById('toggleAccProfileBtn');
+  if (panel && panel.classList.contains('hidden')) {
+    toggleBtn?.click();
+  }
+  panel?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 });
 
 on('copyAccountCodeBtn', 'click', () => {
@@ -2684,18 +2760,119 @@ async function loadUserOrdersPage(page = 1) {
   }
 }
 
+function fmtWalletDateTime(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '—';
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  return `${hh}:${mm} ${d.toLocaleDateString('vi-VN')}`;
+}
+
+function renderUserLedgerHistory() {
+  const ledBody = document.getElementById('userLedgerTableBody');
+  if (!ledBody) return;
+  const list = (latestUserLedger || []).filter((l) => {
+    const amt = Number(l.amount || 0);
+    if (activeWalletLedgerFilter === 'in') return amt >= 0;
+    if (activeWalletLedgerFilter === 'out') return amt < 0;
+    return true;
+  });
+  if (list.length === 0) {
+    const isFiltered = activeWalletLedgerFilter !== 'all';
+    ledBody.innerHTML = `
+      <tr>
+        <td colspan="3" class="text-center">
+          <div class="table-empty-state">
+            <strong>${isFiltered ? 'Không có giao dịch ở mục lọc này' : 'Chưa có biến động số dư'}</strong>
+            <p>${isFiltered ? 'Hãy chọn "Tất cả" để xem đầy đủ lịch sử biến động số dư.' : 'Tiền hoàn từ các đơn hàng thành công và thưởng giới thiệu sẽ được ghi nhận chi tiết tại đây.'}</p>
+          </div>
+        </td>
+      </tr>`;
+    return;
+  }
+  ledBody.innerHTML = list
+    .map((l) => {
+      const isPos = Number(l.amount) >= 0;
+      const color = isPos ? 'var(--emerald, #059669)' : 'var(--danger, #dc2626)';
+      const prefix = isPos ? '+' : '';
+      const dirBadge = isPos
+        ? '<span class="ledger-dir-badge is-in" aria-hidden="true">↘</span>'
+        : '<span class="ledger-dir-badge is-out" aria-hidden="true">↗</span>';
+      return `
+        <tr>
+          <td data-label="Thời gian">${fmtWalletDateTime(l.createdAt)}</td>
+          <td data-label="Nội dung"><span class="ledger-note-wrap">${dirBadge}<span>${escapeHtml(l.note)}</span></span></td>
+          <td data-label="Số tiền"><strong style="color:${color};font-variant-numeric:tabular-nums;">${prefix}${fmtVnd(l.amount)}</strong></td>
+        </tr>
+      `;
+    })
+    .join('');
+}
+
+function renderUserWithdrawalsHistory() {
+  const wdBody = document.getElementById('userWithdrawalsTableBody');
+  if (!wdBody) return;
+  const list = (latestUserWithdrawals || []).filter((w) => {
+    const st = String(w.status || 'pending').toLowerCase();
+    if (activeWalletWdFilter === 'all') return true;
+    if (activeWalletWdFilter === 'rejected') return st === 'rejected' || st === 'cancelled';
+    return st === activeWalletWdFilter;
+  });
+  if (list.length === 0) {
+    const isFiltered = activeWalletWdFilter !== 'all';
+    const minW = fmtVnd(numOr(publicConfig.minWithdrawAmount, 50000));
+    wdBody.innerHTML = `
+      <tr>
+        <td colspan="4" class="text-center">
+          <div class="table-empty-state">
+            <strong>${isFiltered ? 'Không có lệnh rút ở trạng thái này' : 'Chưa có lịch sử rút tiền'}</strong>
+            <p>${isFiltered ? 'Hãy chọn "Tất cả" để xem toàn bộ lịch sử rút tiền của bạn.' : `Khi số dư khả dụng đạt từ ${minW}, bạn có thể gửi yêu cầu rút miễn phí về Ngân hàng hoặc MoMo.`}</p>
+          </div>
+        </td>
+      </tr>`;
+    return;
+  }
+  wdBody.innerHTML = list
+    .map((w) => {
+      const st = String(w.status || 'pending').toLowerCase();
+      const stCls = getStatusClass(st);
+      const stLabel =
+        st === 'paid'
+          ? 'Đã chuyển khoản'
+          : st === 'rejected'
+          ? 'Từ chối'
+          : st === 'cancelled'
+          ? 'Đã huỷ'
+          : 'Chờ thanh toán';
+      return `
+        <tr>
+          <td data-label="Ngày">${fmtWalletDateTime(w.createdAt)}</td>
+          <td data-label="Số tiền"><strong style="font-variant-numeric:tabular-nums;">${fmtVnd(w.amount)}</strong></td>
+          <td data-label="Tài khoản">${escapeHtml(w.bankName)} - ${escapeHtml(w.bankAccount)}</td>
+          <td data-label="Trạng thái"><span class="status-badge ${stCls}">${stLabel}</span></td>
+        </tr>
+      `;
+    })
+    .join('');
+}
+
 async function loadUserDashboard(prefetchedData = null) {
   if (!authToken) return;
   const refreshBtn = document.getElementById('refreshWalletBtn');
   const refreshOrdersBtn = document.getElementById('refreshOrdersBtn');
+  const ledBodyEl = document.getElementById('userLedgerTableBody');
+  const wdBodyEl = document.getElementById('userWithdrawalsTableBody');
   if (refreshBtn) {
     refreshBtn.disabled = true;
-    refreshBtn.textContent = 'Đang tải...';
+    refreshBtn.classList.add('is-spinning');
   }
   if (refreshOrdersBtn) {
     refreshOrdersBtn.disabled = true;
     refreshOrdersBtn.classList.add('is-spinning');
   }
+  ledBodyEl?.classList.add('wallet-tbody-loading');
+  wdBodyEl?.classList.add('wallet-tbody-loading');
   try {
     const q = document.getElementById('userOrderSearchInput')?.value?.trim() || '';
     const params = new URLSearchParams({
@@ -2715,6 +2892,14 @@ async function loadUserDashboard(prefetchedData = null) {
         ? prefetchedData
         : await apiFetch('/api/user/me?' + params.toString());
     currentUser = data.user;
+    latestPendingWithdrawn = Number(
+      data.pendingWithdrawn ??
+        (Array.isArray(data.withdrawals)
+          ? data.withdrawals
+              .filter((w) => String(w.status || '').toLowerCase() === 'pending')
+              .reduce((sum, w) => sum + Math.max(0, Math.round(Number(w.amount || 0))), 0)
+          : 0)
+    );
     updateNotificationBadge(data.unreadNotificationCount ?? 0);
     renderUserVipProgress(data.vipInfo, data.effectiveCashbackPercent);
     safeStorage.set(
@@ -2779,83 +2964,24 @@ async function loadUserDashboard(prefetchedData = null) {
     syncUserActivityNotifications(data);
 
     // Balance History Table
-    const ledBody = document.getElementById('userLedgerTableBody');
     const ledger = data.ledger || [];
+    latestUserLedger = ledger;
     const ledgerState = updateAdminPaginationUi({ infoId: 'userLedgerPageInfo', prevBtnId: 'userLedgerPrevBtn', nextBtnId: 'userLedgerNextBtn', pagination: data.ledgerPagination, fallbackTotal: ledger.length, itemLabel: 'giao dịch' });
     userLedgerPage = ledgerState.page;
-    if (ledBody) {
-      if (ledger.length === 0) {
-        ledBody.innerHTML = `
-          <tr>
-            <td colspan="3" class="text-center">
-              <div class="table-empty-state">
-                <strong>Chưa có biến động số dư</strong>
-                <p>Tiền hoàn từ các đơn hàng thành công và thưởng giới thiệu sẽ được ghi nhận chi tiết tại đây.</p>
-              </div>
-            </td>
-          </tr>`;
-      } else {
-        ledBody.innerHTML = ledger
-          .map((l) => {
-            const isPos = Number(l.amount) >= 0;
-            const color = isPos ? '#059669' : '#dc2626';
-            const prefix = isPos ? '+' : '';
-            const dt = l.createdAt ? new Date(l.createdAt).toLocaleDateString('vi-VN') : '—';
-            return `
-              <tr>
-                <td data-label="Thời gian">${dt}</td>
-                <td data-label="Nội dung">${escapeHtml(l.note)}</td>
-                <td data-label="Số tiền"><strong style="color:${color};">${prefix}${fmtVnd(l.amount)}</strong></td>
-              </tr>
-            `;
-          })
-          .join('');
-      }
-    }
+    renderUserLedgerHistory();
 
     // Withdrawals Table
-    const wdBody = document.getElementById('userWithdrawalsTableBody');
     const wds = data.withdrawals || [];
-    if (wdBody) {
-      if (wds.length === 0) {
-        wdBody.innerHTML = `
-          <tr>
-            <td colspan="4" class="text-center">
-              <div class="table-empty-state">
-                <strong>Chưa có lịch sử rút tiền</strong>
-                <p>Khi số dư khả dụng đạt từ 50.000đ, bạn có thể gửi yêu cầu rút miễn phí về Ngân hàng hoặc MoMo.</p>
-              </div>
-            </td>
-          </tr>`;
-      } else {
-        wdBody.innerHTML = wds
-          .map((w) => {
-            const stCls = getStatusClass(w.status);
-            const stLabel =
-              w.status === 'paid'
-                ? 'Đã chuyển khoản'
-                : w.status === 'rejected'
-                ? 'Từ chối'
-                : 'Chờ thanh toán';
-            const dt = w.createdAt ? new Date(w.createdAt).toLocaleDateString('vi-VN') : '—';
-            return `
-              <tr>
-                <td data-label="Ngày">${dt}</td>
-                <td data-label="Số tiền"><strong>${fmtVnd(w.amount)}</strong></td>
-                <td data-label="Tài khoản">${escapeHtml(w.bankName)} - ${escapeHtml(w.bankAccount)}</td>
-                <td data-label="Trạng thái"><span class="status-badge ${stCls}">${stLabel}</span></td>
-              </tr>
-            `;
-          })
-          .join('');
-      }
-    }
+    latestUserWithdrawals = wds;
+    renderUserWithdrawalsHistory();
   } catch (err) {
     showToast(err.message);
   } finally {
+    ledBodyEl?.classList.remove('wallet-tbody-loading');
+    wdBodyEl?.classList.remove('wallet-tbody-loading');
     if (refreshBtn) {
       refreshBtn.disabled = false;
-      refreshBtn.textContent = 'Làm mới số dư';
+      refreshBtn.classList.remove('is-spinning');
     }
     if (refreshOrdersBtn) {
       refreshOrdersBtn.disabled = false;
@@ -3233,6 +3359,9 @@ async function handleSubmitWithdrawal(event) {
       document.getElementById('wdCurrentPassword').value = '';
     }
     showToast('Đã gửi yêu cầu rút tiền thành công!');
+    if (typeof setWithdrawSheetOpen === 'function') {
+      setWithdrawSheetOpen(false);
+    }
     await loadUserDashboard();
   } catch (err) {
     showToast(err.message);
@@ -3747,10 +3876,21 @@ async function loadAdminDashboard() {
 }
 
 // Prevent browser password managers from autofilling saved admin usernames into search bars.
+on('loginIdentifier', 'keydown', (e) => {
+  if (e.key === 'Enter') {
+    const pwdEl = document.getElementById('loginPassword');
+    if (pwdEl && !pwdEl.value) {
+      e.preventDefault();
+      pwdEl.focus();
+    }
+  }
+});
+
 ['admOrderSearchInput', 'admWithdrawalSearchInput', 'admUserSearchInput'].forEach((id) => {
   const unlock = (e) => {
     if (e.currentTarget && e.currentTarget.readOnly) e.currentTarget.readOnly = false;
   };
+  on(id, 'touchstart', unlock);
   on(id, 'pointerdown', unlock);
   on(id, 'focus', unlock);
 });
@@ -5354,10 +5494,10 @@ function syncShibaToggleButton() {
   const isHidden = mode === 'hidden';
   btn.setAttribute('aria-pressed', isHidden ? 'false' : 'true');
   label.textContent = isHidden
-    ? 'Bé Shiba: Đang ẩn'
+    ? 'Đang ẩn'
     : mode === 'sleep'
-      ? 'Bé Shiba: Đang ngủ'
-      : 'Bé Shiba: Đang bật';
+      ? 'Đang ngủ'
+      : 'Đang bật';
 }
 
 on('toggleShibaCompanionBtn', 'click', () => {

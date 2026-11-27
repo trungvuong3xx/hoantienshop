@@ -52,9 +52,11 @@ function runTests() {
     '[BIZ-01] Customer orders rows render platform badge (Shopee / TikTok) and orderAmount'
   );
   assert.ok(
-    appJs.includes("refreshBtn.textContent = 'Đang tải...'") &&
-      appJs.includes("refreshBtn.textContent = 'Làm mới số dư'"),
-    '[UX-01] #refreshWalletBtn toggles loading text and restores exact label'
+    (appJs.includes("refreshBtn.textContent = 'Đang tải...'") &&
+      appJs.includes("refreshBtn.textContent = 'Làm mới số dư'")) ||
+      (appJs.includes("refreshBtn.classList.add('is-spinning')") &&
+        appJs.includes("refreshBtn.classList.remove('is-spinning')")),
+    '[UX-01] #refreshWalletBtn toggles loading state and restores cleanly'
   );
   assert.ok(
     html.includes('id="confirmActionModal"') &&

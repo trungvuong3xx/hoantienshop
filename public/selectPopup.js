@@ -114,7 +114,8 @@
       message.className = 'app-invalid-message';
       message.setAttribute('role', 'alert');
       message.textContent = control.validationMessage;
-      focusTarget.after(message);
+      const anchor = focusTarget.closest('.password-field-wrap, .orders-search-input-wrap') || focusTarget;
+      anchor.after(message);
       focusTarget.focus();
       const clear = () => message.remove();
       control.addEventListener('input', clear, { once: true });

@@ -1451,9 +1451,26 @@ function registerCashbackRoutes(app) {
       platform: effectiveOrderPlatform
     });
 
-    const userWithdrawals = db.withdrawals
+    const rawUserWithdrawals = db.withdrawals
       .filter((w) => w.userId === user.id && !w.archivedAt)
       .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    const pendingWithdrawn = rawUserWithdrawals
+      .filter((w) => w.status === 'pending')
+      .reduce((sum, w) => {
+        const a = Math.round(Number(w.amount));
+        return sum + (Number.isFinite(a) && a > 0 ? a : 0);
+      }, 0);
+    const userWithdrawals = rawUserWithdrawals.slice(0, 50).map((w) => ({
+      id: w.id,
+      amount: Math.round(Number(w.amount || 0)),
+      method: w.method || (w.bankName === 'MoMo' ? 'momo' : 'bank'),
+      bankName: w.bankName || '',
+      bankAccount: w.bankAccount || '',
+      bankOwner: w.bankOwner || '',
+      status: w.status || 'pending',
+      createdAt: w.createdAt || null,
+      processedAt: w.processedAt || null
+    }));
 
     const allUserLedger = db.ledger
       .filter((l) => l.userId === user.id)
@@ -1494,6 +1511,7 @@ function registerCashbackRoutes(app) {
       orders: userOrders.map(sanitizeOrderForUser),
       ordersPagination,
       orderStatusCounts,
+      pendingWithdrawn,
       withdrawals: userWithdrawals,
       ledger: userLedger,
       ledgerPagination,
