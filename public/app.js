@@ -2301,9 +2301,6 @@ function renderTikTokComparisonResults(data, sourceItem, targetPlatform = 'tikto
         ? `<span class="tt-compare-card-badge ${getCompareBadgeClass(prod.comparisonStatus)}">${escapeHtml(prod.comparisonLabel)}</span>`
         : '';
 
-      const commRateText =
-        prod.commissionRate > 0 ? ` (${Number(prod.commissionRate).toFixed(1).replace(/\.0$/, '')}%)` : '';
-      const grossCommText = prod.grossCommission > 0 ? `${fmtVnd(prod.grossCommission)}${commRateText}` : 'Đang cập nhật';
       const cashbackText = prod.estimatedCashback > 0 ? `+ ${fmtVnd(prod.estimatedCashback)}` : '0đ';
 
       return `
@@ -2322,12 +2319,8 @@ function renderTikTokComparisonResults(data, sourceItem, targetPlatform = 'tikto
               <span>${ui.priceLabel}</span>
               <strong>${fmtVnd(prod.price)}</strong>
             </div>
-            <div class="tt-compare-price-row">
-              <span>Hoa hồng dự kiến</span>
-              <strong>${grossCommText}</strong>
-            </div>
             <div class="tt-compare-price-row is-cashback">
-              <span>Tiền hoàn khách nhận</span>
+              <span>Hoàn tối đa ~</span>
               <strong>${cashbackText}</strong>
             </div>
           </div>
