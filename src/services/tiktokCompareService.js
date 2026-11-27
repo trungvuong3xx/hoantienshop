@@ -395,13 +395,13 @@ function buildComparableProduct(rawProd, options = {}) {
     savingsVsShopee = Math.round(shopeeEffectivePrice - effectivePrice);
     if (savingsVsShopee >= PRICE_SIMILAR_THRESHOLD_VND) {
       comparisonStatus = 'tiktok_cheaper';
-      comparisonLabel = `Rẻ hơn ${savingsVsShopee.toLocaleString('vi-VN')}đ trên TikTok`;
+      comparisonLabel = `TikTok Shop rẻ hơn ${savingsVsShopee.toLocaleString('vi-VN')}đ`;
     } else if (savingsVsShopee <= -PRICE_SIMILAR_THRESHOLD_VND) {
       comparisonStatus = 'shopee_cheaper';
-      comparisonLabel = `Shopee có lợi hơn ${Math.abs(savingsVsShopee).toLocaleString('vi-VN')}đ`;
+      comparisonLabel = `Shopee rẻ hơn ${Math.abs(savingsVsShopee).toLocaleString('vi-VN')}đ`;
     } else {
       comparisonStatus = 'similar';
-      comparisonLabel = 'Giá thực trả tương đương';
+      comparisonLabel = 'Giá tương đương';
     }
   }
 
@@ -901,13 +901,13 @@ function buildComparableShopeeProduct(rawNode, options = {}) {
     savingsVsTikTok = Math.round(tiktokEffectivePrice - effectivePrice);
     if (savingsVsTikTok >= PRICE_SIMILAR_THRESHOLD_VND) {
       comparisonStatus = 'target_cheaper';
-      comparisonLabel = `Rẻ hơn ${savingsVsTikTok.toLocaleString('vi-VN')}đ trên Shopee`;
+      comparisonLabel = `Shopee rẻ hơn ${savingsVsTikTok.toLocaleString('vi-VN')}đ`;
     } else if (savingsVsTikTok <= -PRICE_SIMILAR_THRESHOLD_VND) {
       comparisonStatus = 'source_cheaper';
-      comparisonLabel = `TikTok có lợi hơn ${Math.abs(savingsVsTikTok).toLocaleString('vi-VN')}đ`;
+      comparisonLabel = `TikTok Shop rẻ hơn ${Math.abs(savingsVsTikTok).toLocaleString('vi-VN')}đ`;
     } else {
       comparisonStatus = 'similar';
-      comparisonLabel = 'Giá thực trả tương đương';
+      comparisonLabel = 'Giá tương đương';
     }
   }
 
