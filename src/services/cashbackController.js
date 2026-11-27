@@ -2654,13 +2654,18 @@ function registerCashbackRoutes(app) {
       const taxDeductPercent = Number(s.taxDeductPercent ?? 10);
       const appId = (process.env.SHOPEE_APP_ID || s.shopeeAppId || '').trim();
       const appSecret = (process.env.SHOPEE_APP_SECRET || s.shopeeAppSecret || '').trim();
+      const addlivetagApiKey = (
+        s.addlivetagApiKey ||
+        process.env.ADDLIVETAG_API_KEY ||
+        DEFAULT_ADDLIVETAG_API_KEY
+      ).trim();
 
-      if (!appId || !appSecret) {
+      if ((!appId || !appSecret) && !addlivetagApiKey) {
         logger.logLeave('POST /api/compare/shopee', { status: 'not_configured' });
         return res.status(503).json({
           ok: false,
           code: 'NOT_CONFIGURED',
-          error: 'Tính năng đối chiếu Shopee hiện chưa cấu hình Shopee Open API (App ID & Secret).'
+          error: 'Tính năng đối chiếu Shopee hiện chưa sẵn sàng.'
         });
       }
 
@@ -2671,7 +2676,8 @@ function registerCashbackRoutes(app) {
         cashbackPercent,
         taxDeductPercent,
         appId,
-        appSecret
+        appSecret,
+        addlivetagApiKey
       });
 
       logger.logLeave('POST /api/compare/shopee', {

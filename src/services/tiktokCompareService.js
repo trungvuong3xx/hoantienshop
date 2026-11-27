@@ -1,7 +1,7 @@
 const logger = require('../utils/logger');
 const { calculateCommissionSplit } = require('./dbService');
 const { parseAccessTradeMoney, parseAccessTradeCommissionRate } = require('./tiktokService');
-const { searchShopeeProductOffersByKeyword } = require('./shopeeService');
+const { searchShopeeProductOffersByKeyword, searchAddlivetagShopeeMarket } = require('./shopeeService');
 
 const ACCESSTRADE_TIKTOK_V2_PRODUCT_FEEDS = 'https://api.accesstrade.vn/v2/tiktokshop_product_feeds';
 const COMPARE_CACHE_TTL_MS = 10 * 60 * 1000;
@@ -943,7 +943,8 @@ async function searchComparableShopeeProducts(params = {}, options = {}) {
     cashbackPercent = 70,
     taxDeductPercent = 10,
     appId = '',
-    appSecret = ''
+    appSecret = '',
+    addlivetagApiKey = ''
   } = params;
 
   logger.logEnter('searchComparableShopeeProducts', {
@@ -997,7 +998,32 @@ async function searchComparableShopeeProducts(params = {}, options = {}) {
     }
   }
 
-  const searchFn = options.searchShopeeFn || searchShopeeProductOffersByKeyword;
+  const hasOpenApi = Boolean(String(appId || '').trim() && String(appSecret || '').trim());
+  const cleanAddlivetagKey = String(addlivetagApiKey || '').trim();
+
+  const searchFn =
+    options.searchShopeeFn ||
+    (async (query, _appId, _appSecret, limit) => {
+      if (hasOpenApi) {
+        try {
+          const openApiRows = await searchShopeeProductOffersByKeyword(query, appId, appSecret, limit);
+          if (openApiRows.length > 0 || !cleanAddlivetagKey) {
+            return openApiRows;
+          }
+        } catch (openApiErr) {
+          if (!cleanAddlivetagKey) throw openApiErr;
+          logger.warning('searchComparableShopeeProducts', 'Shopee Open API failed, falling back to AddLiveTag', {
+            error: openApiErr.message
+          });
+        }
+      }
+      if (cleanAddlivetagKey) {
+        return searchAddlivetagShopeeMarket(query, cleanAddlivetagKey, limit);
+      }
+      const err = new Error('Chưa cấu hình nguồn dữ liệu Shopee (Open API hoặc AddLiveTag API Key).');
+      err.code = 'MISSING_API_KEY';
+      throw err;
+    });
 
   const taskPromise = (async () => {
     let rawNodes = await searchFn(cleanQuery, appId, appSecret, DEFAULT_SEARCH_LIMIT);

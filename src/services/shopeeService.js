@@ -541,12 +541,109 @@ async function searchShopeeProductOffersByKeyword(keyword, appId, appSecret, lim
   throw lastErr || new Error('Hệ thống đối chiếu Shopee tạm thời không phản hồi.');
 }
 
+/**
+ * Search Shopee products by keyword via AddLiveTag Market Search API (data.addlivetag.com/search/market.php).
+ */
+async function searchAddlivetagShopeeMarket(keyword, apiKey, limit = 15) {
+  logger.logEnter('searchAddlivetagShopeeMarket', {
+    keywordLength: String(keyword || '').length,
+    limit
+  });
+  const cleanKeyword = String(keyword || '').trim();
+  const cleanKey = String(apiKey || process.env.ADDLIVETAG_API_KEY || '').trim();
+
+  if (!cleanKeyword) return [];
+  if (!cleanKey) {
+    const err = new Error('Chưa cấu hình AddLiveTag API Key để tìm sản phẩm Shopee.');
+    err.code = 'MISSING_API_KEY';
+    throw err;
+  }
+
+  // Keep query concise (4-6 key tokens) so AddLiveTag full-text market search stays fast (<2s)
+  const rawTokens = cleanKeyword.split(/\s+/).filter((t) => t.length >= 2);
+  const unitToks = rawTokens.filter((t) => /\d+(?:ml|l|g|gr|kg|gb|tb|mah)/i.test(t));
+  const coreTokens = rawTokens
+    .filter((t) => !/^(la|sp|hc|vn)$/i.test(t) && !unitToks.includes(t))
+    .slice(0, 5);
+  const conciseKeyword = [...coreTokens, ...unitToks.slice(0, 1)].join(' ').trim() || cleanKeyword;
+
+  const safeLimit = Math.min(30, Math.max(1, Number(limit) || 15));
+  const url = new URL('https://data.addlivetag.com/search/market.php');
+  url.searchParams.set('q', conciseKeyword);
+  url.searchParams.set('limit', String(safeLimit));
+  url.searchParams.set('sort', 'revenue_all');
+
+  let response;
+  try {
+    response = await fetch(url.toString(), {
+      method: 'GET',
+      headers: {
+        'X-API-Key': cleanKey,
+        Accept: 'application/json',
+        'User-Agent': 'HoanTienShop/1.0'
+      },
+      signal: AbortSignal.timeout(8500)
+    });
+  } catch (err) {
+    const isTimeout = err?.name === 'AbortError' || err?.name === 'TimeoutError' || /timeout|aborted/i.test(String(err?.message || ''));
+    const wrapped = new Error(
+      isTimeout
+        ? 'Kết nối tìm kiếm Shopee tạm thời quá thời gian chờ.'
+        : 'Không thể kết nối máy chủ tìm kiếm Shopee.'
+    );
+    wrapped.code = isTimeout ? 'TIMEOUT' : 'NETWORK_ERROR';
+    throw wrapped;
+  }
+
+  if (!response.ok) {
+    const status = response.status;
+    const err = new Error(
+      status === 429
+        ? 'Hệ thống tìm kiếm Shopee đang bận, vui lòng thử lại sau ít giây.'
+        : 'Hệ thống đối chiếu Shopee tạm thời không phản hồi.'
+    );
+    err.code = status === 429 ? 'RATE_LIMITED' : status === 401 || status === 403 ? 'AUTH_ERROR' : 'UPSTREAM_ERROR';
+    err.httpStatus = status;
+    throw err;
+  }
+
+  const data = await response.json().catch(() => null);
+  const rawProducts = Array.isArray(data?.products) ? data.products : [];
+  const normalized = rawProducts.map((p) => {
+    const rawPrice = Number(p.priceMin || p.price || p.priceMax || 0);
+    const rawCommRate = Number(p.commissionRate || 0);
+    const commPercentage = rawCommRate > 0 && rawCommRate < 1 ? rawCommRate * 100 : rawCommRate;
+    const itemId = String(p.itemId || '').trim();
+    const shopId = String(p.shopId || '').trim();
+    return {
+      itemId,
+      shopId,
+      productName: String(p.productName || '').trim(),
+      shopName: String(p.shopName || '').trim() || 'Shopee',
+      imageUrl: String(p.imageUrl || '').trim(),
+      price: Number.isFinite(rawPrice) && rawPrice > 0 ? Math.round(rawPrice) : 0,
+      priceMin: Number(p.priceMin || rawPrice) || 0,
+      priceMax: Number(p.priceMax || rawPrice) || 0,
+      commissionRate: Number.isFinite(commPercentage) && commPercentage > 0 ? Number(commPercentage.toFixed(2)) : 0,
+      commission: 0,
+      sales: Number(p.sales || 0) || 0,
+      productLink:
+        String(p.productLink || '').trim() ||
+        (shopId && itemId ? `https://shopee.vn/product/${shopId}/${itemId}` : '')
+    };
+  });
+
+  logger.logLeave('searchAddlivetagShopeeMarket', { count: normalized.length });
+  return normalized;
+}
+
 module.exports = {
   convertShopeeLink,
   buildShopeeRedirectLink,
   generateShopeeOpenApiLink,
   fetchShopeeProductOffer,
   searchShopeeProductOffersByKeyword,
+  searchAddlivetagShopeeMarket,
   fetchAddlivetagProductData,
   fetchShopeeConversionReport,
   DEFAULT_ADDLIVETAG_API_KEY
