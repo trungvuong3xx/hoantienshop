@@ -73,7 +73,43 @@ async function runTests() {
   );
   assert.strictEqual(wrongVolume.eligible, false, '15ml mini must not match 50ml full-size');
   assert.strictEqual(wrongVolume.reason, 'unit_mismatch');
-  console.log('   PASS: Exact volume accepted, mismatched volume rejected.');
+
+  // Combo vs single & Combo 3 vs Combo 5 must be rejected
+  const combo3VsCombo5 = scoreTikTokCandidate(
+    'Combo 3 Bộ Pijama Nữ Mặc Nhà Lụa Satin Cao Cấp',
+    180000,
+    makeMockProduct({
+      id: '1738459399426246601',
+      title: 'Combo 5 Bộ Pijama Nữ Mặc Nhà Lụa Satin Cao Cấp',
+      sales_price: { minimum_amount: '250000' }
+    })
+  );
+  assert.strictEqual(combo3VsCombo5.eligible, false, 'Combo 3 must not match Combo 5');
+  assert.strictEqual(combo3VsCombo5.reason, 'unit_mismatch');
+
+  const singleVsCombo3 = scoreTikTokCandidate(
+    'Bộ Pijama Nữ Mặc Nhà Lụa Satin Cao Cấp',
+    120000,
+    makeMockProduct({
+      id: '1738459399426246602',
+      title: 'Combo 3 Bộ Pijama Nữ Mặc Nhà Lụa Satin Cao Cấp',
+      sales_price: { minimum_amount: '180000' }
+    })
+  );
+  assert.strictEqual(singleVsCombo3.eligible, false, 'Single item must not match Combo 3');
+  assert.strictEqual(singleVsCombo3.reason, 'unit_mismatch');
+
+  const combo3VsCombo3 = scoreTikTokCandidate(
+    'Combo 3 Bộ Pijama Nữ Mặc Nhà Lụa Satin Cao Cấp',
+    180000,
+    makeMockProduct({
+      id: '1738459399426246603',
+      title: '[Peinn] Combo 3 Bộ Pijama Nữ Mặc Nhà Lụa Satin Mềm Mịn',
+      sales_price: { minimum_amount: '165000' }
+    })
+  );
+  assert.strictEqual(combo3VsCombo3.eligible, true, 'Combo 3 must match Combo 3');
+  console.log('   PASS: Exact volume, combo-vs-single, and combo-count mismatch guards verified.');
 
   // 3. Exact Cashback Formula & Net Price Comparison (Cases 1, 8, 9)
   console.log('3. Testing cashback formula (commission * 0.9 * 0.7) & comparison labels...');
@@ -307,6 +343,8 @@ async function runTests() {
     const cmpJson = await cmpRes.json();
     assert.strictEqual(cmpJson.found, true);
     assert.strictEqual(cmpJson.items.length, 1);
+    assert.strictEqual(cmpJson.items[0].grossCommission, undefined, 'grossCommission must be stripped from public response');
+    assert.strictEqual(cmpJson.items[0].commissionRate, undefined, 'commissionRate must be stripped from public response');
     assert(!JSON.stringify(cmpJson).includes('test_secret_at_key_999'), 'API key must never leak in response');
 
     // Reject invalid productId (arbitrary URL / non-numeric)
@@ -388,6 +426,24 @@ async function runTests() {
   assert.strictEqual(spPriced.comparisonStatus, 'target_cheaper');
   assert(spPriced.comparisonLabel.includes('Shopee'), `Expected Shopee cheaper label, got ${spPriced.comparisonLabel}`);
 
+  // String formatted price ("330,000" / "1.250.000") handling on Shopee side
+  const formattedPriceNode = { ...mockShopeeNode, price: '330,000', commission: '33.000' };
+  const spStrScore = scoreShopeeCandidate(
+    'LA Kem Chống Nắng La Roche Posay Anthelios UVMune 400 SPF50+ 50ml',
+    350034,
+    formattedPriceNode
+  );
+  assert.strictEqual(spStrScore.eligible, true, 'Comma-formatted string price must parse cleanly');
+  const spStrPriced = buildComparableShopeeProduct(formattedPriceNode, {
+    tiktokEffectivePrice: 328595,
+    cashbackPercent: 70,
+    taxDeductPercent: 10,
+    matchScore: spStrScore.score,
+    productLink: spStrScore.productLink
+  });
+  assert.strictEqual(spStrPriced.price, 330000);
+  assert.strictEqual(spStrPriced.grossCommission, 33000);
+
   const spSearchRes = await searchComparableShopeeProducts(
     {
       tiktokTitle: 'LA Kem Chống Nắng La Roche Posay Anthelios UVMune 400 SPF50+ 50ml',
@@ -406,6 +462,7 @@ async function runTests() {
   assert.strictEqual(spSearchRes.found, true);
   assert.strictEqual(spSearchRes.items.length, 1, '15ml mini must be filtered out on Shopee side too');
   assert.strictEqual(spSearchRes.items[0].productLink, undefined, 'Internal productLink must not leak');
+  assert.strictEqual(spSearchRes.items[0].grossCommission, undefined, 'Internal grossCommission must not leak');
 
   // Test POST /api/compare/shopee/link endpoint
   const app2 = express();
@@ -450,6 +507,9 @@ async function runTests() {
   assert(js.includes('/api/compare/shopee') && js.includes('/api/compare/shopee/link'), 'app.js must call backend Shopee compare endpoints');
   assert(!js.includes('api.accesstrade.vn'), 'Frontend must NEVER call AccessTrade API directly');
   assert(js.includes('inFlightTikTokCompareLinks') && js.includes('createdTikTokCompareLinks'), 'Frontend must deduplicate rapid clicks');
+  assert(js.includes('tiktokCompareRenderSeq'), 'Frontend must guard against stale async race conditions');
+  assert(js.includes('Hoàn tối đa ~'), 'Frontend must show cashback label on compare cards');
+  assert(!js.includes('Hoa hồng dự kiến'), 'Frontend must not expose gross commission row');
   assert(js.includes('MUA TIKTOK NHẬN HOÀN TIỀN') && js.includes('MUA SHOPEE NHẬN HOÀN TIỀN'), 'Frontend must include both CTA buttons');
   assert(js.includes('Chưa bao gồm voucher cá nhân'), 'Frontend must include transparency disclaimer');
   console.log('   PASS: Frontend markers, anti-double-click, and security checks verified.');

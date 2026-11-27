@@ -172,11 +172,25 @@ function extractProductUnits(title) {
     units.push({ type: 'storage', value: m[2] === 'tb' ? val * 1024 : val, raw: m[0].trim() });
   }
 
-  // Pack / count (e.g., 30 viên, 10 miếng, 2 chai)
-  for (const m of norm.matchAll(/\b(\d+)\s*(vien|mieng|goi|chai|tuyp|hop|cap|chiec)\b/g)) {
+  // Pack / count (e.g., 30 viên, 10 miếng, 2 chai, 3 bộ, 5 cái)
+  for (const m of norm.matchAll(/\b(\d+)\s*(vien|mieng|goi|chai|tuyp|hop|cap|chiec|cai|doi|lon|thung|loc|quyen|cuon)\b/g)) {
     const val = parseInt(m[1], 10);
     if (!Number.isFinite(val) || val <= 0) continue;
     units.push({ type: 'count', value: val, raw: m[0].trim() });
+  }
+
+  // Multi-pack / Combo / Set / Bộ (e.g., "combo 3 bộ", "set 2", "5 đồ bộ", "combo 5")
+  const packValues = new Set();
+  for (const m of norm.matchAll(/\b(?:combo|set)\s*(\d+)\b/g)) {
+    const val = parseInt(m[1], 10);
+    if (Number.isFinite(val) && val >= 2 && val <= 50) packValues.add(val);
+  }
+  for (const m of norm.matchAll(/\b(\d+)\s*(?:do\s*)?bo\b/g)) {
+    const val = parseInt(m[1], 10);
+    if (Number.isFinite(val) && val >= 2 && val <= 50) packValues.add(val);
+  }
+  for (const val of packValues) {
+    units.push({ type: 'pack', value: val, raw: `pack_${val}` });
   }
 
   return units;
@@ -198,16 +212,31 @@ function tokenizeForMatching(title) {
 }
 
 /**
- * Evaluate compatibility between unit measurements of Shopee and TikTok titles.
+ * Evaluate compatibility between unit measurements of source and target titles.
+ * Enforces strict multi-pack (combo/set/bộ) compatibility so single items never match combos,
+ * and combo-3 never matches combo-5.
  * Returns { status: 'exact' | 'mismatch' | 'neutral' }.
  */
-function compareUnits(shopeeUnits, tiktokUnits) {
-  if (!shopeeUnits.length || !tiktokUnits.length) {
+function compareUnits(sourceUnits, targetUnits) {
+  const sPacks = sourceUnits.filter((u) => u.type === 'pack').map((u) => u.value);
+  const tPacks = targetUnits.filter((u) => u.type === 'pack').map((u) => u.value);
+  if (sPacks.length > 0 || tPacks.length > 0) {
+    // Reject single-item vs multi-pack mismatch
+    if (sPacks.length === 0 || tPacks.length === 0) {
+      return { status: 'mismatch' };
+    }
+    const samePack = sPacks.some((sv) => tPacks.includes(sv));
+    if (!samePack) {
+      return { status: 'mismatch' };
+    }
+  }
+
+  if (!sourceUnits.length || !targetUnits.length) {
     return { status: 'neutral' };
   }
 
   const sharedTypes = new Set(
-    shopeeUnits.map((u) => u.type).filter((t) => tiktokUnits.some((tu) => tu.type === t))
+    sourceUnits.map((u) => u.type).filter((t) => targetUnits.some((tu) => tu.type === t))
   );
   if (sharedTypes.size === 0) {
     return { status: 'neutral' };
@@ -215,10 +244,15 @@ function compareUnits(shopeeUnits, tiktokUnits) {
 
   let matchedAny = false;
   for (const type of sharedTypes) {
-    const sVals = shopeeUnits.filter((u) => u.type === type).map((u) => u.value);
-    const tVals = tiktokUnits.filter((u) => u.type === type).map((u) => u.value);
+    const sVals = sourceUnits.filter((u) => u.type === type).map((u) => u.value);
+    const tVals = targetUnits.filter((u) => u.type === type).map((u) => u.value);
+    const tolerance = type === 'pack' || type === 'count' ? 0 : 0.1;
     const hasCloseMatch = sVals.some((sv) =>
-      tVals.some((tv) => Math.abs(sv - tv) / Math.max(sv, tv, 1) <= 0.1)
+      tVals.some((tv) =>
+        tolerance === 0
+          ? sv === tv
+          : Math.abs(sv - tv) / Math.max(sv, tv, 1) <= tolerance
+      )
     );
     if (!hasCloseMatch) {
       return { status: 'mismatch' };
@@ -664,8 +698,11 @@ async function searchComparableTikTokProducts(params = {}, options = {}) {
       };
     }
 
-    // Strip internal detailLink before returning to public frontend (backend keeps it in verifiedTikTokProducts)
-    const publicItems = topItems.map(({ detailLink, ...publicFields }) => publicFields);
+    // Strip internal detailLink and gross margin metrics before returning to public frontend
+    const publicItems = topItems.map(({ detailLink, grossCommission, commissionRate, ...publicFields }) => ({
+      ...publicFields,
+      matchQuality: publicFields.matchScore >= 0.65 ? 'exact' : 'similar'
+    }));
 
     const result = {
       ok: true,
@@ -780,7 +817,7 @@ function scoreShopeeCandidate(tiktokTitle, tiktokPrice, rawNode) {
     return { eligible: false, score: 0, reason: 'invalid_product_fields' };
   }
 
-  const price = Number(rawNode?.price || rawNode?.priceMin || 0);
+  const price = parseAccessTradeMoney(rawNode?.price) || parseAccessTradeMoney(rawNode?.priceMin) || 0;
   if (!Number.isFinite(price) || price <= 0) {
     return { eligible: false, score: 0, reason: 'invalid_price' };
   }
@@ -863,13 +900,13 @@ function buildComparableShopeeProduct(rawNode, options = {}) {
     productLink = ''
   } = options;
 
-  const price = Math.round(Number(rawNode?.price || rawNode?.priceMin || 0));
+  const price = parseAccessTradeMoney(rawNode?.price) || parseAccessTradeMoney(rawNode?.priceMin) || 0;
   const rawCommRate = Number(rawNode?.commissionRate || 0);
   const commissionRate =
     Number.isFinite(rawCommRate) && rawCommRate > 0
       ? Number((rawCommRate < 1 ? rawCommRate * 100 : rawCommRate).toFixed(2))
       : 0;
-  const rawDirectComm = Number(rawNode?.commission || 0);
+  const rawDirectComm = parseAccessTradeMoney(rawNode?.commission);
   const grossCommission =
     Number.isFinite(rawDirectComm) && rawDirectComm > 0
       ? Math.round(rawDirectComm)
@@ -1082,7 +1119,11 @@ async function searchComparableShopeeProducts(params = {}, options = {}) {
       };
     }
 
-    const publicItems = topItems.map(({ productLink, ...publicFields }) => publicFields);
+    // Strip internal productLink and gross margin metrics before returning to public frontend
+    const publicItems = topItems.map(({ productLink, grossCommission, commissionRate, ...publicFields }) => ({
+      ...publicFields,
+      matchQuality: publicFields.matchScore >= 0.65 ? 'exact' : 'similar'
+    }));
 
     const result = {
       ok: true,

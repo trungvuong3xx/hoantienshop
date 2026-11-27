@@ -2163,6 +2163,7 @@ async function handleGetCashbackLink(rawOptions) {
 }
 
 let tiktokCompareAbortController = null;
+let tiktokCompareRenderSeq = 0;
 const inFlightTikTokCompareLinks = new Set();
 const createdTikTokCompareLinks = new Map();
 
@@ -2170,6 +2171,7 @@ const TIKTOK_COMPARE_DISCLAIMER =
   'Giá và tiền hoàn được tính theo giá bán công khai và hoa hồng dự kiến tại thời điểm tra cứu. Chưa bao gồm voucher cá nhân, mã giảm giá riêng hoặc ưu đãi trong tài khoản của bạn. Tiền hoàn thực tế phụ thuộc vào điều kiện ghi nhận đơn hàng và đối soát của nền tảng.';
 
 function resetTikTokComparison() {
+  tiktokCompareRenderSeq += 1;
   if (tiktokCompareAbortController) {
     tiktokCompareAbortController.abort();
     tiktokCompareAbortController = null;
@@ -2347,7 +2349,6 @@ function renderTikTokComparisonResults(data, sourceItem, targetPlatform = 'tikto
     <div class="tt-compare-header">
       <div class="tt-compare-header-top">
         <span class="tt-compare-plat-pill is-${ui.badgeClass}">${ui.platformIcon}<span>${ui.platformName}</span></span>
-        ${headlineBadgeHtml}
       </div>
     </div>
     <div class="tt-compare-grid">${cardsHtml}</div>
@@ -2384,6 +2385,7 @@ async function handleBuyTikTokCompareItem(btnEl, productId, targetPlatform = 'ti
     }
   }
 
+  const capturedSeq = tiktokCompareRenderSeq;
   inFlightTikTokCompareLinks.add(flightKey);
   const originalHtml = btnEl.innerHTML;
   btnEl.disabled = true;
@@ -2405,6 +2407,9 @@ async function handleBuyTikTokCompareItem(btnEl, productId, targetPlatform = 'ti
     }
 
     createdTikTokCompareLinks.set(sessionKey, safeAffUrl);
+    if (capturedSeq !== tiktokCompareRenderSeq) {
+      return;
+    }
     if (feedbackEl) {
       feedbackEl.innerHTML = `
         <div class="tt-compare-ready-links">
@@ -2421,6 +2426,9 @@ async function handleBuyTikTokCompareItem(btnEl, productId, targetPlatform = 'ti
       showToast(`Đã tạo link ${ui.platformName}! Bấm "${ui.openNowText}" nếu trình duyệt chặn tự mở.`);
     }
   } catch (err) {
+    if (capturedSeq !== tiktokCompareRenderSeq) {
+      return;
+    }
     const msg = err?.message || `Không thể tạo link hoàn tiền ${ui.platformName} lúc này.`;
     if (feedbackEl) {
       feedbackEl.innerHTML = `<div class="tt-compare-card-error">${escapeHtml(msg)}</div>`;
@@ -2428,8 +2436,10 @@ async function handleBuyTikTokCompareItem(btnEl, productId, targetPlatform = 'ti
     showToast(msg);
   } finally {
     inFlightTikTokCompareLinks.delete(flightKey);
-    btnEl.disabled = false;
-    btnEl.innerHTML = originalHtml;
+    if (capturedSeq === tiktokCompareRenderSeq) {
+      btnEl.disabled = false;
+      btnEl.innerHTML = originalHtml;
+    }
   }
 }
 
@@ -2445,6 +2455,7 @@ async function loadCrossPlatformComparison(targetPlatform, sourceItem) {
   }
   const controller = new AbortController();
   tiktokCompareAbortController = controller;
+  const currentSeq = ++tiktokCompareRenderSeq;
 
   renderTikTokComparisonLoading(targetPlatform);
 
@@ -2468,10 +2479,10 @@ async function loadCrossPlatformComparison(targetPlatform, sourceItem) {
       silentConnectionNotice: true
     });
 
-    if (controller.signal.aborted) return;
+    if (controller.signal.aborted || currentSeq !== tiktokCompareRenderSeq) return;
     renderTikTokComparisonResults(data, sourceItem, targetPlatform);
   } catch (err) {
-    if (controller.signal.aborted || err?.name === 'AbortError') return;
+    if (controller.signal.aborted || err?.name === 'AbortError' || currentSeq !== tiktokCompareRenderSeq) return;
     renderTikTokComparisonError(
       err?.message || `Hệ thống đối chiếu ${ui.platformName} tạm thời không phản hồi.`,
       sourceItem,
