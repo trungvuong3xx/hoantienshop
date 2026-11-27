@@ -1896,6 +1896,7 @@ async function handleGetCashbackLink(rawOptions) {
   if (previewAbortController) {
     previewAbortController.abort();
   }
+  resetTikTokComparison();
   isConverting = true;
   if (getCashbackLinkBtn) {
     getCashbackLinkBtn.disabled = true;
@@ -2000,6 +2001,20 @@ async function handleGetCashbackLink(rawOptions) {
                    <strong class="cp-cashback-value">Có hoàn tiền</strong>
                  </div>`;
 
+          const itemEffectivePrice =
+            (isShopee || isTikTok) && item.price > 0 && item.estimatedCashback > 0
+              ? Math.max(0, Math.round(item.price) - Math.round(item.estimatedCashback))
+              : 0;
+          const shopeeNetPriceHtml =
+            itemEffectivePrice > 0
+              ? `<div class="cp-net-price-formula">
+                   <div class="cp-net-top-row">
+                     <span class="cp-net-label">Giá thực trả sau hoàn</span>
+                     <strong class="cp-net-final">${fmtVnd(itemEffectivePrice)}</strong>
+                   </div>
+                 </div>`
+              : '';
+
           const rawTitle = item.productName || item.title || '';
           const displayItemTitle =
             rawTitle && !rawTitle.match(/^Sản phẩm (Shopee|TikTok)/i)
@@ -2043,6 +2058,7 @@ async function handleGetCashbackLink(rawOptions) {
                 </div>
 
                 ${estCashbackStripHtml}
+                ${shopeeNetPriceHtml}
 
                 <!-- Nút Mua Hàng to rõ -->
                 <div class="cp-cta-block">
@@ -2088,6 +2104,25 @@ async function handleGetCashbackLink(rawOptions) {
     } else if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('lila:convert-success', { detail: { count: items.length } }));
     }
+
+    // Async 2-way Cross-Platform Price & Cashback Comparison (Shopee <-> TikTok Shop, non-blocking)
+    const primaryItem = items.find((i) => i.platform === 'shopee' || i.platform === 'tiktok');
+    const rawPrimaryTitle = String(primaryItem?.productName || primaryItem?.title || '').trim();
+    const hasSearchableTitle =
+      Boolean(primaryItem) &&
+      rawPrimaryTitle.length >= 4 &&
+      !/^(Sản phẩm (Shopee|TikTok)|Đang cập nhật)/i.test(rawPrimaryTitle);
+
+    if (hasSearchableTitle) {
+      const targetPlatform = primaryItem.platform === 'shopee' ? 'tiktok' : 'shopee';
+      void loadCrossPlatformComparison(targetPlatform, {
+        productName: rawPrimaryTitle,
+        price: Number(primaryItem.price || 0),
+        estimatedCashback: Number(primaryItem.estimatedCashback || 0)
+      });
+    } else {
+      resetTikTokComparison();
+    }
   } catch (err) {
     if (isRefreshAfterAuth) {
       renderAuthRefreshRetryNote();
@@ -2103,6 +2138,340 @@ async function handleGetCashbackLink(rawOptions) {
       getCashbackLinkBtn.textContent = 'Lấy Link Hoàn Tiền';
     }
   }
+}
+
+let tiktokCompareAbortController = null;
+const inFlightTikTokCompareLinks = new Set();
+const createdTikTokCompareLinks = new Map();
+
+const TIKTOK_COMPARE_DISCLAIMER =
+  'Giá và tiền hoàn được tính theo giá bán công khai và hoa hồng dự kiến tại thời điểm tra cứu. Chưa bao gồm voucher cá nhân, mã giảm giá riêng hoặc ưu đãi trong tài khoản của bạn. Tiền hoàn thực tế phụ thuộc vào điều kiện ghi nhận đơn hàng và đối soát của nền tảng.';
+
+function resetTikTokComparison() {
+  if (tiktokCompareAbortController) {
+    tiktokCompareAbortController.abort();
+    tiktokCompareAbortController = null;
+  }
+  const sec = document.getElementById('tiktokCompareSection');
+  if (sec) {
+    sec.classList.add('hidden');
+    sec.innerHTML = '';
+  }
+}
+
+function getCompareTargetUi(targetPlatform) {
+  const isShopee = targetPlatform === 'shopee';
+  const platformIcon = isShopee
+    ? `<svg class="plat-svg-icon" viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M19 7h-3V6a4 4 0 0 0-8 0v1H5a1 1 0 0 0-1 1v11a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3V8a1 1 0 0 0-1-1zm-9-1a2 2 0 0 1 4 0v1h-4V6zm8 13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V9h2v1.5a1 1 0 0 0 2 0V9h4v1.5a1 1 0 0 0 2 0V9h2v10z"/><path d="M13.5 13.5c-.3-.2-.7-.3-1.1-.4-.6-.2-.9-.3-.9-.6 0-.3.3-.5.7-.5.5 0 .9.2 1.2.4a.5.5 0 1 0 .6-.8c-.5-.3-1.1-.6-1.8-.6-1 0-1.7.6-1.7 1.5 0 .6.4 1.1 1.2 1.3.6.2.8.3.8.6 0 .3-.3.5-.8.5-.6 0-1.1-.3-1.4-.6a.5.5 0 1 0-.7.7c.5.5 1.2.8 2.1.8 1.1 0 1.8-.6 1.8-1.5 0-.7-.4-1.1-1.1-1.3z"/></svg>`
+    : `<svg class="plat-svg-icon" viewBox="0 0 24 24" width="13" height="13" fill="currentColor" aria-hidden="true"><path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.34 0 .67.06.98.17V8.89a6.45 6.45 0 0 0-.98-.07A6.33 6.33 0 0 0 3 15.16 6.33 6.33 0 0 0 9.34 21.5a6.33 6.33 0 0 0 6.33-6.34V8.47a8.28 8.28 0 0 0 4.81 1.53V6.69h-.89z"/></svg>`;
+  return {
+    isShopee,
+    badgeClass: isShopee ? 'shopee' : 'tiktok',
+    platformIcon,
+    platformName: isShopee ? 'Shopee' : 'TikTok Shop',
+    heading: isShopee
+      ? 'SO SÁNH GIÁ & HOÀN TIỀN TRÊN SHOPEE'
+      : 'SO SÁNH GIÁ & HOÀN TIỀN TRÊN TIKTOK SHOP',
+    priceLabel: isShopee ? 'Giá bán Shopee' : 'Giá bán TikTok Shop',
+    ctaText: isShopee ? 'MUA SHOPEE NHẬN HOÀN TIỀN' : 'MUA TIKTOK NHẬN HOÀN TIỀN',
+    openNowText: isShopee ? 'Mở Shopee ngay' : 'Mở TikTok ngay',
+    copyMsg: isShopee ? 'Đã sao chép link Shopee hoàn tiền!' : 'Đã sao chép link TikTok hoàn tiền!',
+    searchEndpoint: isShopee ? '/api/compare/shopee' : '/api/compare/tiktok',
+    linkEndpoint: isShopee ? '/api/compare/shopee/link' : '/api/compare/tiktok/link'
+  };
+}
+
+function renderTikTokComparisonLoading(targetPlatform = 'tiktok') {
+  const sec = document.getElementById('tiktokCompareSection');
+  if (!sec) return;
+  const ui = getCompareTargetUi(targetPlatform);
+  sec.classList.remove('hidden');
+  sec.innerHTML = `
+    <div class="tt-compare-header">
+      <div class="tt-compare-header-top">
+        <span class="tt-compare-plat-pill is-${ui.badgeClass}">${ui.platformIcon}<span>${ui.platformName}</span></span>
+        <span class="tt-compare-headline-badge is-similar">Đang tìm sản phẩm tương đương...</span>
+      </div>
+    </div>
+    <div class="tt-compare-skeleton-grid" aria-label="Đang tải so sánh ${ui.platformName}">
+      <div class="tt-compare-skeleton-card"></div>
+      <div class="tt-compare-skeleton-card"></div>
+    </div>
+  `;
+}
+
+function renderTikTokComparisonError(errorMsg, sourceItem, targetPlatform = 'tiktok') {
+  const sec = document.getElementById('tiktokCompareSection');
+  if (!sec) return;
+  const ui = getCompareTargetUi(targetPlatform);
+  sec.classList.remove('hidden');
+  sec.innerHTML = `
+    <div class="tt-compare-header">
+      <div class="tt-compare-header-top">
+        <span class="tt-compare-plat-pill is-${ui.badgeClass}">${ui.platformIcon}<span>${ui.platformName}</span></span>
+      </div>
+    </div>
+    <div class="tt-compare-state-box">
+      <p>${escapeHtml(errorMsg || `Hệ thống đối chiếu ${ui.platformName} tạm thời không phản hồi.`)}</p>
+      <button type="button" class="tt-compare-retry-btn" id="btnRetryTikTokCompare">Thử tìm lại</button>
+    </div>
+    <p class="tt-compare-disclaimer">${escapeHtml(TIKTOK_COMPARE_DISCLAIMER)}</p>
+  `;
+  const retryBtn = document.getElementById('btnRetryTikTokCompare');
+  if (retryBtn) {
+    retryBtn.addEventListener('click', () => {
+      void loadCrossPlatformComparison(targetPlatform, sourceItem);
+    });
+  }
+}
+
+function getCompareBadgeClass(status) {
+  if (status === 'tiktok_cheaper' || status === 'target_cheaper') return 'is-tiktok-cheaper';
+  if (status === 'shopee_cheaper' || status === 'source_cheaper') return 'is-shopee-cheaper';
+  return 'is-similar';
+}
+
+function renderTikTokComparisonResults(data, sourceItem, targetPlatform = 'tiktok') {
+  const sec = document.getElementById('tiktokCompareSection');
+  if (!sec) return;
+  const ui = getCompareTargetUi(targetPlatform);
+  sec.classList.remove('hidden');
+
+  const items = Array.isArray(data?.items) ? data.items.slice(0, 3) : [];
+  const disclaimer = data?.disclaimer || TIKTOK_COMPARE_DISCLAIMER;
+
+  if (items.length === 0) {
+    sec.innerHTML = `
+      <div class="tt-compare-header">
+        <div class="tt-compare-header-top">
+          <span class="tt-compare-plat-pill is-${ui.badgeClass}">${ui.platformIcon}<span>${ui.platformName}</span></span>
+        </div>
+      </div>
+      <div class="tt-compare-state-box">
+        <p>${escapeHtml(data?.message || `Chưa tìm thấy sản phẩm tương đương đủ độ chính xác trên ${ui.platformName}.`)}</p>
+      </div>
+      <p class="tt-compare-disclaimer">${escapeHtml(disclaimer)}</p>
+    `;
+    return;
+  }
+
+  const best = data?.bestComparison || null;
+  const bestId = best?.bestTikTokProductId || best?.bestProductId || '';
+  const headlineBadgeHtml =
+    best && best.label
+      ? `<span class="tt-compare-headline-badge ${getCompareBadgeClass(best.status)}">${escapeHtml(best.label.toUpperCase())}</span>`
+      : '';
+
+  const cardsHtml = items
+    .map((prod) => {
+      const pid = String(prod.productId || prod.itemId || '').trim();
+      const sid = String(prod.shopId || '').trim();
+      const safeImg = safeHttpsUrl(prod.imageUrl);
+      const thumbHtml = safeImg
+        ? `<img src="${safeImg}" alt="${escapeHtml(prod.title)}" class="tt-compare-thumb" referrerpolicy="no-referrer" loading="lazy" />`
+        : `<div class="tt-compare-thumb tt-compare-thumb-fallback">${UI_ICONS.shoppingBagLg}</div>`;
+
+      const isBestDeal =
+        best &&
+        (best.status === 'tiktok_cheaper' || best.status === 'target_cheaper') &&
+        bestId === pid;
+      const badgeHtml = prod.comparisonLabel
+        ? `<span class="tt-compare-card-badge ${getCompareBadgeClass(prod.comparisonStatus)}">${escapeHtml(prod.comparisonLabel)}</span>`
+        : '';
+
+      const commRateText =
+        prod.commissionRate > 0 ? ` (${Number(prod.commissionRate).toFixed(1).replace(/\.0$/, '')}%)` : '';
+      const grossCommText = prod.grossCommission > 0 ? `${fmtVnd(prod.grossCommission)}${commRateText}` : 'Đang cập nhật';
+      const cashbackText = prod.estimatedCashback > 0 ? `+ ${fmtVnd(prod.estimatedCashback)}` : '0đ';
+      const effectiveText = fmtVnd(prod.effectivePrice);
+      const formulaText = `${fmtVnd(prod.price)} − ${fmtVnd(prod.estimatedCashback)} = ${effectiveText}`;
+
+      return `
+        <div class="tt-compare-card ${isBestDeal ? 'is-best-deal' : ''}" data-tt-product-id="${escapeHtml(pid)}">
+          <div class="tt-compare-card-top">
+            ${thumbHtml}
+            <div class="tt-compare-meta">
+              <div class="tt-compare-prod-title" title="${escapeHtml(prod.title)}">${escapeHtml(prod.title)}</div>
+              <div class="tt-compare-shop">Shop: ${escapeHtml(prod.shopName || ui.platformName)}</div>
+              ${badgeHtml}
+            </div>
+          </div>
+
+          <div class="tt-compare-pricing">
+            <div class="tt-compare-price-row">
+              <span>${ui.priceLabel}</span>
+              <strong>${fmtVnd(prod.price)}</strong>
+            </div>
+            <div class="tt-compare-price-row">
+              <span>Hoa hồng dự kiến</span>
+              <strong>${grossCommText}</strong>
+            </div>
+            <div class="tt-compare-price-row is-cashback">
+              <span>Tiền hoàn khách nhận</span>
+              <strong>${cashbackText}</strong>
+            </div>
+            <div class="tt-compare-price-row is-effective">
+              <span>Giá thực trả sau hoàn</span>
+              <strong>${effectiveText}</strong>
+            </div>
+          </div>
+
+          <div class="tt-compare-actions">
+            <button
+              type="button"
+              class="tt-compare-buy-btn ${ui.isShopee ? 'is-shopee-btn' : ''}"
+              data-tt-buy-id="${escapeHtml(pid)}"
+              data-tt-shop-id="${escapeHtml(sid)}"
+              data-tt-target="${escapeHtml(targetPlatform)}"
+            >
+              ${UI_ICONS.shoppingCart}
+              <span>${ui.ctaText}</span>
+            </button>
+            <div class="tt-compare-card-feedback" data-tt-feedback-id="${escapeHtml(pid)}"></div>
+          </div>
+        </div>
+      `;
+    })
+    .join('');
+
+  sec.innerHTML = `
+    <div class="tt-compare-header">
+      <div class="tt-compare-header-top">
+        <span class="tt-compare-plat-pill is-${ui.badgeClass}">${ui.platformIcon}<span>${ui.platformName}</span></span>
+        ${headlineBadgeHtml}
+      </div>
+    </div>
+    <div class="tt-compare-grid">${cardsHtml}</div>
+    <p class="tt-compare-disclaimer">${escapeHtml(disclaimer)}</p>
+  `;
+
+  sec.querySelectorAll('[data-tt-buy-id]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const pid = btn.getAttribute('data-tt-buy-id');
+      const sid = btn.getAttribute('data-tt-shop-id') || '';
+      const target = btn.getAttribute('data-tt-target') || targetPlatform;
+      if (pid) void handleBuyTikTokCompareItem(btn, pid, target, sid);
+    });
+  });
+}
+
+async function handleBuyTikTokCompareItem(btnEl, productId, targetPlatform = 'tiktok', shopId = '') {
+  const cleanId = String(productId || '').trim();
+  const ui = getCompareTargetUi(targetPlatform);
+  const flightKey = `${targetPlatform}:${cleanId}`;
+  if (!cleanId || inFlightTikTokCompareLinks.has(flightKey)) return;
+
+  const feedbackEl = document.querySelector(`[data-tt-feedback-id="${cleanId}"]`);
+  const sessionKey = `${targetPlatform}:${cleanId}:${authToken ? currentUser?.id || 'auth' : 'guest'}`;
+
+  // Reuse already-generated affiliate link for the same product & auth state in this session
+  const cachedAffUrl = createdTikTokCompareLinks.get(sessionKey);
+  if (cachedAffUrl) {
+    const safeCached = safeAppOrWebUrl(cachedAffUrl);
+    if (safeCached) {
+      window.open(safeCached, '_blank', 'noopener');
+      showToast(`Đang mở sản phẩm ${ui.platformName} qua link hoàn tiền!`);
+      return;
+    }
+  }
+
+  inFlightTikTokCompareLinks.add(flightKey);
+  const originalHtml = btnEl.innerHTML;
+  btnEl.disabled = true;
+  btnEl.textContent = 'Đang tạo link hoàn tiền...';
+  if (feedbackEl) feedbackEl.innerHTML = '';
+
+  try {
+    const reqBody = ui.isShopee
+      ? { itemId: cleanId, ...(shopId ? { shopId } : {}) }
+      : { productId: cleanId };
+    const res = await apiFetch(ui.linkEndpoint, {
+      method: 'POST',
+      body: JSON.stringify(reqBody)
+    });
+
+    const safeAffUrl = safeAppOrWebUrl(res?.affiliateUrl);
+    if (!res?.ok || !safeAffUrl) {
+      throw new Error(res?.error || `Không thể tạo link Affiliate ${ui.platformName} hợp lệ.`);
+    }
+
+    createdTikTokCompareLinks.set(sessionKey, safeAffUrl);
+    if (feedbackEl) {
+      feedbackEl.innerHTML = `
+        <div class="tt-compare-ready-links">
+          <a href="${safeAffUrl}" target="_blank" rel="noopener" class="tt-compare-open-now">${ui.openNowText}</a>
+          <button type="button" class="tt-compare-copy-btn" data-copy="${safeAffUrl}" data-copy-msg="${ui.copyMsg}">Sao chép</button>
+        </div>
+      `;
+    }
+
+    const opened = window.open(safeAffUrl, '_blank', 'noopener');
+    if (opened) {
+      showToast(`Đã tạo link hoàn tiền ${ui.platformName} thành công!`);
+    } else {
+      showToast(`Đã tạo link ${ui.platformName}! Bấm "${ui.openNowText}" nếu trình duyệt chặn tự mở.`);
+    }
+  } catch (err) {
+    const msg = err?.message || `Không thể tạo link hoàn tiền ${ui.platformName} lúc này.`;
+    if (feedbackEl) {
+      feedbackEl.innerHTML = `<div class="tt-compare-card-error">${escapeHtml(msg)}</div>`;
+    }
+    showToast(msg);
+  } finally {
+    inFlightTikTokCompareLinks.delete(flightKey);
+    btnEl.disabled = false;
+    btnEl.innerHTML = originalHtml;
+  }
+}
+
+async function loadCrossPlatformComparison(targetPlatform, sourceItem) {
+  if (!sourceItem || !sourceItem.productName) {
+    resetTikTokComparison();
+    return;
+  }
+
+  const ui = getCompareTargetUi(targetPlatform);
+  if (tiktokCompareAbortController) {
+    tiktokCompareAbortController.abort();
+  }
+  const controller = new AbortController();
+  tiktokCompareAbortController = controller;
+
+  renderTikTokComparisonLoading(targetPlatform);
+
+  try {
+    const payload = ui.isShopee
+      ? {
+          productName: sourceItem.productName,
+          tiktokPrice: sourceItem.price || 0,
+          tiktokEstimatedCashback: sourceItem.estimatedCashback || 0
+        }
+      : {
+          productName: sourceItem.productName,
+          shopeePrice: sourceItem.price || 0,
+          shopeeEstimatedCashback: sourceItem.estimatedCashback || 0
+        };
+
+    const data = await apiFetch(ui.searchEndpoint, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+      signal: controller.signal
+    });
+
+    if (controller.signal.aborted) return;
+    renderTikTokComparisonResults(data, sourceItem, targetPlatform);
+  } catch (err) {
+    if (controller.signal.aborted || err?.name === 'AbortError') return;
+    renderTikTokComparisonError(
+      err?.message || `Hệ thống đối chiếu ${ui.platformName} tạm thời không phản hồi.`,
+      sourceItem,
+      targetPlatform
+    );
+  }
+}
+
+async function loadTikTokPriceComparison(shopeeItem) {
+  return loadCrossPlatformComparison('tiktok', shopeeItem);
 }
 
 function renderAuthRefreshRetryNote() {

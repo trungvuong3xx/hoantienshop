@@ -9069,3 +9069,431 @@ details.faq-accordion[open] p {
   display: inline-block;
   vertical-align: bottom;
 }
+
+/* ================= SHOPEE -> TIKTOK SHOP PRICE & CASHBACK COMPARISON ================= */
+.cp-net-price-formula {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 11px 14px;
+  border-radius: var(--radius-md);
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  margin-top: -2px;
+}
+
+.cp-net-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.cp-net-label {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.cp-net-price-formula .cp-net-final {
+  font-size: 16.5px;
+  font-weight: 800;
+  color: var(--shopee-dark);
+  white-space: nowrap;
+}
+
+.cp-net-price-formula .cp-net-eq {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  text-align: right;
+  word-break: break-word;
+}
+
+.tt-compare-section {
+  margin-top: 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  padding: 16px;
+  box-shadow: var(--shadow-sm);
+}
+
+.tt-compare-header {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.tt-compare-header-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+}
+
+.tt-compare-plat-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.tt-compare-plat-pill.is-tiktok {
+  background: var(--tiktok);
+  color: #ffffff;
+}
+
+.tt-compare-plat-pill.is-shopee {
+  background: var(--shopee);
+  color: #ffffff;
+}
+
+.tt-compare-title {
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: var(--text-main);
+  text-transform: uppercase;
+  line-height: 1.35;
+}
+
+.tt-compare-headline-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.tt-compare-headline-badge.is-tiktok-cheaper {
+  background: var(--emerald-light);
+  color: var(--emerald-dark);
+  border: 1px solid #a7f3d0;
+}
+
+.tt-compare-headline-badge.is-shopee-cheaper {
+  background: var(--shopee-light);
+  color: var(--shopee-dark);
+  border: 1px solid #fed7aa;
+}
+
+.tt-compare-headline-badge.is-similar {
+  background: var(--info-soft);
+  color: var(--blue);
+  border: 1px solid #bfdbfe;
+}
+
+.tt-compare-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 12px;
+}
+
+.tt-compare-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 14px;
+  border-radius: var(--radius-lg);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  min-width: 0;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.tt-compare-card.is-best-deal {
+  border-color: var(--emerald);
+  box-shadow: 0 4px 14px rgba(5, 150, 105, 0.1);
+}
+
+.tt-compare-card-top {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  min-width: 0;
+}
+
+.tt-compare-thumb {
+  width: 68px;
+  height: 68px;
+  border-radius: var(--radius-md);
+  object-fit: cover;
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  background: var(--bg-soft);
+}
+
+.tt-compare-thumb-fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+}
+
+.tt-compare-meta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tt-compare-prod-title {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-main);
+  line-height: 1.38;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
+}
+
+.tt-compare-shop {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tt-compare-card-badge {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  max-width: 100%;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.tt-compare-card-badge.is-tiktok-cheaper {
+  background: var(--emerald-light);
+  color: var(--emerald-dark);
+}
+
+.tt-compare-card-badge.is-shopee-cheaper {
+  background: var(--shopee-light);
+  color: var(--shopee-dark);
+}
+
+.tt-compare-card-badge.is-similar {
+  background: var(--bg-soft);
+  color: var(--text-sub);
+}
+
+.tt-compare-pricing {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 10px;
+  border-radius: var(--radius-md);
+  background: var(--bg-soft);
+  font-size: 12.5px;
+}
+
+.tt-compare-price-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--text-sub);
+}
+
+.tt-compare-price-row strong {
+  color: var(--text-main);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.tt-compare-price-row.is-cashback strong {
+  color: var(--emerald-dark);
+}
+
+.tt-compare-price-row.is-effective {
+  padding-top: 6px;
+  margin-top: 2px;
+  border-top: 1px dashed var(--border);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.tt-compare-price-row.is-effective strong {
+  font-size: 14.5px;
+  color: var(--shopee-dark);
+}
+
+.tt-compare-formula-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-align: right;
+  word-break: break-word;
+}
+
+.tt-compare-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tt-compare-buy-btn {
+  width: 100%;
+  min-height: var(--touch-min);
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  border: none;
+  background: var(--tiktok);
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  transition: opacity 0.2s ease, transform 0.15s ease;
+}
+
+.tt-compare-buy-btn:hover:not(:disabled) {
+  opacity: 0.92;
+}
+
+.tt-compare-buy-btn.is-shopee-btn {
+  background: var(--shopee);
+}
+
+.tt-compare-buy-btn:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
+.tt-compare-ready-links {
+  display: flex;
+  gap: 6px;
+  align-items: stretch;
+}
+
+.tt-compare-ready-links .tt-compare-open-now {
+  flex: 1;
+  min-height: 40px;
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  background: var(--emerald);
+  color: #ffffff;
+  font-size: 12.5px;
+  font-weight: 700;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+}
+
+.tt-compare-ready-links .tt-compare-copy-btn {
+  min-height: 40px;
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--bg-soft);
+  color: var(--text-main);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.tt-compare-card-error {
+  font-size: 12px;
+  color: var(--danger);
+  background: var(--danger-soft);
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  padding: 7px 9px;
+  line-height: 1.35;
+}
+
+.tt-compare-state-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-align: center;
+  padding: 18px 12px;
+  border-radius: var(--radius-md);
+  background: var(--bg-soft);
+  color: var(--text-sub);
+  font-size: 13px;
+}
+
+.tt-compare-retry-btn {
+  padding: 7px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-main);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  min-height: 36px;
+}
+
+.tt-compare-skeleton-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 12px;
+}
+
+.tt-compare-skeleton-card {
+  height: 170px;
+  border-radius: var(--radius-lg);
+  background: linear-gradient(90deg, var(--bg-soft) 25%, #e2e8f0 50%, var(--bg-soft) 75%);
+  background-size: 200% 100%;
+  animation: ttCompareShimmer 1.35s infinite linear;
+}
+
+@keyframes ttCompareShimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.tt-compare-disclaimer {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  font-size: 11.5px;
+  line-height: 1.48;
+  color: var(--text-muted);
+}
+
+@media (max-width: 640px) {
+  .tt-compare-section {
+    padding: 14px 12px;
+    border-radius: var(--radius-lg);
+  }
+  .tt-compare-grid {
+    grid-template-columns: 1fr;
+  }
+  .tt-compare-headline-badge {
+    white-space: normal;
+  }
+}

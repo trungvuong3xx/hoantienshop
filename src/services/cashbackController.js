@@ -65,6 +65,7 @@ const {
 } = require('./notificationService');
 const { convertTextLinks } = require('./converterService');
 const {
+  convertShopeeLink,
   fetchShopeeConversionReport,
   fetchShopeeProductOffer,
   fetchAddlivetagProductData,
@@ -72,11 +73,18 @@ const {
 } = require('./shopeeService');
 const {
   TIKTOK_VIDEO_LINK_ERROR,
+  generateTikTokAccessTradeLink,
   fetchTikTokAccessTradePreview,
   mapAccessTradeTikTokError,
   fetchAccessTradeOrders,
   fetchAccessTradeOrderProducts
 } = require('./tiktokService');
+const {
+  searchComparableTikTokProducts,
+  getVerifiedTikTokProduct,
+  searchComparableShopeeProducts,
+  getVerifiedShopeeProduct
+} = require('./tiktokCompareService');
 const {
   isAllowedHost,
   isAllowedAffiliateRedirectUrl,
@@ -968,7 +976,7 @@ function registerCashbackRoutes(app) {
       const activeDb = ensureDbLoaded();
       migrateZaloSettings(activeDb);
       next();
-      }, { incrementalOnly: Boolean(getPgPool()) && (req.path.startsWith('/go/') || ['/api/convert', '/api/preview', '/api/settings', '/api/public-config', '/api/notifications'].includes(req.path) || !req.path.startsWith('/api/')) });
+      }, { incrementalOnly: Boolean(getPgPool()) && (req.path.startsWith('/go/') || req.path.startsWith('/api/compare/') || ['/api/convert', '/api/preview', '/api/settings', '/api/public-config', '/api/notifications'].includes(req.path) || !req.path.startsWith('/api/')) });
     } catch (err) {
       logger.error('initMiddleware', 'Postgres startup error', { error: err.message });
       if (process.env.DATABASE_URL || process.env.POSTGRES_URL) {
@@ -2448,6 +2456,342 @@ function registerCashbackRoutes(app) {
     } catch (err) {
       logger.error('POST /api/convert', 'Convert error', { error: err.message });
       return res.status(500).json({ error: 'Đã có lỗi xảy ra trên hệ thống.' });
+    }
+  }));
+
+  // 8.5. Shopee -> TikTok Shop Price & Cashback Comparison + Affiliate Link Creation
+  const compareTikTokLimiter = createRateLimiter({
+    windowMs: 60000,
+    max: 20,
+    keyPrefix: 'compare_tt',
+    failClosed: true
+  });
+
+  app.post('/api/compare/tiktok', compareTikTokLimiter, asyncHandler(async (req, res) => {
+    logger.logEnter('POST /api/compare/tiktok');
+    try {
+      const { productName, shopeePrice, shopeeEstimatedCashback } = req.body || {};
+      if (!productName || typeof productName !== 'string' || productName.trim().length < 3 || productName.length > 500) {
+        return res.status(400).json({
+          ok: false,
+          error: 'Thiếu tên sản phẩm Shopee hợp lệ để tìm kiếm trên TikTok Shop.'
+        });
+      }
+
+      const rawPrice = shopeePrice !== undefined && shopeePrice !== null && shopeePrice !== '' ? Number(shopeePrice) : 0;
+      const safePrice = Number.isFinite(rawPrice) && rawPrice >= 0 && rawPrice <= 1000000000 ? rawPrice : 0;
+
+      const rawCb =
+        shopeeEstimatedCashback !== undefined && shopeeEstimatedCashback !== null && shopeeEstimatedCashback !== ''
+          ? Number(shopeeEstimatedCashback)
+          : 0;
+      const safeCb = Number.isFinite(rawCb) && rawCb >= 0 && rawCb <= safePrice ? rawCb : 0;
+
+      const db = ensureDbLoaded();
+      const s = db.settings || {};
+      const authUser = getAuthUser(req);
+      const cashbackPercent = resolveUserCashbackRate(authUser, s);
+      const taxDeductPercent = Number(s.taxDeductPercent ?? 10);
+      const accesstradeApiKey = (process.env.ACCESSTRADE_API_KEY || s.accesstradeApiKey || '').trim();
+
+      if (!accesstradeApiKey) {
+        logger.logLeave('POST /api/compare/tiktok', { status: 'not_configured' });
+        return res.status(503).json({
+          ok: false,
+          code: 'NOT_CONFIGURED',
+          error: 'Tính năng đối chiếu TikTok Shop hiện tạm chưa sẵn sàng.'
+        });
+      }
+
+      const result = await searchComparableTikTokProducts({
+        shopeeTitle: productName.trim(),
+        shopeePrice: safePrice,
+        shopeeEstimatedCashback: safeCb,
+        cashbackPercent,
+        taxDeductPercent,
+        apiKey: accesstradeApiKey
+      });
+
+      logger.logLeave('POST /api/compare/tiktok', {
+        found: result.found,
+        count: result.items.length,
+        cached: result.cached
+      });
+      return res.json({
+        ...result,
+        cashbackPercent,
+        taxDeductPercent
+      });
+    } catch (err) {
+      const code = err?.code || 'UPSTREAM_ERROR';
+      const status = code === 'RATE_LIMITED' ? 429 : code === 'TIMEOUT' ? 504 : 502;
+      logger.warning('POST /api/compare/tiktok', 'Compare search failed', { code, error: err.message });
+      return res.status(status).json({
+        ok: false,
+        code,
+        error: err.message || 'Hệ thống đối chiếu TikTok Shop tạm thời không phản hồi.'
+      });
+    }
+  }));
+
+  const compareTikTokLinkLimiter = createRateLimiter({
+    windowMs: 60000,
+    max: 20,
+    keyPrefix: 'compare_tt_link',
+    failClosed: true
+  });
+
+  app.post('/api/compare/tiktok/link', compareTikTokLinkLimiter, asyncHandler(async (req, res) => {
+    logger.logEnter('POST /api/compare/tiktok/link');
+    try {
+      const { productId } = req.body || {};
+      const cleanProductId = String(productId || '').trim();
+      if (!/^\d{6,30}$/.test(cleanProductId)) {
+        return res.status(400).json({
+          ok: false,
+          error: 'Mã sản phẩm TikTok Shop không hợp lệ.'
+        });
+      }
+
+      const db = ensureDbLoaded();
+      const s = db.settings || {};
+      const authUser = getAuthUser(req);
+      const accesstradeApiKey = (process.env.ACCESSTRADE_API_KEY || s.accesstradeApiKey || '').trim();
+      const tiktokDeepLinkTemplate = (
+        process.env.TIKTOK_DEEPLINK_TEMPLATE ||
+        s.tiktokDeepLinkTemplate ||
+        'https://go.isclix.com/deep_link/v6/7110811489339796158/6648523843406889655?sub4=oneatweb'
+      ).trim();
+
+      if (!accesstradeApiKey) {
+        return res.status(503).json({
+          ok: false,
+          error: 'Hệ thống tạo link TikTok Shop tạm thời chưa sẵn sàng.'
+        });
+      }
+
+      // Never accept arbitrary URLs from client: use server-verified detailLink or canonical TikTok product URL
+      const verified = getVerifiedTikTokProduct(cleanProductId);
+      const canonicalDetailUrl =
+        verified?.detailLink ||
+        `https://shop.tiktok.com/view/product/${cleanProductId}?region=VN&local=en`;
+
+      const clickId = crypto.randomBytes(8).toString('hex');
+      const atRes = await generateTikTokAccessTradeLink(canonicalDetailUrl, cleanProductId, {
+        accesstradeApiKey,
+        tiktokDeepLinkTemplate,
+        subId: clickId
+      });
+
+      const clickRecord = {
+        clickId,
+        userId: authUser ? authUser.id : null,
+        userCode: authUser ? authUser.code : 'GUEST',
+        platform: 'tiktok',
+        originalUrl: canonicalDetailUrl,
+        cleanUrl: canonicalDetailUrl,
+        productId: atRes.productId || cleanProductId,
+        affiliateUrl: atRes.affiliateUrl,
+        createdAt: new Date().toISOString()
+      };
+      await appendClickRecords([clickRecord]);
+
+      logger.logLeave('POST /api/compare/tiktok/link', {
+        productId: cleanProductId,
+        clickId,
+        userCode: clickRecord.userCode
+      });
+      return res.json({
+        ok: true,
+        productId: atRes.productId || cleanProductId,
+        clickId,
+        affiliateUrl: atRes.affiliateUrl,
+        isLoggedIn: Boolean(authUser)
+      });
+    } catch (err) {
+      logger.warning('POST /api/compare/tiktok/link', 'Create TikTok compare link failed', {
+        error: err.message
+      });
+      return res.status(502).json({
+        ok: false,
+        error: mapAccessTradeTikTokError(err)
+      });
+    }
+  }));
+
+  // 8.6. TikTok Shop -> Shopee Price & Cashback Comparison + Affiliate Link Creation
+  const compareShopeeLimiter = createRateLimiter({
+    windowMs: 60000,
+    max: 20,
+    keyPrefix: 'compare_sp',
+    failClosed: true
+  });
+
+  app.post('/api/compare/shopee', compareShopeeLimiter, asyncHandler(async (req, res) => {
+    logger.logEnter('POST /api/compare/shopee');
+    try {
+      const { productName, tiktokPrice, tiktokEstimatedCashback } = req.body || {};
+      if (!productName || typeof productName !== 'string' || productName.trim().length < 3 || productName.length > 500) {
+        return res.status(400).json({
+          ok: false,
+          error: 'Thiếu tên sản phẩm TikTok Shop hợp lệ để tìm kiếm trên Shopee.'
+        });
+      }
+
+      const rawPrice = tiktokPrice !== undefined && tiktokPrice !== null && tiktokPrice !== '' ? Number(tiktokPrice) : 0;
+      const safePrice = Number.isFinite(rawPrice) && rawPrice >= 0 && rawPrice <= 1000000000 ? rawPrice : 0;
+
+      const rawCb =
+        tiktokEstimatedCashback !== undefined && tiktokEstimatedCashback !== null && tiktokEstimatedCashback !== ''
+          ? Number(tiktokEstimatedCashback)
+          : 0;
+      const safeCb = Number.isFinite(rawCb) && rawCb >= 0 && rawCb <= safePrice ? rawCb : 0;
+
+      const db = ensureDbLoaded();
+      const s = db.settings || {};
+      const authUser = getAuthUser(req);
+      const cashbackPercent = resolveUserCashbackRate(authUser, s);
+      const taxDeductPercent = Number(s.taxDeductPercent ?? 10);
+      const appId = (process.env.SHOPEE_APP_ID || s.shopeeAppId || '').trim();
+      const appSecret = (process.env.SHOPEE_APP_SECRET || s.shopeeAppSecret || '').trim();
+
+      if (!appId || !appSecret) {
+        logger.logLeave('POST /api/compare/shopee', { status: 'not_configured' });
+        return res.status(503).json({
+          ok: false,
+          code: 'NOT_CONFIGURED',
+          error: 'Tính năng đối chiếu Shopee hiện chưa cấu hình Shopee Open API (App ID & Secret).'
+        });
+      }
+
+      const result = await searchComparableShopeeProducts({
+        tiktokTitle: productName.trim(),
+        tiktokPrice: safePrice,
+        tiktokEstimatedCashback: safeCb,
+        cashbackPercent,
+        taxDeductPercent,
+        appId,
+        appSecret
+      });
+
+      logger.logLeave('POST /api/compare/shopee', {
+        found: result.found,
+        count: result.items.length,
+        cached: result.cached
+      });
+      return res.json({
+        ...result,
+        cashbackPercent,
+        taxDeductPercent
+      });
+    } catch (err) {
+      const code = err?.code || 'UPSTREAM_ERROR';
+      const status = code === 'RATE_LIMITED' ? 429 : code === 'TIMEOUT' ? 504 : 502;
+      logger.warning('POST /api/compare/shopee', 'Compare Shopee search failed', { code, error: err.message });
+      return res.status(status).json({
+        ok: false,
+        code,
+        error: err.message || 'Hệ thống đối chiếu Shopee tạm thời không phản hồi.'
+      });
+    }
+  }));
+
+  const compareShopeeLinkLimiter = createRateLimiter({
+    windowMs: 60000,
+    max: 20,
+    keyPrefix: 'compare_sp_link',
+    failClosed: true
+  });
+
+  app.post('/api/compare/shopee/link', compareShopeeLinkLimiter, asyncHandler(async (req, res) => {
+    logger.logEnter('POST /api/compare/shopee/link');
+    try {
+      const { itemId, shopId } = req.body || {};
+      const cleanItemId = String(itemId || '').trim();
+      const cleanShopId = String(shopId || '').trim();
+
+      if (!/^\d{4,30}$/.test(cleanItemId)) {
+        return res.status(400).json({
+          ok: false,
+          error: 'Mã sản phẩm Shopee không hợp lệ.'
+        });
+      }
+      if (cleanShopId && !/^\d{1,30}$/.test(cleanShopId)) {
+        return res.status(400).json({
+          ok: false,
+          error: 'Mã gian hàng Shopee không hợp lệ.'
+        });
+      }
+
+      const db = ensureDbLoaded();
+      const s = db.settings || {};
+      const authUser = getAuthUser(req);
+
+      // Never accept arbitrary URLs from client: use server-verified productLink or canonical Shopee product URL
+      const verified = getVerifiedShopeeProduct(cleanItemId);
+      const effectiveShopId = verified?.shopId || cleanShopId;
+      const canonicalUrl =
+        verified?.productLink ||
+        (effectiveShopId
+          ? `https://shopee.vn/product/${effectiveShopId}/${cleanItemId}`
+          : `https://shopee.vn/item-i.0.${cleanItemId}`);
+
+      const clickId = crypto.randomBytes(8).toString('hex');
+      const conv = await convertShopeeLink(
+        {
+          cleanUrl: canonicalUrl,
+          itemId: cleanItemId,
+          shopId: effectiveShopId || null,
+          linkType: 'product'
+        },
+        {
+          shopeeMode: process.env.SHOPEE_MODE || s.shopeeMode || 'an_redir',
+          shopeeAffiliateId: process.env.SHOPEE_AFFILIATE_ID || s.shopeeAffiliateId || '17346310715',
+          shopeeAppId: process.env.SHOPEE_APP_ID || s.shopeeAppId || '',
+          shopeeAppSecret: process.env.SHOPEE_APP_SECRET || s.shopeeAppSecret || '',
+          shortenerProvider: s.shortenerProvider || 'none',
+          subId: clickId
+        }
+      );
+
+      if (!conv?.affiliateUrl) {
+        throw new Error('Không thể tạo liên kết Shopee hợp lệ.');
+      }
+
+      const clickRecord = {
+        clickId,
+        userId: authUser ? authUser.id : null,
+        userCode: authUser ? authUser.code : 'GUEST',
+        platform: 'shopee',
+        originalUrl: canonicalUrl,
+        cleanUrl: canonicalUrl,
+        productId: cleanItemId,
+        affiliateUrl: conv.affiliateUrl,
+        createdAt: new Date().toISOString()
+      };
+      await appendClickRecords([clickRecord]);
+
+      logger.logLeave('POST /api/compare/shopee/link', {
+        itemId: cleanItemId,
+        clickId,
+        userCode: clickRecord.userCode
+      });
+      return res.json({
+        ok: true,
+        itemId: cleanItemId,
+        productId: cleanItemId,
+        clickId,
+        affiliateUrl: conv.affiliateUrl,
+        isLoggedIn: Boolean(authUser)
+      });
+    } catch (err) {
+      logger.warning('POST /api/compare/shopee/link', 'Create Shopee compare link failed', {
+        error: err.message
+      });
+      return res.status(502).json({
+        ok: false,
+        error: 'Không thể tạo liên kết hoàn tiền Shopee lúc này. Vui lòng thử lại.'
+      });
     }
   }));
 

@@ -459,11 +459,94 @@ async function convertShopeeLink(cleanInfo, config = {}) {
   };
 }
 
+/**
+ * Search Shopee products by keyword via official Shopee Open API productOfferV2.
+ */
+async function searchShopeeProductOffersByKeyword(keyword, appId, appSecret, limit = 15) {
+  logger.logEnter('searchShopeeProductOffersByKeyword', {
+    keywordLength: String(keyword || '').length,
+    limit
+  });
+  const cleanKeyword = String(keyword || '').trim();
+  const cleanAppId = String(appId || '').trim();
+  const cleanSecret = String(appSecret || '').trim();
+
+  if (!cleanKeyword) {
+    return [];
+  }
+  if (!cleanAppId || !cleanSecret) {
+    const err = new Error('Chưa cấu hình Shopee Open API (App ID & Secret) để tìm sản phẩm Shopee.');
+    err.code = 'MISSING_API_KEY';
+    throw err;
+  }
+
+  const safeLimit = Math.min(20, Math.max(1, Number(limit) || 15));
+  const kwJson = JSON.stringify(cleanKeyword);
+  const fullFields =
+    'itemId shopId productName shopName imageUrl price priceMin priceMax commissionRate commission sales productLink offerLink';
+  const minimalFields =
+    'itemId shopId productName imageUrl price priceMin priceMax commissionRate productLink';
+
+  const queries = [
+    `{ productOfferV2(keyword: ${kwJson}, limit: ${safeLimit}) { nodes { ${fullFields} } } }`,
+    `{ productOfferV2(keyword: ${kwJson}, limit: ${safeLimit}) { nodes { ${minimalFields} } } }`
+  ];
+
+  let lastErr = null;
+  for (let i = 0; i < queries.length; i++) {
+    try {
+      const data = await callShopeeGraphql(queries[i], cleanAppId, cleanSecret);
+      const rawNodes = Array.isArray(data?.productOfferV2?.nodes) ? data.productOfferV2.nodes : [];
+      const normalized = rawNodes.map((node) => {
+        const rawPrice = Number(node.priceMin || node.price || node.priceMax || 0);
+        const rawCommRate = Number(node.commissionRate || 0);
+        const commPercentage = rawCommRate > 0 && rawCommRate < 1 ? rawCommRate * 100 : rawCommRate;
+        const rawComm = Number(node.commission || 0);
+        return {
+          itemId: String(node.itemId || '').trim(),
+          shopId: String(node.shopId || '').trim(),
+          productName: String(node.productName || '').trim(),
+          shopName: String(node.shopName || '').trim() || 'Shopee',
+          imageUrl: String(node.imageUrl || '').trim(),
+          price: Number.isFinite(rawPrice) && rawPrice > 0 ? Math.round(rawPrice) : 0,
+          priceMin: Number(node.priceMin || rawPrice) || 0,
+          priceMax: Number(node.priceMax || rawPrice) || 0,
+          commissionRate: Number.isFinite(commPercentage) && commPercentage > 0 ? Number(commPercentage.toFixed(2)) : 0,
+          commission: Number.isFinite(rawComm) && rawComm > 0 ? Math.round(rawComm) : 0,
+          sales: Number(node.sales || 0) || 0,
+          productLink: String(node.productLink || '').trim()
+        };
+      });
+      logger.logLeave('searchShopeeProductOffersByKeyword', { count: normalized.length });
+      return normalized;
+    } catch (err) {
+      lastErr = err;
+      const msg = String(err?.message || '');
+      const isSchemaError = /cannot query field|unknown argument|field/i.test(msg);
+      if (isSchemaError && i === 0) {
+        logger.warning('searchShopeeProductOffersByKeyword', 'Retrying with minimal fields', { error: msg });
+        continue;
+      }
+      const isTimeout = err?.name === 'AbortError' || err?.name === 'TimeoutError' || /timeout|aborted/i.test(msg);
+      const wrapped = new Error(
+        isTimeout
+          ? 'Kết nối tìm kiếm Shopee tạm thời quá thời gian chờ.'
+          : 'Hệ thống đối chiếu Shopee tạm thời không phản hồi.'
+      );
+      wrapped.code = isTimeout ? 'TIMEOUT' : /10020|invalid credential|auth/i.test(msg) ? 'AUTH_ERROR' : 'UPSTREAM_ERROR';
+      throw wrapped;
+    }
+  }
+
+  throw lastErr || new Error('Hệ thống đối chiếu Shopee tạm thời không phản hồi.');
+}
+
 module.exports = {
   convertShopeeLink,
   buildShopeeRedirectLink,
   generateShopeeOpenApiLink,
   fetchShopeeProductOffer,
+  searchShopeeProductOffersByKeyword,
   fetchAddlivetagProductData,
   fetchShopeeConversionReport,
   DEFAULT_ADDLIVETAG_API_KEY
