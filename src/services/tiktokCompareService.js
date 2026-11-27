@@ -11,7 +11,7 @@ const VERIFIED_PRODUCT_MAX = 1000;
 const MAX_COMPARE_RESULTS = 3;
 const DEFAULT_SEARCH_LIMIT = 15;
 const DEFAULT_SEARCH_TIMEOUT_MS = 6500;
-const MIN_MATCH_SCORE = 0.34;
+const MIN_MATCH_SCORE = 0.42;
 const PRICE_SIMILAR_THRESHOLD_VND = 1000;
 
 const TRANSPARENCY_DISCLAIMER =
@@ -29,8 +29,59 @@ const STOPWORDS = new Set([
   'chinh', 'hang', 'gia', 'tot', 're', 'sieu', 'dep', 'xinh', 'nam', 'nu',
   'dung', 'khong', 'co', 'tu', 'den', 'tai', 'bo', 'set', 'combo', 'hop',
   'chai', 'tuyp', 'goi', 'tui', 'cai', 'chiec', 'san', 'pham', 'the', 'for',
-  'and', 'with', 'new', 'hot', 'sale', 'free', 'ship', 'vn', 'viet', 'nam'
+  'and', 'with', 'new', 'hot', 'sale', 'free', 'ship', 'vn', 'viet', 'nam',
+  'mem', 'mai', 'tien', 'loi', 'thong', 'minh', 'nang', 'xan'
 ]);
+
+const COMMON_ASCII_VN_WORDS = new Set([
+  'khong', 'trong', 'ngoai', 'truoc', 'thuong', 'nhieu', 'nhanh', 'nhiet',
+  'thiet', 'truot', 'trang', 'thanh', 'thong', 'huong', 'khoang', 'nguoi',
+  'ngang', 'nhien', 'chinh', 'chuan', 'chuyen', 'phien', 'khach', 'duong',
+  'phuong', 'luong', 'tuong', 'cuong', 'vuong', 'suong', 'xuong', 'buong',
+  'nhung', 'nghin', 'chiet', 'phieu', 'chong', 'nguyen', 'quyen', 'tuyen',
+  'chiem', 'giuong', 'chuong', 'truong', 'vuong', 'khuyen', 'chay', 'chinh'
+]);
+
+/**
+ * Normalize TikTok/Shopee censorship-evasion letter spacing (e.g. "N. ú.m" -> "Núm", "b.ì.n.h" -> "bình")
+ * strictly for search/matching queries (never touches affiliate URLs or product IDs).
+ */
+function normalizeObfuscatedWords(text) {
+  return String(text || '').replace(
+    /(^|[\s([{\-])(\p{L})(?:\.\s*(\p{L})){2,}(?=$|[\s.,;:!?)\]}])/gu,
+    (full, lead) => {
+      const letters = full.slice(lead.length).replace(/\.\s*/g, '');
+      return `${lead}${letters}`;
+    }
+  );
+}
+
+/**
+ * Extract high-signal brand/proper-noun tokens (ASCII-only words >= 6 chars that are not common Vietnamese words).
+ * Examples: "Greenfinger", "Bebegrow", "Anthelios", "UVMune", "Pigeon", "Moyuum".
+ */
+function extractDistinctiveBrandTokens(title) {
+  const normalized = normalizeObfuscatedWords(title)
+    .replace(/\[[^\]]*\]/g, ' ')
+    .replace(/【[^】]*】/g, ' ')
+    .replace(/[^\p{L}\p{N}\s]+/gu, ' ')
+    .trim();
+
+  const words = normalized.split(/\s+/).filter(Boolean);
+  const brands = [];
+  const seen = new Set();
+
+  for (const w of words) {
+    // Only ASCII-only alphabetic tokens of length >= 6 (rules out Vietnamese diacritic words & short generic words)
+    if (!/^[A-Za-z]{6,}$/.test(w)) continue;
+    const lower = w.toLowerCase();
+    if (STOPWORDS.has(lower) || COMMON_ASCII_VN_WORDS.has(lower)) continue;
+    if (seen.has(lower)) continue;
+    seen.add(lower);
+    brands.push(lower);
+  }
+  return brands;
+}
 
 function stripDiacritics(str) {
   return String(str || '')
@@ -69,7 +120,7 @@ function isValidTikTokDetailLink(rawUrl) {
 function cleanShopeeTitleForSearch(rawTitle) {
   if (!rawTitle || typeof rawTitle !== 'string') return '';
 
-  let text = rawTitle
+  let text = normalizeObfuscatedWords(rawTitle)
     // Remove bracketed promotional tags like [CHÍNH HÃNG], [Hỏa tốc], 【Mall】
     .replace(/\[[^\]]*\]/g, ' ')
     .replace(/【[^】]*】/g, ' ')
@@ -125,13 +176,39 @@ function cleanShopeeTitleForSearch(rawTitle) {
 }
 
 /**
- * Build a shorter fallback query (first 5-6 key words + unit) when full query returns 0 results.
+ * Build a shorter fallback query when full query returns 0 results.
+ * Preserves distinctive brand tokens (e.g. "Greenfinger Bebegrow") instead of blindly truncating to generic leading words.
  */
 function buildShorterFallbackQuery(cleanQuery) {
   const tokens = String(cleanQuery || '').split(/\s+/).filter(Boolean);
-  if (tokens.length <= 5) return '';
+  if (tokens.length <= 4) return '';
   const unitRegex = /(\d+(?:[.,]\d+)?(?:ml|l|g|gr|kg|gb|tb|mah)|spf\d+)/i;
   const units = tokens.filter((t) => unitRegex.test(stripDiacritics(t)));
+  const brandSet = new Set(extractDistinctiveBrandTokens(cleanQuery));
+
+  if (brandSet.size > 0) {
+    const brandTokens = tokens.filter((t) => brandSet.has(stripDiacritics(t).toLowerCase()));
+    const firstBrandIdx = tokens.findIndex((t) => brandSet.has(stripDiacritics(t).toLowerCase()));
+    const focused = [];
+    // Include up to 1 meaningful noun right before the brand (e.g. "Núm" before "Greenfinger")
+    if (firstBrandIdx > 0) {
+      const prev = tokens[firstBrandIdx - 1];
+      const prevNorm = stripDiacritics(prev).toLowerCase();
+      if (prevNorm.length >= 2 && !STOPWORDS.has(prevNorm) && !brandSet.has(prevNorm)) {
+        focused.push(prev);
+      }
+    }
+    for (const bt of brandTokens) {
+      if (!focused.includes(bt)) focused.push(bt);
+    }
+    for (const u of units) {
+      if (!focused.includes(u)) focused.push(u);
+    }
+    const brandQuery = focused.join(' ').trim();
+    if (brandQuery && brandQuery !== cleanQuery) return brandQuery;
+  }
+
+  if (tokens.length <= 5) return '';
   const base = tokens.slice(0, 5);
   for (const u of units) {
     if (!base.includes(u)) base.push(u);
@@ -200,7 +277,7 @@ function extractProductUnits(title) {
  * Extract meaningful tokens for similarity scoring.
  */
 function tokenizeForMatching(title) {
-  const norm = stripDiacritics(title)
+  const norm = stripDiacritics(normalizeObfuscatedWords(title))
     .toLowerCase()
     .replace(/\[[^\]]*\]/g, ' ')
     .replace(/【[^】]*】/g, ' ')
@@ -343,6 +420,12 @@ function scoreTikTokCandidate(shopeeTitle, shopeePrice, rawProd) {
 
   const tiktokSet = new Set(tiktokTokens);
   const shopeeUnique = Array.from(new Set(shopeeTokens));
+  const brandTokens = extractDistinctiveBrandTokens(shopeeTitle);
+  const brandSet = new Set(brandTokens);
+
+  if (brandTokens.length > 0 && !brandTokens.some((b) => tiktokSet.has(b))) {
+    return { eligible: false, score: 0, reason: 'brand_mismatch' };
+  }
 
   let matchedCount = 0;
   let weightedMatched = 0;
@@ -351,8 +434,9 @@ function scoreTikTokCandidate(shopeeTitle, shopeePrice, rawProd) {
 
   shopeeUnique.forEach((tok, idx) => {
     const isModelOrNum = /\d/.test(tok);
+    const isBrandTok = brandSet.has(tok);
     const isLeadingBrandToken = idx < 3;
-    const weight = isModelOrNum ? 2.0 : isLeadingBrandToken ? 1.6 : 1.0;
+    const weight = isBrandTok ? 2.4 : isModelOrNum ? 2.0 : isLeadingBrandToken ? 1.6 : 1.0;
     totalWeight += weight;
 
     if (tiktokSet.has(tok)) {
@@ -845,6 +929,12 @@ function scoreShopeeCandidate(tiktokTitle, tiktokPrice, rawNode) {
 
   const targetSet = new Set(targetTokens);
   const sourceUnique = Array.from(new Set(sourceTokens));
+  const brandTokens = extractDistinctiveBrandTokens(tiktokTitle);
+  const brandSet = new Set(brandTokens);
+
+  if (brandTokens.length > 0 && !brandTokens.some((b) => targetSet.has(b))) {
+    return { eligible: false, score: 0, reason: 'brand_mismatch' };
+  }
 
   let matchedCount = 0;
   let weightedMatched = 0;
@@ -853,8 +943,9 @@ function scoreShopeeCandidate(tiktokTitle, tiktokPrice, rawNode) {
 
   sourceUnique.forEach((tok, idx) => {
     const isModelOrNum = /\d/.test(tok);
+    const isBrandTok = brandSet.has(tok);
     const isLeadingBrandToken = idx < 3;
-    const weight = isModelOrNum ? 2.0 : isLeadingBrandToken ? 1.6 : 1.0;
+    const weight = isBrandTok ? 2.4 : isModelOrNum ? 2.0 : isLeadingBrandToken ? 1.6 : 1.0;
     totalWeight += weight;
 
     if (targetSet.has(tok)) {
@@ -1183,6 +1274,8 @@ module.exports = {
   TRANSPARENCY_DISCLAIMER,
   cleanShopeeTitleForSearch,
   buildShorterFallbackQuery,
+  normalizeObfuscatedWords,
+  extractDistinctiveBrandTokens,
   extractProductUnits,
   compareUnits,
   scoreTikTokCandidate,

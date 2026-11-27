@@ -4731,28 +4731,188 @@ if (viewAdmin) {
 // Admin User Management Modal Functions
 const userManageModal = document.getElementById('userManageModal');
 let currentManagingUser = null;
+let lastAdminResetTempPwd = '';
+let manageResetCountdownTimer = null;
 
-function openUserManageModal(user) {
-  currentManagingUser = user;
-  if (!userManageModal) return;
+function getSystemDefaultCashbackRate() {
+  const fromSettings = Number(document.getElementById('admCashbackPercent')?.value);
+  if (Number.isFinite(fromSettings) && fromSettings > 0) return fromSettings;
+  const fromPublic = Number(publicConfig?.cashbackPercent);
+  if (Number.isFinite(fromPublic) && fromPublic > 0) return fromPublic;
+  return 70;
+}
+
+function syncUserManageSummary(user) {
+  if (!user) return;
   const setTxt = (id, txt) => {
     const el = document.getElementById(id);
     if (el) el.textContent = txt;
   };
 
-  if (document.getElementById('manageUserId')) {
-    document.getElementById('manageUserId').value = user.id;
-  }
-  setTxt('manageUserCode', user.code);
+  setTxt('manageHeaderUserCode', user.code ? `#${user.code}` : '');
+  setTxt('manageUserCode', user.code || '—');
   setTxt('manageUserName', user.name || 'Chưa cập nhật');
-  setTxt('manageUserPhone', user.phone);
-  setTxt('manageUserBalance', fmtVnd(user.balanceAvailable));
+  setTxt('manageUserPhone', user.phone || '—');
+  setTxt('manageUserBalance', fmtVnd(user.balanceAvailable || 0));
 
   const statusEl = document.getElementById('manageUserStatus');
   if (statusEl) {
-    statusEl.innerHTML = user.accountLocked
-      ? '<span class="status-badge st-cancelled">Đang bị khóa (Chặn đăng nhập &amp; rút tiền)</span>'
-      : '<span class="status-badge st-approved">Đang hoạt động bình thường</span>';
+    if (user.isDeleted) {
+      statusEl.innerHTML = '<span class="status-badge st-cancelled">Đã lưu trữ (Vô hiệu hóa)</span>';
+    } else if (user.accountLocked) {
+      statusEl.innerHTML = '<span class="status-badge st-cancelled">Đang bị khóa</span>';
+    } else {
+      statusEl.innerHTML = '<span class="status-badge st-approved">Đang hoạt động</span>';
+    }
+  }
+
+  const defaultRate = getSystemDefaultCashbackRate();
+  const hasCustomRate =
+    user.customCashbackPercent !== null &&
+    user.customCashbackPercent !== undefined &&
+    user.customCashbackPercent !== '';
+  const rateText = hasCustomRate
+    ? `Riêng ${user.customCashbackPercent}%`
+    : `Mặc định ${defaultRate}%`;
+
+  const summaryRateEl = document.getElementById('manageSummaryRateBadge');
+  if (summaryRateEl) {
+    summaryRateEl.textContent = rateText;
+    summaryRateEl.classList.toggle('is-custom', hasCustomRate);
+  }
+  const headerRateEl = document.getElementById('manageRateHeaderBadge');
+  if (headerRateEl) {
+    headerRateEl.textContent = rateText;
+    headerRateEl.classList.toggle('is-custom', hasCustomRate);
+  }
+  const rateBoxEl = document.getElementById('manageRateStatusBox');
+  if (rateBoxEl) {
+    rateBoxEl.classList.toggle('is-custom', hasCustomRate);
+    rateBoxEl.innerHTML = hasCustomRate
+      ? `Đang dùng: <strong>Tỷ lệ riêng (${escapeHtml(String(user.customCashbackPercent))}%)</strong> — ghi đè mặc định hệ thống (${escapeHtml(String(defaultRate))}%).`
+      : `Đang dùng: <strong>Mặc định hệ thống (${escapeHtml(String(defaultRate))}%)</strong>.`;
+  }
+  const resetRateBtn = document.getElementById('btnResetCustomCashbackRate');
+  if (resetRateBtn) {
+    resetRateBtn.disabled = !hasCustomRate;
+  }
+
+  const lockBtn = document.getElementById('btnToggleUserLock');
+  const lockTitle = document.getElementById('manageLockTitle');
+  const lockDesc = document.getElementById('manageLockDesc');
+  if (lockTitle) {
+    lockTitle.textContent = user.accountLocked ? 'Mở khóa tài khoản' : 'Khóa tài khoản tạm thời';
+  }
+  if (lockDesc) {
+    lockDesc.textContent = user.accountLocked
+      ? 'Tài khoản đang bị khóa đăng nhập và rút tiền. Bấm bên dưới để khôi phục hoạt động.'
+      : 'Chặn đăng nhập & rút tiền, thu hồi phiên cũ. Có thể mở khóa lại bất cứ lúc nào.';
+  }
+  if (lockBtn) {
+    lockBtn.innerHTML = user.accountLocked
+      ? `${UI_ICONS.unlock}<span>Mở Khóa Tài Khoản</span>`
+      : `${UI_ICONS.lock}<span>Khóa Tài Khoản Này</span>`;
+    lockBtn.className = user.accountLocked
+      ? 'btn btn-success btn-sm btn-icon-svg um-full-btn'
+      : 'btn btn-outline btn-sm btn-icon-svg um-full-btn';
+    lockBtn.disabled = Boolean(user.isDeleted || user.role === 'admin');
+  }
+
+  const delBtn = document.getElementById('btnDeleteUser');
+  if (delBtn) {
+    delBtn.disabled = Boolean(user.isDeleted || user.role === 'admin');
+    const delSpan = delBtn.querySelector('span');
+    if (delSpan) {
+      delSpan.textContent = user.isDeleted ? 'Tài Khoản Đã Lưu Trữ' : 'Lưu Trữ Tài Khoản';
+    }
+  }
+}
+
+function setManageAdjustType(type) {
+  const cleanType = type === 'minus' ? 'minus' : 'plus';
+  const hiddenInput = document.getElementById('manageAdjustType');
+  if (hiddenInput) hiddenInput.value = cleanType;
+
+  const plusBtn = document.getElementById('btnAdjustTypePlus');
+  const minusBtn = document.getElementById('btnAdjustTypeMinus');
+  if (plusBtn) {
+    plusBtn.classList.toggle('is-active', cleanType === 'plus');
+    plusBtn.setAttribute('aria-pressed', String(cleanType === 'plus'));
+  }
+  if (minusBtn) {
+    minusBtn.classList.toggle('is-active', cleanType === 'minus');
+    minusBtn.setAttribute('aria-pressed', String(cleanType === 'minus'));
+  }
+
+  const submitBtn = document.getElementById('btnAdjustUserBalance');
+  const submitLabel = document.getElementById('btnAdjustUserBalanceLabel');
+  if (submitBtn) {
+    submitBtn.classList.toggle('is-minus-mode', cleanType === 'minus');
+  }
+  if (submitLabel) {
+    submitLabel.textContent = cleanType === 'minus' ? 'Xác Nhận Trừ Tiền' : 'Xác Nhận Cộng Tiền';
+  }
+  updateManageBalancePreview();
+}
+
+function updateManageBalancePreview() {
+  const box = document.getElementById('manageAdjustPreview');
+  if (!box || !currentManagingUser) return;
+  const rawAmt = Number(document.getElementById('manageAdjustAmount')?.value || 0);
+  const type = document.getElementById('manageAdjustType')?.value === 'minus' ? 'minus' : 'plus';
+
+  if (!Number.isFinite(rawAmt) || rawAmt <= 0) {
+    box.classList.add('hidden');
+    return;
+  }
+
+  const before = Number(currentManagingUser.balanceAvailable || 0);
+  const delta = type === 'minus' ? -Math.round(rawAmt) : Math.round(rawAmt);
+  const after = before + delta;
+
+  const beforeEl = document.getElementById('managePreviewBefore');
+  const deltaEl = document.getElementById('managePreviewDelta');
+  const afterEl = document.getElementById('managePreviewAfter');
+  const warnEl = document.getElementById('managePreviewWarn');
+
+  if (beforeEl) beforeEl.textContent = fmtVnd(before);
+  if (deltaEl) deltaEl.textContent = `${delta >= 0 ? '+' : '-'}${fmtVnd(Math.abs(delta))}`;
+  if (afterEl) afterEl.textContent = after < 0 ? `-${fmtVnd(Math.abs(after))}` : fmtVnd(after);
+
+  box.classList.remove('hidden', 'is-plus', 'is-minus', 'is-negative');
+  if (after < 0) {
+    box.classList.add('is-minus', 'is-negative');
+    if (warnEl) {
+      warnEl.textContent = 'Cảnh báo: Số dư dự kiến sau khi trừ sẽ bị âm. Vui lòng kiểm tra kỹ trước khi xác nhận.';
+      warnEl.classList.remove('hidden');
+    }
+  } else {
+    box.classList.add(type === 'minus' ? 'is-minus' : 'is-plus');
+    if (warnEl) {
+      warnEl.textContent = '';
+      warnEl.classList.add('hidden');
+    }
+  }
+}
+
+function syncUserManageAccordions() {
+  if (!userManageModal) return;
+  const isDesktop = window.innerWidth >= 768;
+  userManageModal.querySelectorAll('details[data-um-section]').forEach((detailsEl) => {
+    if (isDesktop) {
+      detailsEl.open = true;
+    } else {
+      detailsEl.open = detailsEl.dataset.umSection === 'balance';
+    }
+  });
+}
+
+function openUserManageModal(user) {
+  currentManagingUser = { ...user };
+  if (!userManageModal) return;
+
+  if (document.getElementById('manageUserId')) {
+    document.getElementById('manageUserId').value = user.id;
   }
 
   const setVal = (id, v) => {
@@ -4771,27 +4931,50 @@ function openUserManageModal(user) {
       : ''
   );
 
-  const lockBtn = document.getElementById('btnToggleUserLock');
-  if (lockBtn) {
-    lockBtn.innerHTML = user.accountLocked
-      ? `${UI_ICONS.unlock}<span>Mở Khóa Tài Khoản</span>`
-      : `${UI_ICONS.lock}<span>Khóa Tài Khoản Này</span>`;
-    lockBtn.className = user.accountLocked
-      ? 'btn btn-success btn-sm btn-icon-svg'
-      : 'btn btn-outline btn-sm btn-icon-svg';
-  }
+  const advDetails = userManageModal.querySelector('.manage-advanced');
+  if (advDetails) advDetails.open = false;
+
+  setManageAdjustType('plus');
+  syncUserManageSummary(currentManagingUser);
+  syncUserManageAccordions();
+  updateManageBalancePreview();
 
   userManageModal.classList.remove('hidden');
 }
 
-let lastAdminResetTempPwd = '';
-
 function clearManageResetResult() {
+  if (manageResetCountdownTimer) {
+    clearInterval(manageResetCountdownTimer);
+    manageResetCountdownTimer = null;
+  }
   lastAdminResetTempPwd = '';
   const box = document.getElementById('manageResetResultBox');
   const valEl = document.getElementById('manageResetPwdValue');
+  const countEl = document.getElementById('manageResetCountdown');
   if (valEl) valEl.textContent = '';
+  if (countEl) countEl.textContent = '60';
   if (box) box.classList.add('hidden');
+}
+
+function showManageResetResult(tempPwd) {
+  clearManageResetResult();
+  lastAdminResetTempPwd = tempPwd;
+  const box = document.getElementById('manageResetResultBox');
+  const valEl = document.getElementById('manageResetPwdValue');
+  const countEl = document.getElementById('manageResetCountdown');
+  if (valEl) valEl.textContent = tempPwd;
+  let remaining = 60;
+  if (countEl) countEl.textContent = String(remaining);
+  if (box) box.classList.remove('hidden');
+
+  manageResetCountdownTimer = setInterval(() => {
+    remaining -= 1;
+    if (remaining <= 0) {
+      clearManageResetResult();
+    } else if (countEl) {
+      countEl.textContent = String(remaining);
+    }
+  }, 1000);
 }
 
 on('closeUserManageModalBtn', 'click', () => {
@@ -4799,6 +4982,34 @@ on('closeUserManageModalBtn', 'click', () => {
   resetPasswordVisibility(userManageModal);
   userManageModal?.classList.add('hidden');
 });
+
+on('btnHideResetPwd', 'click', () => {
+  clearManageResetResult();
+});
+
+on('btnCopyManageCode', 'click', () => {
+  if (!currentManagingUser?.code) return;
+  copyText(currentManagingUser.code, `Đã sao chép mã khách ${currentManagingUser.code}`);
+});
+
+on('btnCopyManagePhone', 'click', () => {
+  if (!currentManagingUser?.phone) return;
+  copyText(currentManagingUser.phone, `Đã sao chép SĐT ${currentManagingUser.phone}`);
+});
+
+on('btnAdjustTypePlus', 'click', () => setManageAdjustType('plus'));
+on('btnAdjustTypeMinus', 'click', () => setManageAdjustType('minus'));
+on('manageAdjustAmount', 'input', updateManageBalancePreview);
+
+if (userManageModal) {
+  userManageModal.addEventListener('focusin', (e) => {
+    if (window.innerWidth < 768 && e.target && e.target.matches('input:not([type="hidden"])')) {
+      setTimeout(() => {
+        e.target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 220);
+    }
+  });
+}
 
 on('btnCopyResetPwd', 'click', () => {
   if (!lastAdminResetTempPwd) return;
@@ -4829,7 +5040,7 @@ on('btnGenerateRandomPwd', 'click', () => {
     input.value = pwd;
     input.type = 'text';
     syncPasswordToggleUi(input);
-    showToast('Đã tạo mật khẩu ngẫu nhiên: ' + pwd);
+    showToast('Đã tạo mật khẩu ngẫu nhiên an toàn. Bấm "Lưu Mật Khẩu" để áp dụng.');
   }
 });
 
@@ -4841,7 +5052,11 @@ on('btnResetUserPassword', 'click', async () => {
     return;
   }
   const btn = document.getElementById('btnResetUserPassword');
-  if (btn) btn.disabled = true;
+  const origHtml = btn?.innerHTML;
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Đang lưu...';
+  }
   try {
     const res = await apiFetch('/api/admin/users/action', {
       method: 'POST',
@@ -4852,11 +5067,7 @@ on('btnResetUserPassword', 'click', async () => {
       })
     });
     showToast(res.message);
-    lastAdminResetTempPwd = newPassword;
-    const resultBox = document.getElementById('manageResetResultBox');
-    const resultVal = document.getElementById('manageResetPwdValue');
-    if (resultVal) resultVal.textContent = newPassword;
-    if (resultBox) resultBox.classList.remove('hidden');
+    showManageResetResult(newPassword);
     const pwdInput = document.getElementById('manageNewPassword');
     if (pwdInput) {
       pwdInput.value = '';
@@ -4867,23 +5078,41 @@ on('btnResetUserPassword', 'click', async () => {
   } catch (err) {
     showToast(err.message);
   } finally {
-    if (btn) btn.disabled = false;
+    if (btn) {
+      btn.disabled = false;
+      if (origHtml) btn.innerHTML = origHtml;
+    }
   }
 });
 
 on('btnAdjustUserBalance', 'click', async () => {
   if (!currentManagingUser) return;
-  const type = document.getElementById('manageAdjustType')?.value;
-  const rawAmt = Number(document.getElementById('manageAdjustAmount')?.value || 0);
+  const type = document.getElementById('manageAdjustType')?.value === 'minus' ? 'minus' : 'plus';
+  const rawAmt = Math.round(Number(document.getElementById('manageAdjustAmount')?.value || 0));
   const note = document.getElementById('manageAdjustNote')?.value?.trim() || '';
 
-  if (!rawAmt || rawAmt <= 0) {
+  if (!Number.isFinite(rawAmt) || rawAmt <= 0) {
     showToast('Vui lòng nhập số tiền lớn hơn 0.');
     return;
   }
+
   const amount = type === 'minus' ? -rawAmt : rawAmt;
+  const before = Number(currentManagingUser.balanceAvailable || 0);
+  const after = before + amount;
+  const actionLabel = type === 'minus' ? 'TRỪ' : 'CỘNG';
+  const afterText = after < 0 ? `-${fmtVnd(Math.abs(after))}` : fmtVnd(after);
+
+  const confirmed = await askUserConfirm(
+    `Xác nhận ${actionLabel} ${fmtVnd(rawAmt)} cho ${currentManagingUser.code} (${currentManagingUser.name || currentManagingUser.phone})?\n• Số dư hiện tại: ${fmtVnd(before)}\n• Số dư dự kiến sau điều chỉnh: ${afterText}${note ? `\n• Lý do: ${note}` : ''}`,
+    type === 'minus' ? 'Xác Nhận Trừ Số Dư' : 'Xác Nhận Cộng Số Dư'
+  );
+  if (!confirmed) return;
+
   const btn = document.getElementById('btnAdjustUserBalance');
+  const labelEl = document.getElementById('btnAdjustUserBalanceLabel');
+  const prevLabel = labelEl?.textContent || '';
   if (btn) btn.disabled = true;
+  if (labelEl) labelEl.textContent = 'Đang xử lý...';
 
   try {
     const res = await apiFetch('/api/admin/users/action', {
@@ -4896,7 +5125,42 @@ on('btnAdjustUserBalance', 'click', async () => {
       })
     });
     showToast(res.message);
-    userManageModal?.classList.add('hidden');
+    currentManagingUser.balanceAvailable = after;
+    const amtInput = document.getElementById('manageAdjustAmount');
+    const noteInput = document.getElementById('manageAdjustNote');
+    if (amtInput) amtInput.value = '';
+    if (noteInput) noteInput.value = '';
+    syncUserManageSummary(currentManagingUser);
+    updateManageBalancePreview();
+    await loadAdminDashboard();
+  } catch (err) {
+    showToast(err.message);
+  } finally {
+    if (btn) btn.disabled = false;
+    if (labelEl) labelEl.textContent = prevLabel || (type === 'minus' ? 'Xác Nhận Trừ Tiền' : 'Xác Nhận Cộng Tiền');
+  }
+});
+
+on('btnResetUserBalanceZero', 'click', async () => {
+  if (!currentManagingUser) return;
+  const confirmed = await askUserConfirm(
+    `Bạn có chắc chắn muốn đặt toàn bộ số dư khả dụng (${fmtVnd(currentManagingUser.balanceAvailable || 0)}) của khách hàng ${currentManagingUser.code} về 0đ không?`,
+    'Đặt Lại Số Dư = 0đ'
+  );
+  if (!confirmed) {
+    return;
+  }
+  const btn = document.getElementById('btnResetUserBalanceZero');
+  if (btn) btn.disabled = true;
+  try {
+    const res = await apiFetch('/api/admin/users/action', {
+      method: 'POST',
+      body: JSON.stringify({ userId: currentManagingUser.id, action: 'reset_balance' })
+    });
+    showToast(res.message);
+    currentManagingUser.balanceAvailable = 0;
+    syncUserManageSummary(currentManagingUser);
+    updateManageBalancePreview();
     await loadAdminDashboard();
   } catch (err) {
     showToast(err.message);
@@ -4905,62 +5169,60 @@ on('btnAdjustUserBalance', 'click', async () => {
   }
 });
 
-on('btnResetUserBalanceZero', 'click', async () => {
-  if (!currentManagingUser) return;
-  const confirmed = await askUserConfirm(
-    `Bạn có chắc chắn muốn đặt toàn bộ số dư khả dụng của khách hàng ${currentManagingUser.code} về 0đ không?`,
-    'Đặt Lại Số Dư = 0đ'
-  );
-  if (!confirmed) {
-    return;
-  }
-  try {
-    const res = await apiFetch('/api/admin/users/action', {
-      method: 'POST',
-      body: JSON.stringify({ userId: currentManagingUser.id, action: 'reset_balance' })
-    });
-    showToast(res.message);
-    userManageModal?.classList.add('hidden');
-    await loadAdminDashboard();
-  } catch (err) {
-    showToast(err.message);
-  }
-});
-
 on('btnToggleUserLock', 'click', async () => {
   if (!currentManagingUser) return;
+  const willUnlock = Boolean(currentManagingUser.accountLocked);
+  const confirmed = await askUserConfirm(
+    willUnlock
+      ? `Mở khóa tài khoản ${currentManagingUser.code} (${currentManagingUser.phone})?\nKhách hàng sẽ có thể đăng nhập và rút tiền trở lại.`
+      : `Khóa tài khoản ${currentManagingUser.code} (${currentManagingUser.phone})?\nKhách hàng sẽ bị chặn đăng nhập, chặn rút tiền và đăng xuất khỏi toàn bộ thiết bị hiện tại.`,
+    willUnlock ? 'Mở Khóa Tài Khoản' : 'Khóa Tài Khoản Thành Viên'
+  );
+  if (!confirmed) return;
+
+  const btn = document.getElementById('btnToggleUserLock');
+  if (btn) btn.disabled = true;
   try {
     const res = await apiFetch('/api/admin/users/action', {
       method: 'POST',
       body: JSON.stringify({ userId: currentManagingUser.id, action: 'toggle_lock' })
     });
     showToast(res.message);
-    userManageModal?.classList.add('hidden');
+    currentManagingUser.accountLocked = !willUnlock;
+    syncUserManageSummary(currentManagingUser);
     await loadAdminDashboard();
   } catch (err) {
     showToast(err.message);
+  } finally {
+    if (btn) btn.disabled = Boolean(currentManagingUser?.isDeleted || currentManagingUser?.role === 'admin');
   }
 });
 
 on('btnDeleteUser', 'click', async () => {
   if (!currentManagingUser) return;
   const confirmed = await askUserConfirm(
-    `Lưu trữ tài khoản ${currentManagingUser.code} (${currentManagingUser.phone})?\nTài khoản sẽ bị khóa và các phiên đăng nhập cũ bị thu hồi. Thông tin, số điện thoại và lịch sử giao dịch vẫn được giữ.`,
+    `Lưu trữ tài khoản ${currentManagingUser.code} (${currentManagingUser.phone})?\nTài khoản sẽ bị khóa vĩnh viễn và các phiên đăng nhập cũ bị thu hồi. Thông tin, số điện thoại và lịch sử giao dịch vẫn được giữ.`,
     'Lưu Trữ Tài Khoản Thành Viên'
   );
   if (!confirmed) {
     return;
   }
+  const btn = document.getElementById('btnDeleteUser');
+  if (btn) btn.disabled = true;
   try {
     const res = await apiFetch('/api/admin/users/action', {
       method: 'POST',
       body: JSON.stringify({ userId: currentManagingUser.id, action: 'delete' })
     });
     showToast(res.message);
+    clearManageResetResult();
+    resetPasswordVisibility(userManageModal);
     userManageModal?.classList.add('hidden');
     await loadAdminDashboard();
   } catch (err) {
     showToast(err.message);
+  } finally {
+    if (btn) btn.disabled = false;
   }
 });
 
@@ -6222,13 +6484,20 @@ async function submitUserCustomCashbackRate(rateValue) {
           ? String(res.customCashbackPercent)
           : '';
     }
+    syncUserManageSummary(currentManagingUser);
     showToast(res.message);
     await loadAdminUsersPage(adminUsersPage);
   } catch (err) {
     showToast(err.message);
   } finally {
     if (btn) btn.disabled = false;
-    if (resetBtn) resetBtn.disabled = false;
+    if (resetBtn) {
+      const hasCustom =
+        currentManagingUser?.customCashbackPercent !== null &&
+        currentManagingUser?.customCashbackPercent !== undefined &&
+        currentManagingUser?.customCashbackPercent !== '';
+      resetBtn.disabled = !hasCustom;
+    }
   }
 }
 

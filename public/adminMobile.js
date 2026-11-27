@@ -127,17 +127,7 @@
     new MutationObserver(decorate).observe(body, { childList: true });
     decorate();
   });
-  // Field layout lives in HTML/base CSS and does not depend on this enhancement.
-  const preview = document.createElement('p'); preview.className = 'admin-adjust-preview'; preview.setAttribute('aria-live', 'polite');
-  document.getElementById('manageAdjustAmount').closest('.admin-adjust-row').after(preview);
-  const updatePreview = () => {
-    const amount = Number(document.getElementById('manageAdjustAmount').value);
-    const balance = latestAdminUsers.find(u => u.id === document.getElementById('manageUserId').value)?.balanceAvailable;
-    const minus = document.getElementById('manageAdjustType').value === 'minus';
-    preview.textContent = amount > 0 ? `${minus ? 'Trừ' : 'Cộng'} ${fmtVnd(amount)}${Number.isFinite(balance) ? ` · Số dư dự kiến: ${fmtVnd(balance + (minus ? -amount : amount))}` : ''}` : '';
-  };
-  ['manageAdjustAmount', 'manageAdjustType'].forEach(id => document.getElementById(id).addEventListener('input', updatePreview));
-  new MutationObserver(() => { if (!document.getElementById('userManageModal').classList.contains('hidden')) updatePreview(); }).observe(document.getElementById('userManageModal'), { attributes: true, attributeFilter: ['class'] });
+  // Balance preview and field layout now live directly in index.html + app.js.
   // Collapse settings into named sections without changing field IDs or save payloads.
   root.querySelectorAll('.admin-settings-grid > .admin-card').forEach(card => {
     const section = document.createElement('details'); section.className = card.className; section.open = !mobile.matches;

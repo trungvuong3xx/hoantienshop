@@ -64,9 +64,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link id="webFont" media="print" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/styles.css?v=2.9.20" />
+  <link rel="stylesheet" href="/styles.css?v=2.9.21" />
   <link rel="stylesheet" href="/selectPopup.css?v=5" />
-  <script src="/app.js?v=2.9.20" defer></script>
+  <script src="/app.js?v=2.9.21" defer></script>
   <script src="/selectPopup.js?v=4" defer></script>
 </head>
 <body>
@@ -1861,124 +1861,248 @@
 
   <!-- User Management Modal for Admin -->
   <div id="userManageModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="userManageModalTitle">
-    <div class="modal-box modal-lg">
-      <div class="modal-head">
+    <div class="modal-box modal-lg um-modal-box">
+      <div class="modal-head um-modal-head">
         <div class="modal-title-group">
           <span class="modal-header-icon is-indigo" aria-hidden="true">
             <svg class="svg-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
           </span>
-          <h3 id="userManageModalTitle">Quản Lý Thành Viên</h3>
+          <div class="um-title-stack">
+            <h3 id="userManageModalTitle">Quản Lý Thành Viên</h3>
+            <span id="manageHeaderUserCode" class="um-header-code"></span>
+          </div>
         </div>
         <button type="button" class="close-btn" id="closeUserManageModalBtn" aria-label="Đóng">
           <svg class="svg-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
       </div>
 
-      <div class="modal-body-form" style="gap: 16px;">
+      <div class="modal-body-form um-modal-body">
         <input type="hidden" id="manageUserId" />
-        <div class="modal-info-card">
-          <div>Mã khách: <strong id="manageUserCode"></strong></div>
-          <div>Họ tên: <strong id="manageUserName"></strong></div>
-          <div>SĐT: <strong id="manageUserPhone"></strong></div>
-          <div>Số dư khả dụng: <strong id="manageUserBalance" style="color: #059669;"></strong></div>
-          <div>Trạng thái: <strong id="manageUserStatus"></strong></div>
-        </div>
 
-        <div class="manage-sections-grid">
-        <div class="modal-section-divider">
-          <h4 style="margin: 0 0 8px 0; font-size: 14px;">1. Đổi / Cấp Lại Mật Khẩu</h4>
-          <div class="manage-password-grid">
-            <div class="admin-adjust-field manage-full-width">
-              <label for="manageNewPassword">Mật khẩu mới</label>
-              <input type="password" id="manageNewPassword" autocomplete="new-password" minlength="6" maxlength="64" placeholder="Nhập ít nhất 6 ký tự" />
+        <!-- A. Compact Member Summary Card -->
+        <div class="um-summary-card">
+          <div class="um-summary-identity">
+            <div class="um-summary-top-line">
+              <strong id="manageUserName" class="um-summary-name"></strong>
+              <span id="manageUserStatus" class="um-summary-status"></span>
             </div>
-            <button type="button" class="btn btn-outline btn-sm" id="btnGenerateRandomPwd" title="Tạo mật khẩu ngẫu nhiên an toàn">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1"/><circle cx="15.5" cy="15.5" r="1"/><circle cx="15.5" cy="8.5" r="1"/><circle cx="8.5" cy="15.5" r="1"/></svg>
-              <span>Tạo ngẫu nhiên</span>
-            </button>
-            <button type="button" class="btn btn-primary btn-sm btn-icon-svg" id="btnResetUserPassword">
-              <svg class="svg-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/></svg>
-              <span>Lưu Mật Khẩu</span>
-            </button>
+            <div class="um-summary-meta">
+              <span class="um-meta-chip">
+                <span class="um-meta-label">Mã:</span>
+                <strong id="manageUserCode"></strong>
+                <button type="button" class="um-mini-copy" id="btnCopyManageCode" title="Sao chép mã khách" aria-label="Sao chép mã khách">
+                  <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                </button>
+              </span>
+              <span class="um-meta-chip">
+                <span class="um-meta-label">SĐT:</span>
+                <strong id="manageUserPhone"></strong>
+                <button type="button" class="um-mini-copy" id="btnCopyManagePhone" title="Sao chép số điện thoại" aria-label="Sao chép số điện thoại">
+                  <svg class="svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                </button>
+              </span>
+              <span class="um-meta-chip">
+                <span class="um-meta-label">Hoàn tiền:</span>
+                <span id="manageSummaryRateBadge" class="um-rate-pill"></span>
+              </span>
+            </div>
           </div>
-          <div id="manageResetResultBox" class="manage-reset-result-box hidden" aria-live="polite">
-            <div class="manage-reset-result-head">
-              <span>Mật khẩu tạm vừa cấp (chỉ hiển thị tạm thời):</span>
-              <code id="manageResetPwdValue" class="manage-reset-pwd-code"></code>
-            </div>
-            <div class="manage-reset-result-actions">
-              <button type="button" class="btn btn-outline btn-sm btn-icon-svg" id="btnCopyResetPwd">
-                <svg class="svg-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                <span>Sao chép MK</span>
-              </button>
-              <button type="button" class="btn btn-primary btn-sm btn-icon-svg" id="btnCopyResetMsg">
-                <svg class="svg-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-                <span>Copy tin gửi Zalo</span>
-              </button>
-            </div>
+          <div class="um-summary-balance-box">
+            <span class="um-balance-label">Số dư khả dụng</span>
+            <strong id="manageUserBalance" class="um-summary-balance-val"></strong>
           </div>
         </div>
 
-        <div class="modal-section-divider">
-          <h4 style="margin: 0 0 8px 0; font-size: 14px;">2. Điều Chỉnh Số Dư Thủ Công</h4>
-          <div class="admin-adjust-row">
-            <div class="admin-adjust-field">
-              <label for="manageAdjustType">Loại điều chỉnh</label>
-              <select id="manageAdjustType">
-              <option value="plus">Cộng (+)</option>
-              <option value="minus">Trừ (-)</option>
-              </select>
-            </div>
-            <div class="admin-adjust-field">
-              <label for="manageAdjustAmount">Số tiền (VNĐ)</label>
-              <input type="number" id="manageAdjustAmount" inputmode="numeric" placeholder="Nhập số tiền..." />
-            </div>
-          </div>
-          <div class="admin-adjust-row manage-adjust-submit">
-            <div class="admin-adjust-field manage-full-width">
-              <label for="manageAdjustNote">Lý do điều chỉnh</label>
-              <input type="text" id="manageAdjustNote" placeholder="Thưởng sự kiện, đền bù, phạt..." />
-            </div>
-            <button type="button" class="btn btn-success btn-sm btn-icon-svg" id="btnAdjustUserBalance">
-              <svg class="svg-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
-              <span>Xác Nhận Điều Chỉnh</span>
-            </button>
-          </div>
-          <details class="manage-advanced">
-            <summary>Thao tác nâng cao với số dư</summary>
-            <button type="button" class="btn btn-warning btn-sm btn-icon-svg" id="btnResetUserBalanceZero">
-              <svg class="svg-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
-              <span>Đặt Lại Số Dư = 0đ</span>
-            </button>
-          </details>
-        </div>
+        <!-- 2-Column Desktop Grid / 1-Column Mobile Stack -->
+        <div class="manage-sections-grid um-sections-grid">
+          <!-- LEFT COLUMN: Financial & Cashback Policy -->
+          <div class="um-col um-col-primary">
+            <!-- C. Điều chỉnh số dư thủ công -->
+            <details class="um-card um-card-balance" open data-um-section="balance">
+              <summary class="um-card-summary">
+                <span class="um-card-title-wrap">
+                  <span class="um-card-icon is-emerald" aria-hidden="true">
+                    <svg class="svg-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                  </span>
+                  <span class="um-card-title">Điều Chỉnh Số Dư Thủ Công</span>
+                </span>
+                <svg class="um-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+              </summary>
+              <div class="um-card-body">
+                <input type="hidden" id="manageAdjustType" value="plus" />
+                <div class="um-seg-toggle" role="group" aria-label="Loại điều chỉnh số dư">
+                  <button type="button" class="um-seg-btn is-plus is-active" id="btnAdjustTypePlus" data-adjust-type="plus" aria-pressed="true">
+                    <svg class="svg-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    <span>Cộng tiền</span>
+                  </button>
+                  <button type="button" class="um-seg-btn is-minus" id="btnAdjustTypeMinus" data-adjust-type="minus" aria-pressed="false">
+                    <svg class="svg-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    <span>Trừ tiền</span>
+                  </button>
+                </div>
 
-        <div class="modal-section-divider">
-          <h4 style="margin: 0 0 8px 0; font-size: 14px;">3. Tỷ Lệ Hoàn Tiền Riêng (Ghi đè mặc định)</h4>
-          <p style="margin: 0 0 8px 0; font-size: 12px; color: #64748b;">Để trống hoặc bấm Mặc định để dùng tỷ lệ chung của hệ thống. Áp dụng cho các đơn phát sinh mới.</p>
-          <div class="admin-adjust-row">
-            <div class="admin-adjust-field">
-              <label for="manageCustomCashbackRate">% Hoàn riêng</label>
-              <input type="number" id="manageCustomCashbackRate" min="0" step="0.5" placeholder="VD: 85 (để trống = mặc định)" />
-            </div>
-            <div style="display:flex; gap:8px; align-items:flex-end;">
-              <button type="button" class="btn btn-primary btn-sm" id="btnSaveCustomCashbackRate">Lưu % Riêng</button>
-              <button type="button" class="btn btn-outline btn-sm" id="btnResetCustomCashbackRate">Về Mặc Định</button>
-            </div>
-          </div>
-        </div>
+                <div class="um-field-grid">
+                  <div class="admin-adjust-field">
+                    <label for="manageAdjustAmount">Số tiền (VNĐ)</label>
+                    <input type="number" id="manageAdjustAmount" inputmode="numeric" min="1" step="1000" placeholder="VD: 50000" />
+                  </div>
+                  <div class="admin-adjust-field">
+                    <label for="manageAdjustNote">Lý do điều chỉnh</label>
+                    <input type="text" id="manageAdjustNote" maxlength="200" placeholder="Thưởng sự kiện, đền bù, trừ sai lệch..." />
+                  </div>
+                </div>
 
-        <div class="modal-section-divider manage-account-actions">
-          <h4>4. Trạng thái tài khoản</h4>
-          <button type="button" class="btn btn-outline btn-sm btn-icon-svg" id="btnToggleUserLock">
-            <svg class="svg-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-            <span>Khóa / Mở Khóa Tài Khoản</span>
-          </button>
-          <button type="button" class="btn btn-ghost btn-sm" id="btnDeleteUser" style="color: #dc2626;">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
-            <span>Lưu Trữ Tài Khoản</span>
-          </button>
-        </div>
+                <!-- Built-in Before / After Balance Preview -->
+                <div id="manageAdjustPreview" class="um-balance-preview hidden" aria-live="polite">
+                  <div class="um-preview-row">
+                    <span>Số dư hiện tại</span>
+                    <strong id="managePreviewBefore">0đ</strong>
+                  </div>
+                  <div class="um-preview-row">
+                    <span>Thay đổi</span>
+                    <strong id="managePreviewDelta">+0đ</strong>
+                  </div>
+                  <div class="um-preview-row is-total">
+                    <span>Số dư dự kiến sau điều chỉnh</span>
+                    <strong id="managePreviewAfter">0đ</strong>
+                  </div>
+                  <p id="managePreviewWarn" class="um-preview-warn hidden"></p>
+                </div>
+
+                <button type="button" class="btn btn-success btn-sm btn-icon-svg um-full-btn" id="btnAdjustUserBalance">
+                  <svg class="svg-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+                  <span id="btnAdjustUserBalanceLabel">Xác Nhận Cộng Tiền</span>
+                </button>
+
+                <details class="manage-advanced">
+                  <summary>Thao tác nâng cao với số dư</summary>
+                  <div class="um-advanced-body">
+                    <p class="um-helper-note">Đưa toàn bộ số dư khả dụng của thành viên về 0đ (ghi nhận sổ cái kiểm toán).</p>
+                    <button type="button" class="btn btn-warning btn-sm btn-icon-svg um-full-btn" id="btnResetUserBalanceZero">
+                      <svg class="svg-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+                      <span>Đặt Lại Số Dư = 0đ</span>
+                    </button>
+                  </div>
+                </details>
+              </div>
+            </details>
+
+            <!-- D. Tỷ lệ hoàn tiền riêng -->
+            <details class="um-card" open data-um-section="rate">
+              <summary class="um-card-summary">
+                <span class="um-card-title-wrap">
+                  <span class="um-card-icon is-blue" aria-hidden="true">
+                    <svg class="svg-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg>
+                  </span>
+                  <span class="um-card-title">Tỷ Lệ Hoàn Tiền Riêng</span>
+                  <span id="manageRateHeaderBadge" class="um-summary-pill"></span>
+                </span>
+                <svg class="um-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+              </summary>
+              <div class="um-card-body">
+                <div id="manageRateStatusBox" class="um-rate-status-box"></div>
+                <div class="admin-adjust-field">
+                  <label for="manageCustomCashbackRate">Tỷ lệ hoàn riêng (%)</label>
+                  <input type="number" id="manageCustomCashbackRate" min="0" max="100" step="0.5" placeholder="VD: 80 (để trống = mặc định)" />
+                </div>
+                <div class="um-btn-row-2">
+                  <button type="button" class="btn btn-primary btn-sm" id="btnSaveCustomCashbackRate">Lưu % Riêng</button>
+                  <button type="button" class="btn btn-outline btn-sm" id="btnResetCustomCashbackRate">Về Mặc Định</button>
+                </div>
+                <p class="um-helper-note">Chỉ áp dụng cho đơn hàng phát sinh mới, không thay đổi hoa hồng của các đơn cũ.</p>
+              </div>
+            </details>
+          </div>
+
+          <!-- RIGHT COLUMN: Security & Account Controls -->
+          <div class="um-col um-col-secondary">
+            <!-- B. Đổi / Cấp lại mật khẩu -->
+            <details class="um-card" open data-um-section="password">
+              <summary class="um-card-summary">
+                <span class="um-card-title-wrap">
+                  <span class="um-card-icon is-indigo" aria-hidden="true">
+                    <svg class="svg-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/></svg>
+                  </span>
+                  <span class="um-card-title">Đổi / Cấp Lại Mật Khẩu</span>
+                </span>
+                <svg class="um-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+              </summary>
+              <div class="um-card-body">
+                <div class="admin-adjust-field">
+                  <label for="manageNewPassword">Mật khẩu mới</label>
+                  <input type="password" id="manageNewPassword" autocomplete="new-password" minlength="6" maxlength="64" placeholder="Nhập ít nhất 6 ký tự" />
+                </div>
+                <div class="um-btn-row-2">
+                  <button type="button" class="btn btn-outline btn-sm btn-icon-svg" id="btnGenerateRandomPwd" title="Tạo mật khẩu ngẫu nhiên an toàn">
+                    <svg class="svg-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1"/><circle cx="15.5" cy="15.5" r="1"/><circle cx="15.5" cy="8.5" r="1"/><circle cx="8.5" cy="15.5" r="1"/></svg>
+                    <span>Tạo ngẫu nhiên</span>
+                  </button>
+                  <button type="button" class="btn btn-primary btn-sm btn-icon-svg" id="btnResetUserPassword">
+                    <svg class="svg-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+                    <span>Lưu Mật Khẩu</span>
+                  </button>
+                </div>
+                <p class="um-helper-note">Sau khi lưu, mọi phiên đăng nhập cũ của khách sẽ tự động đăng xuất.</p>
+
+                <div id="manageResetResultBox" class="manage-reset-result-box hidden" aria-live="polite">
+                  <div class="manage-reset-result-head">
+                    <div class="um-reset-head-row">
+                      <span>Mật khẩu tạm (tự ẩn sau <strong id="manageResetCountdown">60</strong>s):</span>
+                      <button type="button" class="um-hide-pwd-btn" id="btnHideResetPwd">Ẩn ngay</button>
+                    </div>
+                    <code id="manageResetPwdValue" class="manage-reset-pwd-code"></code>
+                  </div>
+                  <div class="manage-reset-result-actions">
+                    <button type="button" class="btn btn-outline btn-sm btn-icon-svg" id="btnCopyResetPwd">
+                      <svg class="svg-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                      <span>Sao chép MK</span>
+                    </button>
+                    <button type="button" class="btn btn-primary btn-sm btn-icon-svg" id="btnCopyResetMsg">
+                      <svg class="svg-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                      <span>Copy tin gửi Zalo</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </details>
+
+            <!-- E. Kiểm soát trạng thái tài khoản -->
+            <details class="um-card um-card-danger" open data-um-section="account">
+              <summary class="um-card-summary">
+                <span class="um-card-title-wrap">
+                  <span class="um-card-icon is-danger" aria-hidden="true">
+                    <svg class="svg-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                  </span>
+                  <span class="um-card-title">Trạng Thái &amp; Kiểm Soát Tài Khoản</span>
+                </span>
+                <svg class="um-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+              </summary>
+              <div class="um-card-body">
+                <div class="um-control-item">
+                  <div class="um-control-info">
+                    <strong id="manageLockTitle">Khóa tài khoản tạm thời</strong>
+                    <p id="manageLockDesc">Chặn đăng nhập &amp; rút tiền, thu hồi phiên cũ. Có thể mở khóa lại bất cứ lúc nào.</p>
+                  </div>
+                  <button type="button" class="btn btn-outline btn-sm btn-icon-svg um-full-btn" id="btnToggleUserLock">
+                    <svg class="svg-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                    <span>Khóa Tài Khoản</span>
+                  </button>
+                </div>
+
+                <div class="um-control-item is-archive">
+                  <div class="um-control-info">
+                    <strong>Lưu trữ tài khoản (Vô hiệu hóa)</strong>
+                    <p>Khóa tài khoản &amp; thu hồi phiên vĩnh viễn. Thông tin cá nhân, SĐT và lịch sử đơn hàng vẫn được bảo lưu để đối soát.</p>
+                  </div>
+                  <button type="button" class="btn btn-ghost btn-sm btn-icon-svg um-full-btn um-archive-btn" id="btnDeleteUser">
+                    <svg class="svg-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                    <span>Lưu Trữ Tài Khoản</span>
+                  </button>
+                </div>
+              </div>
+            </details>
+          </div>
         </div>
       </div>
     </div>

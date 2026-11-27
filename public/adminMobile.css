@@ -750,8 +750,6 @@
   #view-admin .admin-settings-save-bar .btn { width: 100%; min-height: 44px; }
 
   /* Modals inside Admin */
-  #userManageModal .admin-adjust-row { flex-direction: column; align-items: stretch; }
-  #userManageModal .admin-adjust-field { flex: auto; width: 100%; }
   #userManageModal .close-btn, #orderEditModal .close-btn { min-width: 44px; min-height: 44px; }
   #userManageModal input, #orderEditModal input { scroll-margin: 90px 0; }
 }

@@ -8,6 +8,7 @@ process.env.NODE_ENV = 'test';
 
 const {
   cleanShopeeTitleForSearch,
+  buildShorterFallbackQuery,
   extractProductUnits,
   scoreTikTokCandidate,
   buildComparableProduct,
@@ -463,6 +464,35 @@ async function runTests() {
   assert.strictEqual(spSearchRes.items.length, 1, '15ml mini must be filtered out on Shopee side too');
   assert.strictEqual(spSearchRes.items[0].productLink, undefined, 'Internal productLink must not leak');
   assert.strictEqual(spSearchRes.items[0].grossCommission, undefined, 'Internal grossCommission must not leak');
+
+  // Regression: TikTok obfuscated title ("N. ú.m") + Brand Gate must reject unrelated Shopee products
+  const obfuscatedTitle = '[LIVE] Đồ dùng trẻ em N. ú.m Greenfinger Bebegrow mềm mại, chịu nhiệt tốt';
+  const cleanedNipple = cleanShopeeTitleForSearch(obfuscatedTitle);
+  assert(cleanedNipple.includes('Núm'), `Expected obfuscated N. ú.m -> Núm, got: ${cleanedNipple}`);
+  const nippleFallback = buildShorterFallbackQuery(cleanedNipple);
+  assert(
+    nippleFallback.includes('Greenfinger') && nippleFallback.includes('Bebegrow'),
+    `Fallback query must preserve brand tokens, got: ${nippleFallback}`
+  );
+  const unrelatedShopeeNodes = [
+    { ...mockShopeeNode, itemId: '90001', price: 54400, productName: 'Kam Vải ủi chịu nhiệt 6 tờ Lớp bảo vệ có thể tái sử dụng cho hạt cầu chì' },
+    { ...mockShopeeNode, itemId: '90002', price: 46224, productName: 'SWEET Thiết Kế Chống Trơn Trượt Ngón Tay Ván Trượt Đồ Chơi Ván' },
+    { ...mockShopeeNode, itemId: '90003', price: 48165, productName: '(V & N) Kids Beach Castle Buet Spade Xẻng Cào Dụng Cụ Nước Cho Bé' }
+  ];
+  for (const junk of unrelatedShopeeNodes) {
+    const rej = scoreShopeeCandidate(obfuscatedTitle, 179520, junk);
+    assert.strictEqual(rej.eligible, false, `Unrelated product must be rejected: ${junk.productName}`);
+    assert.strictEqual(rej.reason, 'brand_mismatch', `Expected brand_mismatch for: ${junk.productName}`);
+  }
+  const realNippleNode = {
+    ...mockShopeeNode,
+    itemId: '90004',
+    price: 165000,
+    commission: 12000,
+    productName: 'Núm ti Greenfinger Bebegrow mềm mại chịu nhiệt cho bé'
+  };
+  const accNipple = scoreShopeeCandidate(obfuscatedTitle, 179520, realNippleNode);
+  assert.strictEqual(accNipple.eligible, true, 'Real Greenfinger Bebegrow nipple must match cleanly');
 
   // Test POST /api/compare/shopee/link endpoint
   const app2 = express();

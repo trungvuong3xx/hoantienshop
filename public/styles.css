@@ -99,55 +99,625 @@ body {
   left: 12px;
 }
 
-/* Keep financial inputs usable even when optional admin enhancements fail to load. */
-#userManageModal .admin-adjust-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  align-items: end;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-#userManageModal .admin-adjust-field { display: grid; gap: 6px; min-width: 0; }
-#userManageModal .admin-adjust-field label { font-size: 13px; font-weight: 600; }
-#userManageModal .admin-adjust-field input,
-#userManageModal .admin-adjust-field select,
-#userManageModal .admin-adjust-field .app-choice-trigger { width: 100%; min-width: 0; box-sizing: border-box; }
-@media (max-width: 640px) {
-  #userManageModal .admin-adjust-row { grid-template-columns: minmax(0, 1fr); }
+/* ================= USER MANAGEMENT MODAL (#userManageModal) ================= */
+#userManageModal .um-modal-box {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  max-height: calc(100dvh - 32px);
 }
 
-/* Member management: consistent fields and deliberate action hierarchy. */
-#userManageModal .modal-body-form { gap: 20px !important; padding: 20px; }
-#userManageModal .modal-info-card { padding: 14px 16px; line-height: 1.8; }
-#userManageModal .modal-section-divider { padding-top: 18px; border-top: 1px solid #e2e8f0; }
-#userManageModal .modal-section-divider h4 { margin: 0 0 14px !important; font-size: 14px; }
+#userManageModal .um-modal-head {
+  flex-shrink: 0;
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border);
+  padding: 14px 20px;
+}
+
+#userManageModal .um-title-stack {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+#userManageModal .um-header-code {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  color: var(--text-sub);
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+#userManageModal .um-header-code:empty {
+  display: none;
+}
+
+#userManageModal .um-modal-body {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 18px 20px 22px;
+  background: var(--bg-page);
+}
+
+/* Compact Member Summary Card */
+#userManageModal .um-summary-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border-radius: var(--radius-lg);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+}
+
+#userManageModal .um-summary-identity {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+
+#userManageModal .um-summary-top-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+#userManageModal .um-summary-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-main);
+  line-height: 1.3;
+  word-break: break-word;
+}
+
+#userManageModal .um-summary-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  font-size: 12.5px;
+  color: var(--text-sub);
+}
+
+#userManageModal .um-meta-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+#userManageModal .um-meta-label {
+  color: var(--text-muted);
+}
+
+#userManageModal .um-mini-copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg-soft);
+  color: var(--text-sub);
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+#userManageModal .um-mini-copy:hover {
+  background: var(--info-soft);
+  border-color: var(--blue);
+  color: var(--blue);
+}
+
+#userManageModal .um-rate-pill,
+#userManageModal .um-summary-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+  background: var(--bg-soft);
+  color: var(--text-sub);
+  border: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+#userManageModal .um-rate-pill.is-custom,
+#userManageModal .um-summary-pill.is-custom {
+  background: var(--info-soft);
+  color: var(--blue);
+  border-color: color-mix(in srgb, var(--blue) 30%, transparent);
+}
+
+#userManageModal .um-summary-pill:empty {
+  display: none;
+}
+
+#userManageModal .um-summary-balance-box {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--emerald-light);
+  border: 1px solid color-mix(in srgb, var(--emerald) 26%, transparent);
+  flex-shrink: 0;
+  min-width: 148px;
+}
+
+#userManageModal .um-balance-label {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--emerald-dark);
+}
+
+#userManageModal .um-summary-balance-val {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--emerald);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.25;
+}
+
+/* Grid & Columns */
+#userManageModal .um-sections-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+#userManageModal .um-col {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+/* Functional Cards / Accordions */
+#userManageModal .um-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+#userManageModal .um-card-danger {
+  border-color: color-mix(in srgb, var(--danger) 28%, var(--border));
+}
+
+#userManageModal .um-card-summary {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 13px 16px;
+  cursor: pointer;
+  user-select: none;
+  min-height: 48px;
+}
+
+#userManageModal .um-card-summary::-webkit-details-marker {
+  display: none;
+}
+
+#userManageModal .um-card[open] > .um-card-summary {
+  border-bottom: 1px solid var(--border);
+}
+
+#userManageModal .um-card-title-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+#userManageModal .um-card-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+#userManageModal .um-card-icon.is-emerald {
+  background: var(--emerald-light);
+  color: var(--emerald);
+}
+
+#userManageModal .um-card-icon.is-blue {
+  background: var(--info-soft);
+  color: var(--blue);
+}
+
+#userManageModal .um-card-icon.is-indigo {
+  background: var(--bg-soft);
+  color: var(--text-main);
+}
+
+#userManageModal .um-card-icon.is-danger {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+#userManageModal .um-card-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+#userManageModal .um-chevron {
+  color: var(--text-muted);
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+}
+
+#userManageModal .um-card[open] > .um-card-summary .um-chevron {
+  transform: rotate(180deg);
+}
+
+#userManageModal .um-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 16px 16px;
+}
+
+/* Consistent Inputs & Buttons */
+#userManageModal .admin-adjust-field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+#userManageModal .admin-adjust-field label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-sub);
+}
+
+#userManageModal .um-field-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+
 #userManageModal input:not([type="hidden"]),
 #userManageModal select,
-#userManageModal .app-choice-trigger,
-#userManageModal .btn { min-height: 46px; height: auto; padding: 11px 12px; border-radius: 10px; font-size: 14px; line-height: 22px; box-sizing: border-box; }
-#userManageModal .btn { display: inline-flex; justify-content: center; align-items: center; gap: 6px; white-space: normal; text-align: center; }
-#userManageModal .btn svg { flex-shrink: 0; }
-#userManageModal .admin-adjust-field { align-content: start; gap: 8px; }
-#userManageModal .admin-adjust-row { align-items: start; gap: 12px; margin-bottom: 14px; }
-#userManageModal .manage-password-grid,
-#userManageModal .manage-account-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-#userManageModal .manage-full-width,
-#userManageModal .manage-account-actions h4,
-#userManageModal #btnAdjustUserBalance { grid-column: 1 / -1; }
-#userManageModal .manage-account-actions h4 { margin-bottom: 0 !important; }
-#userManageModal .manage-advanced { margin-top: 12px; border: 1px solid #e2e8f0; border-radius: 10px; padding: 0 12px; }
-#userManageModal .manage-advanced summary { cursor: pointer; min-height: 44px; padding: 12px 0; font-size: 13px; color: #64748b; }
-#userManageModal .manage-advanced .btn { width: 100%; margin-bottom: 12px; background: #fff7ed; color: #9a3412; border: 1px solid #fed7aa; }
-#userManageModal #btnDeleteUser { background: #fff1f2; border: 1px solid #fecdd3; }
-#userManageModal .admin-adjust-preview:empty { display: none; }
-#userManageModal .admin-adjust-preview:not(:empty) { margin: 0 0 14px; padding: 10px 12px; background: #f0fdf4; border-radius: 8px; }
-@media (max-width: 640px) {
-  #userManageModal .modal-body-form { padding: 16px; }
-  #userManageModal .admin-adjust-row { grid-template-columns: minmax(0, 1fr); }
+#userManageModal .btn {
+  min-height: 44px;
+  height: auto;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  font-size: 14px;
+  line-height: 20px;
+  box-sizing: border-box;
 }
-@media (max-width: 374px) {
-  #userManageModal .manage-password-grid,
-  #userManageModal .manage-account-actions { grid-template-columns: minmax(0, 1fr); }
+
+#userManageModal input:not([type="hidden"]) {
+  width: 100%;
+  min-width: 0;
+}
+
+#userManageModal .btn {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  white-space: normal;
+  text-align: center;
+}
+
+#userManageModal .btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+#userManageModal .btn svg {
+  flex-shrink: 0;
+}
+
+#userManageModal .um-full-btn {
+  width: 100%;
+}
+
+#userManageModal .um-btn-row-2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+#userManageModal .um-helper-note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+/* Segmented Toggle (+ Cộng tiền / - Trừ tiền) */
+#userManageModal .um-seg-toggle {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  padding: 4px;
+  border-radius: 12px;
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+}
+
+#userManageModal .um-seg-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 8px 10px;
+  border-radius: 9px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-sub);
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+#userManageModal .um-seg-btn.is-plus.is-active {
+  background: var(--bg-card);
+  color: var(--emerald-dark);
+  border-color: color-mix(in srgb, var(--emerald) 40%, transparent);
+  box-shadow: var(--shadow-sm);
+}
+
+#userManageModal .um-seg-btn.is-minus.is-active {
+  background: var(--bg-card);
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 40%, transparent);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Built-in Before / After Balance Preview */
+#userManageModal .um-balance-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--emerald-light);
+  border: 1px solid color-mix(in srgb, var(--emerald) 32%, transparent);
+  font-size: 13px;
+}
+
+#userManageModal .um-balance-preview.is-minus {
+  background: var(--warning-soft);
+  border-color: color-mix(in srgb, var(--amber) 38%, transparent);
+}
+
+#userManageModal .um-balance-preview.is-negative {
+  background: var(--danger-soft);
+  border-color: color-mix(in srgb, var(--danger) 42%, transparent);
+}
+
+#userManageModal .um-preview-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--text-sub);
+  font-variant-numeric: tabular-nums;
+}
+
+#userManageModal .um-preview-row.is-total {
+  padding-top: 6px;
+  margin-top: 2px;
+  border-top: 1px dashed var(--border);
+  font-size: 14px;
+  color: var(--text-main);
+}
+
+#userManageModal .um-balance-preview.is-plus #managePreviewDelta,
+#userManageModal .um-balance-preview.is-plus #managePreviewAfter {
+  color: var(--emerald-dark);
+}
+
+#userManageModal .um-balance-preview.is-minus #managePreviewDelta {
+  color: var(--danger);
+}
+
+#userManageModal .um-balance-preview.is-negative #managePreviewAfter {
+  color: var(--danger);
+}
+
+#userManageModal .um-preview-warn {
+  margin: 4px 0 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--danger);
+}
+
+#userManageModal #btnAdjustUserBalance.is-minus-mode {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #ffffff;
+}
+
+/* Advanced Balance Accordion */
+#userManageModal .manage-advanced {
+  margin-top: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 0 12px;
+  background: var(--bg-page);
+}
+
+#userManageModal .manage-advanced summary {
+  cursor: pointer;
+  min-height: 44px;
+  padding: 11px 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+#userManageModal .um-advanced-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-bottom: 12px;
+}
+
+#userManageModal .manage-advanced .btn {
+  background: var(--warning-soft);
+  color: var(--brand-orange);
+  border: 1px solid color-mix(in srgb, var(--amber) 40%, transparent);
+}
+
+/* Rate Status Callout */
+#userManageModal .um-rate-status-box {
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  font-size: 13px;
+  color: var(--text-sub);
+  line-height: 1.45;
+}
+
+#userManageModal .um-rate-status-box.is-custom {
+  background: var(--info-soft);
+  border-color: color-mix(in srgb, var(--blue) 30%, transparent);
+  color: var(--text-main);
+}
+
+/* Account Control Sub-items */
+#userManageModal .um-control-item {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border-radius: var(--radius-md);
+  background: var(--bg-page);
+  border: 1px solid var(--border);
+}
+
+#userManageModal .um-control-item.is-archive {
+  background: var(--danger-soft);
+  border-color: color-mix(in srgb, var(--danger) 28%, transparent);
+}
+
+#userManageModal .um-control-info strong {
+  display: block;
+  font-size: 13.5px;
+  color: var(--text-main);
+  margin-bottom: 2px;
+}
+
+#userManageModal .um-control-info p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+#userManageModal .um-archive-btn {
+  background: var(--bg-card);
+  color: var(--danger);
+  border: 1px solid color-mix(in srgb, var(--danger) 40%, transparent);
+  font-weight: 700;
+}
+
+#userManageModal .um-archive-btn:hover:not(:disabled) {
+  background: var(--danger);
+  color: #ffffff;
+  border-color: var(--danger);
+}
+
+/* Mobile-First Responsive (320px - 767px): Near Full-Screen Bottom Sheet */
+@media (max-width: 767px) {
+  #userManageModal.modal-backdrop {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  #userManageModal .um-modal-box {
+    width: 100%;
+    max-width: 100%;
+    max-height: 94dvh;
+    border-radius: 18px 18px 0 0;
+    border-bottom: 0;
+    animation: sheetSlideUp 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  #userManageModal .um-modal-head {
+    padding: 12px 14px;
+  }
+
+  #userManageModal .um-modal-body {
+    padding: 14px 14px calc(24px + env(safe-area-inset-bottom, 0px));
+    gap: 12px;
+  }
+
+  #userManageModal .um-summary-card {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    padding: 12px 14px;
+  }
+
+  #userManageModal .um-summary-balance-box {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    min-width: 0;
+    padding: 8px 12px;
+  }
+
+  #userManageModal .um-summary-balance-val {
+    font-size: 18px;
+  }
+
+  #userManageModal .um-card-summary {
+    padding: 12px 14px;
+  }
+
+  #userManageModal .um-card-body {
+    padding: 12px 14px 14px;
+  }
+
+  #userManageModal .um-mini-copy {
+    width: 30px;
+    height: 30px;
+  }
+}
+
+@media (max-width: 359px) {
+  #userManageModal .um-btn-row-2 {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 /* Navbar */
@@ -6984,11 +7554,11 @@ body:has(#conversionResultSection:not(.hidden)) .floating-zalo {
 }
 
 .manage-reset-result-box {
-  margin-top: 12px;
+  margin-top: 4px;
   padding: 12px 14px;
   border-radius: 12px;
-  background: #ecfdf5;
-  border: 1.5px solid #6ee7b7;
+  background: var(--emerald-light);
+  border: 1.5px solid color-mix(in srgb, var(--emerald) 45%, transparent);
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -6999,17 +7569,36 @@ body:has(#conversionResultSection:not(.hidden)) .floating-zalo {
   flex-direction: column;
   gap: 6px;
   font-size: 12.5px;
-  color: #065f46;
+  color: var(--emerald-dark);
   font-weight: 600;
+}
+
+.um-reset-head-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.um-hide-pwd-btn {
+  border: 1px solid color-mix(in srgb, var(--emerald) 40%, transparent);
+  background: var(--bg-card);
+  color: var(--emerald-dark);
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
 }
 
 .manage-reset-pwd-code {
   display: block;
   padding: 8px 12px;
   border-radius: 8px;
-  background: #ffffff;
-  border: 1px dashed #10b981;
-  color: #0f172a;
+  background: var(--bg-card);
+  border: 1px dashed var(--emerald);
+  color: var(--text-main);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 15px;
   font-weight: 800;
@@ -7024,7 +7613,7 @@ body:has(#conversionResultSection:not(.hidden)) .floating-zalo {
   gap: 8px;
 }
 
-@media (max-width: 374px) {
+@media (max-width: 359px) {
   .manage-reset-result-actions {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -8754,21 +9343,27 @@ details.faq-accordion[open] p {
   }
 }
 
-/* Compact 2-Column User Manage Modal on Desktop (fixes D-05) */
+/* Balanced 2-Column User Manage Modal on Desktop */
 @media (min-width: 768px) {
-  #userManageModal .modal-box.modal-lg {
-    max-width: 720px;
+  #userManageModal .modal-box.modal-lg,
+  #userManageModal .um-modal-box {
+    max-width: 860px;
+    width: min(860px, calc(100vw - 32px));
   }
-  #userManageModal .manage-sections-grid {
-    display: grid;
+
+  #userManageModal .um-sections-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 16px;
     align-items: start;
   }
-  #userManageModal .manage-sections-grid .modal-section-divider {
-    border-top: 1px solid var(--border);
-    padding-top: 12px;
-    margin-top: 0;
+
+  #userManageModal .um-card-summary {
+    pointer-events: none;
+    cursor: default;
+  }
+
+  #userManageModal .um-chevron {
+    display: none;
   }
 }
 
