@@ -5,22 +5,48 @@
   if (!root) return;
   const nav = root.querySelector('.admin-tabs-nav');
   root.querySelector('.admin-banner').after(nav);
-  const names = { orders: 'Đơn', withdrawals: 'Rút tiền', users: 'Khách', settings: 'Cài đặt' };
+  const mobile = window.matchMedia('(max-width: 640px)');
+  const mobileNames = { orders: 'Đơn', withdrawals: 'Rút tiền', users: 'Khách', settings: 'Cài đặt' };
+  const desktopNames = { orders: 'Đơn Hàng & Đối Soát', withdrawals: 'Yêu Cầu Rút Tiền', users: 'Thành Viên', settings: 'Cấu Hình Hệ Thống' };
   nav.querySelectorAll('[data-admin-tab]').forEach(button => {
-    button.querySelector('span').textContent = names[button.dataset.adminTab];
     button.setAttribute('aria-controls', ADMIN_TAB_PANES[button.dataset.adminTab]);
   });
   const header = document.querySelector('header');
   if (header && typeof ResizeObserver !== 'undefined') new ResizeObserver(() => {
     root.style.setProperty('--admin-header-height', `${header.getBoundingClientRect().height}px`);
   }).observe(header);
-  root.querySelector('.admin-banner-title-row h2').textContent = 'Quản trị';
+  const titleEl = root.querySelector('.admin-banner-title-row h2');
   const tools = document.createElement('details');
   tools.className = 'admin-header-tools';
   tools.innerHTML = '<summary>Công cụ</summary><div></div>';
   const actions = root.querySelector('.admin-banner-actions');
+  const toolBtns = ['syncShopeeNowBtn', 'cleanTestDataBtn'].map(id => document.getElementById(id)).filter(Boolean);
+  const refreshBtn = document.getElementById('refreshAdminBtn');
   actions.append(tools);
-  ['syncShopeeNowBtn', 'cleanTestDataBtn'].forEach(id => tools.lastElementChild.append(document.getElementById(id)));
+  const syncResponsiveChrome = () => {
+    const isMob = mobile.matches;
+    if (titleEl) titleEl.textContent = isMob ? 'Quản trị' : 'Trung Tâm Quản Trị Hệ Thống';
+    nav.querySelectorAll('[data-admin-tab]').forEach(button => {
+      const key = button.dataset.adminTab;
+      const span = button.querySelector('span');
+      if (span) span.textContent = (isMob ? mobileNames[key] : desktopNames[key]) || span.textContent;
+    });
+    if (isMob) {
+      toolBtns.forEach(btn => tools.lastElementChild.append(btn));
+      tools.hidden = false;
+    } else {
+      toolBtns.forEach(btn => {
+        if (refreshBtn) actions.insertBefore(btn, refreshBtn);
+        else actions.append(btn);
+      });
+      tools.open = false;
+      tools.hidden = true;
+    }
+    root.querySelectorAll('.admin-settings-grid > details.admin-card').forEach(section => {
+      section.open = !isMob;
+    });
+  };
+  syncResponsiveChrome();
   // Frequent work comes before occasional import and message tools.
   const ordersPane = document.getElementById('admTabOrders');
   ordersPane.querySelectorAll(':scope > details').forEach(e => ordersPane.append(e));
@@ -43,14 +69,16 @@
   });
 
   const labels = { pending: 'Chờ xử lý', approved: 'Đã duyệt', cancelled: 'Đã hủy', paid: 'Đã chuyển', rejected: 'Từ chối' };
-  const mobile = window.matchMedia('(max-width: 640px)');
   const arrangeActions = more => {
     const group = more.parentElement;
     const secondary = [...group.querySelectorAll('button')].filter(e => !e.matches('[data-ord-action="approve"], [data-wd-action="paid"]'));
     secondary.forEach(button => (mobile.matches ? more.lastElementChild : group).append(button));
     more.open = false;
   };
-  mobile.addEventListener('change', () => root.querySelectorAll('.admin-more-actions').forEach(arrangeActions));
+  mobile.addEventListener('change', () => {
+    syncResponsiveChrome();
+    root.querySelectorAll('.admin-more-actions').forEach(arrangeActions);
+  });
   root.querySelectorAll('.admin-data-table').forEach(table => {
     const headings = [...table.querySelectorAll('th')].map(e => e.textContent.trim());
     const body = table.tBodies[0];

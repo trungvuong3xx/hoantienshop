@@ -3480,15 +3480,19 @@ function renderAdminUsersTable(users) {
 }
 
 async function loadAdminOrdersPage(page = 1) {
+  const tbody = document.getElementById('admOrdersTableBody');
+  tbody?.classList.add('admin-tbody-loading');
   try {
     const q = document.getElementById('admOrderSearchInput')?.value?.trim() || '';
     const status = document.getElementById('admOrderStatusFilter')?.value?.trim() || '';
+    const platform = document.getElementById('admOrderPlatformFilter')?.value?.trim() || '';
     const params = new URLSearchParams({
       page: String(Math.max(1, Number(page) || 1)),
       limit: String(ADMIN_PAGE_LIMIT)
     });
     if (q) params.set('q', q);
     if (status) params.set('status', status);
+    if (platform) params.set('platform', platform);
     const data = await apiFetch('/api/admin/orders?' + params.toString());
     latestAdminOrders = data.orders || [];
     renderAdminOrdersTable(latestAdminOrders);
@@ -3504,10 +3508,14 @@ async function loadAdminOrdersPage(page = 1) {
     adminOrdersTotalPages = state.totalPages;
   } catch (err) {
     showToast(err.message);
+  } finally {
+    tbody?.classList.remove('admin-tbody-loading');
   }
 }
 
 async function loadAdminUsersPage(page = 1) {
+  const tbody = document.getElementById('admUsersTableBody');
+  tbody?.classList.add('admin-tbody-loading');
   try {
     const q = document.getElementById('admUserSearchInput')?.value?.trim() || '';
     const params = new URLSearchParams({
@@ -3530,6 +3538,8 @@ async function loadAdminUsersPage(page = 1) {
     adminUsersTotalPages = state.totalPages;
   } catch (err) {
     showToast(err.message);
+  } finally {
+    tbody?.classList.remove('admin-tbody-loading');
   }
 }
 
@@ -3593,6 +3603,8 @@ function renderAdminWithdrawalsTable(withdrawals) {
 }
 
 async function loadAdminWithdrawalsPage(page = 1) {
+  const tbody = document.getElementById('admWithdrawalsTableBody');
+  tbody?.classList.add('admin-tbody-loading');
   try {
     const q = document.getElementById('admWithdrawalSearchInput')?.value?.trim() || '';
     const status = document.getElementById('admWithdrawalStatusFilter')?.value?.trim() || '';
@@ -3617,6 +3629,8 @@ async function loadAdminWithdrawalsPage(page = 1) {
     adminWithdrawalsTotalPages = state.totalPages;
   } catch (err) {
     showToast(err.message);
+  } finally {
+    tbody?.classList.remove('admin-tbody-loading');
   }
 }
 
@@ -3720,7 +3734,7 @@ async function loadAdminDashboard() {
     // Preserve the active filters and pages after a mutation or manual refresh.
     const hasValue = id => Boolean(document.getElementById(id)?.value?.trim());
     await Promise.all([
-      previousPages.orders > 1 || hasValue('admOrderSearchInput') || hasValue('admOrderStatusFilter')
+      previousPages.orders > 1 || hasValue('admOrderSearchInput') || hasValue('admOrderStatusFilter') || hasValue('admOrderPlatformFilter')
         ? loadAdminOrdersPage(previousPages.orders) : Promise.resolve(),
       previousPages.users > 1 || hasValue('admUserSearchInput')
         ? loadAdminUsersPage(previousPages.users) : Promise.resolve(),
@@ -3750,6 +3764,7 @@ on('admOrderSearchInput', 'keydown', (e) => {
   }
 });
 on('admOrderStatusFilter', 'change', () => loadAdminOrdersPage(1));
+on('admOrderPlatformFilter', 'change', () => loadAdminOrdersPage(1));
 on('admOrdersPrevBtn', 'click', () => {
   if (adminOrdersPage > 1) loadAdminOrdersPage(adminOrdersPage - 1);
 });
