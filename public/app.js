@@ -151,15 +151,28 @@ const UI_ICONS = {
 
 function renderVipBadgeSvg(tierCodeOrIcon, onDark = false) {
   const key = String(tierCodeOrIcon || '').toLowerCase();
-  let color = onDark ? '#fde047' : '#b45309';
-  if (key.includes('silver') || key.includes('bạc') || key.includes('🥈')) {
-    color = onDark ? '#e2e8f0' : '#475569';
-  } else if (key.includes('gold') || key.includes('vàng') || key.includes('🥇')) {
-    color = onDark ? '#fde047' : '#d97706';
-  } else if (key.includes('diamond') || key.includes('kim') || key.includes('💎')) {
-    color = onDark ? '#93c5fd' : '#2563eb';
+  // Diamond — faceted duotone gem
+  if (key.includes('diamond') || key.includes('kim') || key.includes('💎')) {
+    const stroke = onDark ? '#93c5fd' : '#2563eb';
+    const fill = onDark ? 'rgba(147,197,253,0.28)' : 'rgba(37,99,235,0.16)';
+    return `<svg class="svg-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" aria-hidden="true"><path d="M6.5 4h11L21 9.5 12 20 3 9.5 6.5 4Z" fill="${fill}" stroke="${stroke}" stroke-width="1.9" stroke-linejoin="round"/><path d="M3 9.5h18M8.5 9.5 12 20l3.5-10.5M8.5 9.5 12 4l3.5 5.5" stroke="${stroke}" stroke-width="1.5" stroke-linejoin="round"/></svg>`;
   }
-  return `<svg class="svg-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/></svg>`;
+  // Gold — modern duotone crown
+  if (key.includes('gold') || key.includes('vàng') || key.includes('🥇')) {
+    const stroke = onDark ? '#fde047' : '#d97706';
+    const fill = onDark ? 'rgba(253,224,71,0.28)' : 'rgba(245,158,11,0.2)';
+    return `<svg class="svg-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" aria-hidden="true"><path d="M3.5 17.5 5 8l4.5 3.5L12 6l2.5 5.5L19 8l1.5 9.5a1.5 1.5 0 0 1-1.5 1.5H5a1.5 1.5 0 0 1-1.5-1.5Z" fill="${fill}" stroke="${stroke}" stroke-width="1.9" stroke-linejoin="round"/></svg>`;
+  }
+  // Silver — modern duotone star shield
+  if (key.includes('silver') || key.includes('bạc') || key.includes('🥈')) {
+    const stroke = onDark ? '#e2e8f0' : '#475569';
+    const fill = onDark ? 'rgba(226,232,240,0.24)' : 'rgba(100,116,139,0.16)';
+    return `<svg class="svg-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" aria-hidden="true"><path d="M12 3 19 6v5.5c0 4.2-2.9 7.6-7 8.8-4.1-1.2-7-4.6-7-8.8V6l7-3Z" fill="${fill}" stroke="${stroke}" stroke-width="1.9" stroke-linejoin="round"/><path d="m12 8.2 1.1 2.2 2.4.35-1.75 1.7.42 2.4L12 13.7l-2.17 1.15.42-2.4-1.75-1.7 2.4-.35L12 8.2Z" fill="${stroke}"/></svg>`;
+  }
+  // Bronze — modern duotone rosette medal
+  const stroke = onDark ? '#fdba74' : '#b45309';
+  const fill = onDark ? 'rgba(253,186,116,0.24)' : 'rgba(217,119,6,0.16)';
+  return `<svg class="svg-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" aria-hidden="true"><circle cx="12" cy="9.5" r="5.5" fill="${fill}" stroke="${stroke}" stroke-width="1.9"/><path d="m8.8 14.3-1.3 6.2 4.5-2.2 4.5 2.2-1.3-6.2" stroke="${stroke}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 }
 
 const STATUS_CLASS_MAP = {
@@ -5810,17 +5823,23 @@ on('admSaveVipTiersBtn', 'click', async () => {
   }
 });
 
-function renderLeaderboardTable(mode = 'spend') {
+function renderLeaderboardTable(mode = 'spend', { animate = false } = {}) {
   activeLeaderboardTab = mode === 'cashback' ? 'cashback' : 'spend';
+  const viewEl = document.getElementById('view-leaderboard');
   const headerEl = document.getElementById('lbMetricHeader');
   const tbody = document.getElementById('leaderboardTableBody');
+  const tableWrap = document.getElementById('leaderboardTableWrap');
+  const listHeadingEl = document.getElementById('leaderboardListHeading');
   const myRankEl = document.getElementById('leaderboardMyRank');
+
+  viewEl?.classList.toggle('lb-mode-cashback', activeLeaderboardTab === 'cashback');
 
   document.querySelectorAll('[data-lb-tab]').forEach((btn) => {
     const isActive = btn.getAttribute('data-lb-tab') === activeLeaderboardTab;
     btn.classList.toggle('btn-primary', isActive);
     btn.classList.toggle('btn-outline', !isActive);
     btn.classList.toggle('active', isActive);
+    btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
   });
 
   if (headerEl) {
@@ -5835,12 +5854,52 @@ function renderLeaderboardTable(mode = 'spend') {
   if (myRankEl) {
     if (myRank) {
       const val = activeLeaderboardTab === 'cashback' ? myRank.totalCashback : myRank.totalSpend;
-      myRankEl.textContent = `Vị trí của bạn: Hạng #${myRank.rank} — ${
-        activeLeaderboardTab === 'cashback' ? 'Tổng tiền hoàn' : 'Tổng giá trị đơn'
-      }: ${fmtVnd(val)}`;
-      myRankEl.classList.remove('hidden');
+      const initial = String(myRank.displayName || currentUser?.name || 'U').trim().charAt(0).toUpperCase() || 'U';
+      const avatarSrc = isSafeAvatarUrl(myRank.avatarUrl || currentUser?.avatarUrl)
+        ? (myRank.avatarUrl || currentUser?.avatarUrl)
+        : '';
+      const avatarInner = avatarSrc
+        ? `<img src="${escapeHtml(avatarSrc)}" alt="${escapeHtml(myRank.displayName)}" loading="lazy" />`
+        : escapeHtml(initial);
+      const hasGap = Number.isFinite(Number(myRank.gapToNextRank)) && Number(myRank.gapToNextRank) > 0 && myRank.nextRank;
+      const gapHtml = hasGap
+        ? `<div class="lb-my-rank-gap">Còn thiếu ${fmtVnd(myRank.gapToNextRank)} để vượt hạng #${myRank.nextRank}</div>`
+        : (myRank.rank === 1 ? '<div class="lb-my-rank-gap">Bạn đang dẫn đầu bảng xếp hạng</div>' : '');
+      const isInTop20 = myRank.rank <= 20;
+      const showJumpBtn = myRank.rank > 3 && isInTop20;
+      const jumpBtnHtml = showJumpBtn
+        ? '<button type="button" class="lb-my-rank-jump" id="lbJumpToMyRankBtn">Xem vị trí</button>'
+        : '';
+
+      const shortMyTier = String(myRank.vipTierName || '').replace(/^Thành viên\s+/i, '');
+      const myTierPillHtml = shortMyTier
+        ? `<span class="lb-my-tier-pill">${renderVipBadgeSvg(myRank.vipTier || myRank.vipTierIcon, false)}<span>${escapeHtml(shortMyTier)}</span></span>`
+        : '';
+
+      myRankEl.classList.remove('is-unranked', 'hidden');
+      myRankEl.classList.toggle('is-sticky-bottom', !isInTop20);
+      myRankEl.innerHTML = `
+        <div class="lb-my-rank-main">
+          <span class="lb-user-avatar">${avatarInner}</span>
+          <div class="lb-my-rank-info">
+            <div class="lb-my-rank-line"><span>Hạng #${myRank.rank} • ${fmtVnd(val)}</span>${myTierPillHtml}</div>
+            ${gapHtml}
+          </div>
+        </div>
+        ${jumpBtnHtml}
+      `;
+    } else if (authToken && currentUser && currentUser.role !== 'admin') {
+      myRankEl.classList.remove('hidden', 'is-sticky-bottom');
+      myRankEl.classList.add('is-unranked');
+      myRankEl.innerHTML = `
+        <div class="lb-my-rank-info">
+          <div class="lb-my-rank-line" style="font-weight:600;color:var(--text-sub);">Bạn chưa có đơn đã duyệt trong bảng xếp hạng</div>
+          <div class="lb-my-rank-gap">Lên đơn qua LiLa để xuất hiện trên bảng xếp hạng nhé!</div>
+        </div>
+      `;
     } else {
       myRankEl.classList.add('hidden');
+      myRankEl.classList.remove('is-sticky-bottom', 'is-unranked');
     }
   }
 
@@ -5849,28 +5908,45 @@ function renderLeaderboardTable(mode = 'spend') {
     if (podiumEl) {
       podiumEl.innerHTML = '';
       podiumEl.classList.add('hidden');
+      podiumEl.classList.remove('is-two');
     }
+    listHeadingEl?.classList.add('hidden');
+    tableWrap?.classList.remove('hidden');
     tbody.innerHTML = '<tr><td colspan="4" class="text-center">Chưa có dữ liệu đơn đã duyệt để xếp hạng.</td></tr>';
     return;
   }
 
+  let hasPodium = false;
+  let podiumCount = 0;
   if (podiumEl) {
     const top3 = list.slice(0, 3);
     if (top3.length >= 2) {
+      hasPodium = true;
+      podiumCount = top3.length;
       const ordered = top3.length === 3 ? [top3[1], top3[0], top3[2]] : [top3[1], top3[0]];
+      podiumEl.classList.toggle('is-two', top3.length === 2);
       podiumEl.innerHTML = ordered
         .map((item) => {
           const val = activeLeaderboardTab === 'cashback' ? item.totalCashback : item.totalSpend;
-          const medalLabel = item.rank === 1 ? 'TOP 1' : item.rank === 2 ? 'TOP 2' : 'TOP 3';
+          const medalIcon = item.rank === 1
+            ? '<svg class="lb-medal-svg" viewBox="0 0 24 24" width="12" height="12" fill="none" aria-hidden="true"><path d="M3.5 17.5 5 8l4.5 3.5L12 6l2.5 5.5L19 8l1.5 9.5a1.5 1.5 0 0 1-1.5 1.5H5a1.5 1.5 0 0 1-1.5-1.5Z" fill="#f59e0b" stroke="#b45309" stroke-width="1.6" stroke-linejoin="round"/></svg>'
+            : `<svg class="lb-medal-svg" viewBox="0 0 24 24" width="11" height="11" fill="none" aria-hidden="true"><path d="m12 3.5 2.6 5.3 5.9.85-4.25 4.14 1 5.86L12 16.9l-5.25 2.75 1-5.86L3.5 9.65l5.9-.85L12 3.5Z" fill="${item.rank === 2 ? '#94a3b8' : '#fb923c'}" stroke="${item.rank === 2 ? '#475569' : '#c2410c'}" stroke-width="1.6" stroke-linejoin="round"/></svg>`;
+          const medalLabel = `${medalIcon}<span>TOP ${item.rank}</span>`;
+          const isMe = currentUser && item.code && currentUser.code === item.code;
           const initial = String(item.displayName || 'U').trim().charAt(0).toUpperCase() || 'U';
           const avatarInner = isSafeAvatarUrl(item.avatarUrl)
             ? `<img src="${escapeHtml(item.avatarUrl)}" alt="${escapeHtml(item.displayName)}" loading="lazy" />`
             : escapeHtml(initial);
+          const shortTier = String(item.vipTierName || '').replace(/^Thành viên\s+/i, '');
+          const tierPillHtml = shortTier
+            ? `<span class="lb-podium-tier">${renderVipBadgeSvg(item.vipTier || item.vipTierIcon, false)}<span>${escapeHtml(shortTier)}</span></span>`
+            : '';
           return `
-            <div class="lb-podium-card rank-${item.rank}">
+            <div class="lb-podium-card rank-${item.rank}${isMe ? ' is-me' : ''}" data-lb-rank="${item.rank}">
               <span class="lb-podium-medal">${medalLabel}</span>
               <div class="lb-podium-avatar">${avatarInner}</div>
-              <div class="lb-podium-name" title="${escapeHtml(item.displayName)}">${escapeHtml(item.displayName)}</div>
+              <div class="lb-podium-name" title="${escapeHtml(item.displayName)}">${escapeHtml(item.displayName)}${isMe ? ' (Bạn)' : ''}</div>
+              ${tierPillHtml}
               <div class="lb-podium-val">${fmtVnd(val)}</div>
             </div>
           `;
@@ -5880,47 +5956,114 @@ function renderLeaderboardTable(mode = 'spend') {
     } else {
       podiumEl.innerHTML = '';
       podiumEl.classList.add('hidden');
+      podiumEl.classList.remove('is-two');
     }
   }
 
-  tbody.innerHTML = list
-    .map((item) => {
-      const medalCls = item.rank <= 3 ? `lb-rank-medal lb-rank-${item.rank}` : 'lb-rank-medal';
-      const metricVal = activeLeaderboardTab === 'cashback' ? item.totalCashback : item.totalSpend;
-      const isMe = currentUser && item.code && currentUser.code === item.code;
-      const shortTier = String(item.vipTierName || '').replace(/^Thành viên\s+/i, '');
-      const initial = String(item.displayName || 'U').trim().charAt(0).toUpperCase() || 'U';
-      const avatarInner = isSafeAvatarUrl(item.avatarUrl)
-        ? `<img src="${escapeHtml(item.avatarUrl)}" alt="${escapeHtml(item.displayName)}" loading="lazy" />`
-        : escapeHtml(initial);
-      return `
-        <tr class="${isMe ? 'is-me' : ''}">
-          <td class="lb-col-rank"><span class="${medalCls}">#${item.rank}</span></td>
-          <td class="lb-col-user">
-            <div class="lb-user-row">
-              <span class="lb-user-avatar">${avatarInner}</span>
-              <div>
-                <strong>${escapeHtml(item.displayName)}${isMe ? ' (Bạn)' : ''}</strong>
-                <div class="lb-user-code" style="font-size:12px;color:#64748b;">${escapeHtml(item.code)}</div>
+  // Do not duplicate Top 1-3 rows below Podium
+  const tableRows = hasPodium ? list.slice(podiumCount) : list;
+  if (tableRows.length === 0) {
+    listHeadingEl?.classList.add('hidden');
+    tableWrap?.classList.add('hidden');
+    tbody.innerHTML = '';
+  } else {
+    if (listHeadingEl) {
+      if (hasPodium) {
+        const firstRank = tableRows[0].rank;
+        const lastRank = tableRows[tableRows.length - 1].rank;
+        listHeadingEl.textContent = firstRank === lastRank ? `Hạng ${firstRank}` : `Hạng ${firstRank} – ${lastRank}`;
+        listHeadingEl.classList.remove('hidden');
+      } else {
+        listHeadingEl.classList.add('hidden');
+      }
+    }
+    tableWrap?.classList.remove('hidden');
+    tbody.innerHTML = tableRows
+      .map((item) => {
+        const medalCls = item.rank <= 3 ? `lb-rank-medal lb-rank-${item.rank}` : 'lb-rank-medal';
+        const metricVal = activeLeaderboardTab === 'cashback' ? item.totalCashback : item.totalSpend;
+        const isMe = currentUser && item.code && currentUser.code === item.code;
+        const shortTier = String(item.vipTierName || '').replace(/^Thành viên\s+/i, '');
+        const initial = String(item.displayName || 'U').trim().charAt(0).toUpperCase() || 'U';
+        const avatarInner = isSafeAvatarUrl(item.avatarUrl)
+          ? `<img src="${escapeHtml(item.avatarUrl)}" alt="${escapeHtml(item.displayName)}" loading="lazy" />`
+          : escapeHtml(initial);
+        return `
+          <tr class="${isMe ? 'is-me' : ''}" data-lb-rank="${item.rank}">
+            <td class="lb-col-rank"><span class="${medalCls}">#${item.rank}</span></td>
+            <td class="lb-col-user">
+              <div class="lb-user-row">
+                <span class="lb-user-avatar">${avatarInner}</span>
+                <div class="lb-user-meta">
+                  <strong>${escapeHtml(item.displayName)}${isMe ? ' (Bạn)' : ''}</strong>
+                  <div class="lb-user-code" style="font-size:12px;color:#64748b;">${escapeHtml(item.code)}</div>
+                </div>
               </div>
-            </div>
-          </td>
-          <td class="lb-col-tier"><span class="lb-tier-pill">${renderVipBadgeSvg(item.vipTier || item.vipTierIcon, false)}<span>${escapeHtml(shortTier || item.vipTierName || '')}</span></span></td>
-          <td class="lb-col-metric"><strong class="lb-metric-val">${fmtVnd(metricVal)}</strong></td>
-        </tr>`;
-    })
-    .join('');
+            </td>
+            <td class="lb-col-tier"><span class="lb-tier-pill">${renderVipBadgeSvg(item.vipTier || item.vipTierIcon, false)}<span>${escapeHtml(shortTier || item.vipTierName || '')}</span></span></td>
+            <td class="lb-col-metric"><strong class="lb-metric-val">${fmtVnd(metricVal)}</strong></td>
+          </tr>`;
+      })
+      .join('');
+  }
+
+  // Render real VIP tiers benefits card below leaderboard
+  const vipCardEl = document.getElementById('leaderboardVipCard');
+  if (vipCardEl) {
+    const tiers = Array.isArray(data.vipTiers) ? data.vipTiers : [];
+    if (tiers.length > 0) {
+      const myTierCode = String(currentUser?.vipTier || '').toLowerCase();
+      vipCardEl.innerHTML = `
+        <div class="lb-vip-head">
+          <h3>Quyền lợi hạng thành viên</h3>
+          <span>Tích lũy đơn đã duyệt</span>
+        </div>
+        <div class="lb-vip-grid">
+          ${tiers
+            .map((t) => {
+              const shortName = String(t.name || t.code || '').replace(/^Thành viên\s+/i, '');
+              const isCurrent = Boolean(authToken && myTierCode && String(t.code || '').toLowerCase() === myTierCode);
+              const spendLabel = Number(t.minSpend || 0) > 0 ? `Từ ${fmtVnd(t.minSpend)}` : 'Mặc định';
+              return `
+                <div class="lb-vip-item${isCurrent ? ' is-current' : ''}">
+                  <div class="lb-vip-item-top">
+                    <span class="lb-vip-name">${renderVipBadgeSvg(t.code || t.icon, false)}<span>${escapeHtml(shortName)}</span></span>
+                    <span class="lb-vip-rate">${Number(t.cashbackPercent || 0)}%</span>
+                  </div>
+                  <div class="lb-vip-spend">${spendLabel}${isCurrent ? ' • <span class="lb-vip-now-tag">Hạng của bạn</span>' : ''}</div>
+                </div>
+              `;
+            })
+            .join('')}
+        </div>
+      `;
+      vipCardEl.classList.remove('hidden');
+    } else {
+      vipCardEl.classList.add('hidden');
+    }
+  }
+
+  if (animate) {
+    [podiumEl, tableWrap].forEach((el) => {
+      if (!el || el.classList.contains('hidden')) return;
+      el.classList.remove('lb-tab-animate');
+      void el.offsetWidth;
+      el.classList.add('lb-tab-animate');
+    });
+  }
 }
 
 async function loadPublicLeaderboard() {
+  const tbody = document.getElementById('leaderboardTableBody');
+  const tableWrap = document.getElementById('leaderboardTableWrap');
   try {
     const data = await apiFetch('/api/leaderboard');
     latestLeaderboardData = data;
     renderLeaderboardTable(activeLeaderboardTab);
   } catch (err) {
-    const tbody = document.getElementById('leaderboardTableBody');
+    tableWrap?.classList.remove('hidden');
     if (tbody) {
-      tbody.innerHTML = `<tr><td colspan="4" class="text-center">${escapeHtml(err.message)}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="4"><div class="lb-error-box"><span>${escapeHtml(err.message || 'Không thể tải bảng xếp hạng.')}</span><button type="button" class="btn btn-outline btn-sm" id="lbRetryBtn">Thử lại</button></div></td></tr>`;
     }
   }
 }
@@ -5928,7 +6071,27 @@ async function loadPublicLeaderboard() {
 document.addEventListener('click', (e) => {
   const lbBtn = e.target.closest('[data-lb-tab]');
   if (lbBtn) {
-    renderLeaderboardTable(lbBtn.getAttribute('data-lb-tab'));
+    renderLeaderboardTable(lbBtn.getAttribute('data-lb-tab'), { animate: true });
+    return;
+  }
+  if (e.target.closest('#lbRetryBtn')) {
+    const tbody = document.getElementById('leaderboardTableBody');
+    if (tbody) {
+      tbody.innerHTML = '<tr><td colspan="4"><div class="skeleton-row"><div class="skeleton-line w-60"></div><div class="skeleton-line w-30"></div></div></td></tr>';
+    }
+    loadPublicLeaderboard();
+    return;
+  }
+  if (e.target.closest('#lbJumpToMyRankBtn')) {
+    const target = document.querySelector('#view-leaderboard .is-me');
+    if (target) {
+      target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+    return;
+  }
+  if (e.target.closest('#lbBackToTopBtn')) {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    return;
   }
   const recentChip = e.target.closest('[data-recent-url]');
   if (recentChip) {
@@ -5940,6 +6103,16 @@ document.addEventListener('click', (e) => {
     }
   }
 });
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('scroll', () => {
+    const btn = document.getElementById('lbBackToTopBtn');
+    const lbView = document.getElementById('view-leaderboard');
+    if (!btn || !lbView) return;
+    const shouldShow = lbView.classList.contains('active') && (window.scrollY || 0) > 360;
+    btn.classList.toggle('hidden', !shouldShow);
+  }, { passive: true });
+}
 
 // ================= RECENT CONVERTED LINKS (LOCAL HISTORY, MAX 3) =================
 const RECENT_LINKS_STORAGE_KEY = 'lila_recent_links_v1';

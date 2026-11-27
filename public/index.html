@@ -64,9 +64,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link id="webFont" media="print" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/styles.css?v=2.9.7" />
+  <link rel="stylesheet" href="/styles.css?v=2.9.12" />
   <link rel="stylesheet" href="/selectPopup.css?v=3" />
-  <script src="/app.js?v=2.9.10" defer></script>
+  <script src="/app.js?v=2.9.14" defer></script>
   <script src="/selectPopup.js?v=3" defer></script>
 </head>
 <body>
@@ -742,7 +742,13 @@
               <span>Đổi mật khẩu</span>
             </button>
             <button type="button" class="account-action-chip btn-icon-svg" id="toggleShibaCompanionBtn" aria-pressed="true">
-              <span aria-hidden="true">🐕</span>
+              <svg class="svg-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true">
+                <circle cx="8.5" cy="7.5" r="2" fill="currentColor" opacity="0.22" stroke="currentColor" stroke-width="1.8"/>
+                <circle cx="15.5" cy="7.5" r="2" fill="currentColor" opacity="0.22" stroke="currentColor" stroke-width="1.8"/>
+                <circle cx="5.2" cy="12" r="1.7" fill="currentColor" opacity="0.22" stroke="currentColor" stroke-width="1.8"/>
+                <circle cx="18.8" cy="12" r="1.7" fill="currentColor" opacity="0.22" stroke="currentColor" stroke-width="1.8"/>
+                <path d="M12 11.5c-2.6 0-4.8 2.2-4.8 4.4 0 1.6 1.2 2.6 2.7 2.6.9 0 1.5-.3 2.1-.3s1.2.3 2.1.3c1.5 0 2.7-1 2.7-2.6 0-2.2-2.2-4.4-4.8-4.4Z" fill="currentColor" opacity="0.2" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+              </svg>
               <span id="toggleShibaCompanionLabel">Bé Shiba: Đang bật</span>
             </button>
           </div>
@@ -979,22 +985,33 @@
 
     <!-- ==================== VIEW: PUBLIC LEADERBOARD ==================== -->
     <section id="view-leaderboard" class="view-section">
-      <div class="panel">
-        <div class="panel-head-row">
+      <div class="panel lb-panel">
+        <div class="panel-head-row lb-head-row">
           <div>
-            <h2 class="inline-icon-row"><svg class="svg-icon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#ee4d2d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg><span>Bảng Xếp Hạng</span></h2>
-            <p class="panel-sub-inline">Vinh danh các thành viên có tổng giá trị đơn hàng và tổng tiền hoàn cao nhất (chỉ tính đơn đã duyệt).</p>
+            <h2 class="inline-icon-row">
+              <span class="lb-title-badge" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none">
+                  <path d="M7 4h10v6a5 5 0 0 1-10 0V4Z" fill="#EE4D2D" opacity="0.18"/>
+                  <path d="M7 4h10v6a5 5 0 0 1-10 0V4Z" stroke="#EE4D2D" stroke-width="1.9" stroke-linejoin="round"/>
+                  <path d="M7 6H4.5a1.5 1.5 0 0 0-1.5 1.5v1A3.5 3.5 0 0 0 6.5 12H7M17 6h2.5A1.5 1.5 0 0 1 21 7.5v1a3.5 3.5 0 0 1-3.5 3.5H17" stroke="#EE4D2D" stroke-width="1.8" stroke-linecap="round"/>
+                  <path d="M12 15v4M8.5 19h7" stroke="#EE4D2D" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+              </span>
+              <span>Bảng Xếp Hạng</span>
+            </h2>
+            <p class="panel-sub-inline lb-subtitle">Vinh danh thành viên dẫn đầu (chỉ tính đơn đã duyệt).</p>
           </div>
           <div class="lb-tabs" role="tablist" aria-label="Chế độ xếp hạng">
-            <button type="button" class="btn btn-primary btn-sm lb-tab-btn active" data-lb-tab="spend">Tổng giá trị đơn</button>
-            <button type="button" class="btn btn-outline btn-sm lb-tab-btn" data-lb-tab="cashback">Tổng tiền hoàn</button>
+            <button type="button" role="tab" aria-selected="true" class="btn btn-primary btn-sm lb-tab-btn active" data-lb-tab="spend">Tổng giá trị đơn</button>
+            <button type="button" role="tab" aria-selected="false" class="btn btn-outline btn-sm lb-tab-btn" data-lb-tab="cashback">Tổng tiền hoàn</button>
           </div>
         </div>
 
-        <div id="leaderboardMyRank" class="lb-my-rank hidden"></div>
+        <div id="leaderboardMyRank" class="lb-my-rank hidden" aria-live="polite"></div>
         <div id="leaderboardPodium" class="lb-podium hidden" aria-label="Top 3 thành viên"></div>
+        <div id="leaderboardListHeading" class="lb-list-heading hidden"></div>
 
-        <div class="table-responsive" style="margin-top: 12px;">
+        <div id="leaderboardTableWrap" class="table-responsive lb-table-wrap">
           <table class="data-table">
             <thead>
               <tr>
@@ -1012,6 +1029,23 @@
           </table>
         </div>
       </div>
+
+      <!-- Real VIP Tiers Benefits Card -->
+      <div id="leaderboardVipCard" class="panel lb-vip-card hidden" aria-label="Quyền lợi hạng thành viên VIP"></div>
+
+      <!-- Compact Shop CTA -->
+      <div class="lb-cta-card">
+        <div class="lb-cta-text">
+          <strong>Đua Top nhận mức hoàn tiền cao hơn</strong>
+          <span>Mua sắm qua link LiLa để tích lũy đơn duyệt và ghi tên lên Bảng xếp hạng.</span>
+        </div>
+        <button type="button" class="btn btn-primary btn-sm lb-cta-btn" data-nav="home">Tạo link ngay</button>
+      </div>
+
+      <button type="button" id="lbBackToTopBtn" class="lb-back-top hidden" aria-label="Quay về đầu bảng xếp hạng">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m18 15-6-6-6 6"/></svg>
+        <span>Lên đầu</span>
+      </button>
     </section>
 
     <!-- ==================== VIEW 3: GUIDE & FAQ ==================== -->
@@ -2160,23 +2194,24 @@
     </div>
   </div>
 
-  <!-- Mobile Bottom Navigation Bar (4-Tab Mobile-First) -->
+  <!-- Mobile Bottom Navigation Bar (Modern Duotone Icons) -->
   <nav id="mobileBottomNav" class="mobile-bottom-nav" aria-label="Điều hướng di động">
     <button type="button" class="nav-btn mobile-nav-item active" data-nav="home">
       <span class="mobile-nav-icon" aria-hidden="true">
-        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M3 10.5L12 3l9 7.5"></path>
-          <path d="M5 9.5V20a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9.5"></path>
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none">
+          <path class="nav-icon-fill" d="M4.5 10.6 11.1 5a1.4 1.4 0 0 1 1.8 0l6.6 5.6a1.5 1.5 0 0 1 .5 1.1V19a2 2 0 0 1-2 2h-3.5v-5a1.5 1.5 0 0 0-1.5-1.5h-2A1.5 1.5 0 0 0 9.5 16v5H6a2 2 0 0 1-2-2v-7.3c0-.43.19-.84.5-1.1Z"/>
+          <path d="M3.5 10.7 11.1 4.4a1.4 1.4 0 0 1 1.8 0l7.6 6.3" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M5.5 9.8V19a1.8 1.8 0 0 0 1.8 1.8h2.4v-4.6c0-.7.55-1.2 1.25-1.2h2.1c.7 0 1.25.5 1.25 1.2v4.6h2.4a1.8 1.8 0 0 0 1.8-1.8V9.8" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
       </span>
       <span class="mobile-nav-label">Trang chủ</span>
     </button>
     <button type="button" class="nav-btn mobile-nav-item" data-nav="orders">
       <span class="mobile-nav-icon" aria-hidden="true">
-        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M21 8l-9-5-9 5v8l9 5 9-5V8z"></path>
-          <path d="M3.27 6.96L12 12.01l8.73-5.05"></path>
-          <path d="M12 22.08V12"></path>
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none">
+          <rect class="nav-icon-fill" x="4.5" y="4" width="15" height="16.5" rx="3"/>
+          <rect x="4.5" y="4" width="15" height="16.5" rx="3" stroke="currentColor" stroke-width="1.9"/>
+          <path d="M8.5 9h7M8.5 12.8h7M8.5 16.5h4.2" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/>
         </svg>
         <span class="nav-notify-dot hidden" id="mobileOrdersNotifyDot"></span>
       </span>
@@ -2184,9 +2219,11 @@
     </button>
     <button type="button" class="nav-btn mobile-nav-item" data-nav="wallet">
       <span class="mobile-nav-icon" aria-hidden="true">
-        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"></path>
-          <path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"></path>
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none">
+          <rect class="nav-icon-fill" x="3.5" y="6" width="17" height="13.5" rx="3.2"/>
+          <path d="M18 6V5a1.5 1.5 0 0 0-1.5-1.5h-10A2.5 2.5 0 0 0 4 6v11a2.5 2.5 0 0 0 2.5 2.5h12A2 2 0 0 0 20.5 17.5v-9A2.5 2.5 0 0 0 18 6Z" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/>
+          <path d="M15.5 11.2h5v3.6h-5a1.8 1.8 0 0 1 0-3.6Z" fill="currentColor" opacity="0.16" stroke="currentColor" stroke-width="1.7"/>
+          <circle cx="15.8" cy="13" r="0.9" fill="currentColor"/>
         </svg>
         <span class="nav-notify-dot hidden" id="mobileWalletNotifyDot"></span>
       </span>
@@ -2194,22 +2231,22 @@
     </button>
     <button type="button" class="nav-btn mobile-nav-item" data-nav="leaderboard">
       <span class="mobile-nav-icon" aria-hidden="true">
-        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"></path>
-          <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"></path>
-          <path d="M4 22h16"></path>
-          <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"></path>
-          <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"></path>
-          <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"></path>
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none">
+          <rect class="nav-icon-fill" x="9.2" y="5" width="5.6" height="15" rx="1.6"/>
+          <rect x="3.5" y="11" width="5.2" height="9" rx="1.6" stroke="currentColor" stroke-width="1.9"/>
+          <rect x="9.4" y="5" width="5.2" height="15" rx="1.6" stroke="currentColor" stroke-width="1.9"/>
+          <rect x="15.3" y="8.5" width="5.2" height="11.5" rx="1.6" stroke="currentColor" stroke-width="1.9"/>
         </svg>
       </span>
       <span class="mobile-nav-label">Xếp hạng</span>
     </button>
     <button type="button" class="nav-btn mobile-nav-item" data-nav="account">
       <span class="mobile-nav-icon" aria-hidden="true">
-        <svg id="mobileNavAccountIconSvg" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="8" r="4"></circle>
-          <path d="M4 20c0-4 3.6-6 8-6s8 2 8 6"></path>
+        <svg id="mobileNavAccountIconSvg" viewBox="0 0 24 24" width="22" height="22" fill="none">
+          <circle class="nav-icon-fill" cx="12" cy="8" r="3.8"/>
+          <path class="nav-icon-fill" d="M5 19.5c0-3.3 3.1-5.3 7-5.3s7 2 7 5.3"/>
+          <circle cx="12" cy="8" r="3.8" stroke="currentColor" stroke-width="1.9"/>
+          <path d="M4.8 19.8c.4-3.2 3.3-5.3 7.2-5.3s6.8 2.1 7.2 5.3" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/>
         </svg>
         <span id="mobileNavAccountAvatar" class="mobile-nav-avatar hidden"></span>
       </span>
@@ -2217,9 +2254,10 @@
     </button>
     <button type="button" id="mobileNavAdminBtn" class="nav-btn mobile-nav-item hidden" data-nav="admin">
       <span class="mobile-nav-icon" aria-hidden="true">
-        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="12" r="3"></circle>
-          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.26.6.78 1 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none">
+          <path class="nav-icon-fill" d="M12 3.5 19 6.5v5.3c0 4.4-3 7.7-7 8.9-4-1.2-7-4.5-7-8.9V6.5l7-3Z"/>
+          <path d="M12 3.5 19 6.5v5.3c0 4.4-3 7.7-7 8.9-4-1.2-7-4.5-7-8.9V6.5l7-3Z" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/>
+          <path d="m9.2 12.1 1.9 1.9 3.8-4" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
       </span>
       <span class="mobile-nav-label">Quản trị</span>

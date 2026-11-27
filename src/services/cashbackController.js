@@ -1634,15 +1634,30 @@ function registerCashbackRoutes(app) {
     if (authUser) {
       const sIdx = leaderboardCache.rankedSpend.findIndex((r) => r.userId === authUser.id);
       const cIdx = leaderboardCache.rankedCashback.findIndex((r) => r.userId === authUser.id);
-      if (sIdx >= 0) myRankSpend = toPublicEntry(leaderboardCache.rankedSpend[sIdx], sIdx);
-      if (cIdx >= 0) myRankCashback = toPublicEntry(leaderboardCache.rankedCashback[cIdx], cIdx);
+      if (sIdx >= 0) {
+        myRankSpend = toPublicEntry(leaderboardCache.rankedSpend[sIdx], sIdx);
+        if (sIdx > 0) {
+          const above = leaderboardCache.rankedSpend[sIdx - 1];
+          myRankSpend.nextRank = sIdx;
+          myRankSpend.gapToNextRank = Math.max(0, Math.round(above.totalSpend - myRankSpend.totalSpend));
+        }
+      }
+      if (cIdx >= 0) {
+        myRankCashback = toPublicEntry(leaderboardCache.rankedCashback[cIdx], cIdx);
+        if (cIdx > 0) {
+          const above = leaderboardCache.rankedCashback[cIdx - 1];
+          myRankCashback.nextRank = cIdx;
+          myRankCashback.gapToNextRank = Math.max(0, Math.round(above.totalCashback - myRankCashback.totalCashback));
+        }
+      }
     }
 
     return res.json({
       topBySpend,
       topByCashback,
       myRankSpend,
-      myRankCashback
+      myRankCashback,
+      vipTiers: getNormalizedVipTiers(db.settings)
     });
   });
 

@@ -3718,6 +3718,14 @@ body:has(#view-admin.active) .floating-zalo {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
+  width: 100%;
+}
+
+.lb-user-meta {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
 }
 
 .lb-user-avatar {
@@ -5437,13 +5445,111 @@ body:has(#view-admin.active) .floating-zalo {
 
 .lb-my-rank {
   margin-top: 12px;
-  padding: 10px 14px;
-  border-radius: 10px;
-  background: #fff7ed;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--shopee-light);
   border: 1px solid #fed7aa;
   color: #9a3412;
   font-size: 13px;
   font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.lb-my-rank-main {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  flex: 1;
+}
+
+.lb-my-rank-info {
+  min-width: 0;
+  flex: 1;
+}
+
+.lb-my-rank-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.lb-my-tier-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #ffffff;
+  border: 1px solid #fed7aa;
+  color: #c2410c;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.lb-my-rank-gap {
+  margin-top: 2px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--text-muted);
+  line-height: 1.3;
+}
+
+.lb-my-rank-jump {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--shopee);
+  background: #ffffff;
+  border: 1px solid #fed7aa;
+  border-radius: 999px;
+  padding: 5px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: transform 0.14s ease, background 0.15s ease;
+}
+
+.lb-my-rank-jump:active {
+  transform: scale(0.96);
+}
+
+.lb-my-rank.is-unranked {
+  background: var(--bg-soft);
+  border-color: var(--border);
+  color: var(--text-sub);
+  font-weight: 500;
+}
+
+.lb-list-heading {
+  margin-top: 14px;
+  margin-bottom: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.lb-list-heading::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.lb-table-wrap {
+  margin-top: 8px;
 }
 
 .lb-rank-medal {
@@ -5455,17 +5561,24 @@ body:has(#view-admin.active) .floating-zalo {
   border-radius: 999px;
   font-weight: 800;
   font-size: 13px;
+  color: var(--text-sub);
 }
 
 .lb-rank-1 { background: #fef08a; color: #854d0e; }
 .lb-rank-2 { background: #e2e8f0; color: #334155; }
 .lb-rank-3 { background: #fed7aa; color: #9a3412; }
 
+/* Unified metric color: Shopee orange for spend tab, Emerald for cashback tab (both Podium & List) */
 .lb-metric-val {
-  color: #059669;
+  color: var(--shopee);
   font-weight: 800;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+#view-leaderboard.lb-mode-cashback .lb-metric-val,
+#view-leaderboard.lb-mode-cashback .lb-podium-val {
+  color: var(--emerald);
 }
 
 .lb-tier-pill {
@@ -5473,7 +5586,7 @@ body:has(#view-admin.active) .floating-zalo {
   align-items: center;
   gap: 4px;
   white-space: nowrap;
-  padding: 4px 10px;
+  padding: 3px 9px;
   border-radius: 999px;
   font-size: 12px;
   font-weight: 600;
@@ -5482,29 +5595,108 @@ body:has(#view-admin.active) .floating-zalo {
 }
 
 #view-leaderboard tr.is-me {
-  background: #fff7ed;
+  background: var(--shopee-light);
+}
+
+.lb-error-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 18px 12px;
+  color: var(--text-sub);
+  font-size: 13.5px;
+}
+
+.lb-back-top {
+  position: fixed;
+  right: 14px;
+  bottom: calc(80px + env(safe-area-inset-bottom, 0px));
+  z-index: 70;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--text-main);
+  color: #ffffff;
+  border: none;
+  border-radius: 999px;
+  padding: 8px 13px;
+  font-size: 12px;
+  font-weight: 700;
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.22);
+  cursor: pointer;
+  transition: transform 0.15s ease, opacity 0.2s ease;
+}
+
+.lb-back-top:active {
+  transform: scale(0.95);
+}
+
+.lb-tab-animate {
+  animation: lbTabFade 0.18s ease-out;
+}
+
+@keyframes lbTabFade {
+  from { opacity: 0.45; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lb-tab-animate {
+    animation: none;
+  }
 }
 
 @media (max-width: 640px) {
+  /* Hide repeated website footer on functional mobile app tabs (still shown on Home, Guide, Terms & Desktop) */
+  body:has(#view-orders.active) .footer,
+  body:has(#view-wallet.active) .footer,
+  body:has(#view-leaderboard.active) .footer,
+  body:has(#view-account.active) .footer,
+  body:has(#view-admin.active) .footer {
+    display: none;
+  }
+
+  #view-leaderboard {
+    padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+  }
+  #view-leaderboard .lb-panel {
+    padding: 14px 12px;
+    border-radius: 16px;
+  }
+  #view-leaderboard .lb-head-row {
+    gap: 10px;
+  }
+  #view-leaderboard .lb-subtitle {
+    font-size: 12.5px;
+    margin-top: 2px;
+  }
   .lb-tabs {
     display: grid;
     grid-template-columns: 1fr 1fr;
     width: 100%;
-    gap: 6px;
-    background: #f1f5f9;
+    gap: 5px;
+    background: var(--bg-soft);
     padding: 4px;
     border-radius: 12px;
   }
   .lb-tabs .lb-tab-btn {
     width: 100%;
     min-height: 40px;
+    padding: 6px 8px;
+    font-size: 13px;
     border-radius: 9px;
     border: none;
     justify-content: center;
+    white-space: nowrap;
+    transition: transform 0.12s ease, background 0.15s ease;
+  }
+  .lb-tabs .lb-tab-btn:active {
+    transform: scale(0.98);
   }
   .lb-tabs .lb-tab-btn.btn-outline {
     background: transparent;
-    color: #475569;
+    color: var(--text-sub);
   }
   #view-leaderboard .table-responsive {
     overflow: visible;
@@ -5520,27 +5712,36 @@ body:has(#view-admin.active) .floating-zalo {
   #view-leaderboard .data-table tbody {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 0;
   }
+  /* Clean divided mobile list (no nested heavy cards), aligned 4-column grid */
   #view-leaderboard .data-table tbody tr {
     display: grid;
-    grid-template-columns: 36px minmax(0, 1fr) auto;
+    grid-template-columns: 30px 36px minmax(0, 1fr) auto;
     grid-template-rows: auto auto;
-    column-gap: 10px;
-    row-gap: 4px;
+    column-gap: 8px;
+    row-gap: 2px;
     align-items: center;
-    padding: 12px;
-    border: 1px solid #e2e8f0;
-    border-radius: 14px;
-    background: #ffffff;
+    padding: 10px 6px;
+    border: none;
+    border-bottom: 1px solid #f1f5f9;
+    border-radius: 0;
+    background: transparent;
+  }
+  #view-leaderboard .data-table tbody tr:last-child {
+    border-bottom: none;
   }
   #view-leaderboard .data-table tbody tr.is-me {
-    border-color: #fdba74;
-    background: #fff7ed;
+    background: var(--shopee-light);
+    border: 1px solid #fed7aa;
+    border-radius: 12px;
+    padding: 10px 8px;
+    margin: 4px 0;
   }
   #view-leaderboard .data-table tbody tr td {
     padding: 0;
     border: none;
+    min-width: 0;
   }
   #view-leaderboard .data-table tbody tr td.lb-col-rank {
     grid-column: 1;
@@ -5549,13 +5750,28 @@ body:has(#view-admin.active) .floating-zalo {
     justify-content: center;
   }
   #view-leaderboard .data-table tbody tr td.lb-col-user {
+    display: contents;
+  }
+  #view-leaderboard .data-table tbody tr td.lb-col-user .lb-user-row {
+    display: contents;
+  }
+  #view-leaderboard .data-table tbody tr td.lb-col-user .lb-user-avatar {
     grid-column: 2;
+    grid-row: 1 / span 2;
+    width: 34px;
+    height: 34px;
+    font-size: 12px;
+  }
+  #view-leaderboard .data-table tbody tr td.lb-col-user .lb-user-meta {
+    grid-column: 3;
     grid-row: 1;
     min-width: 0;
+    overflow: hidden;
   }
   #view-leaderboard .data-table tbody tr td.lb-col-user strong {
     display: block;
-    font-size: 14px;
+    font-size: 13.5px;
+    line-height: 1.3;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -5564,25 +5780,49 @@ body:has(#view-admin.active) .floating-zalo {
     display: none;
   }
   #view-leaderboard .data-table tbody tr td.lb-col-tier {
-    grid-column: 2;
+    grid-column: 3;
     grid-row: 2;
   }
   #view-leaderboard .data-table tbody tr td.lb-col-tier .lb-tier-pill {
-    padding: 2px 8px;
-    font-size: 12px;
+    padding: 1px 7px;
+    font-size: 11px;
   }
   #view-leaderboard .data-table tbody tr td.lb-col-metric {
-    grid-column: 3;
+    grid-column: 4;
     grid-row: 1 / span 2;
     text-align: right;
   }
   #view-leaderboard .data-table tbody tr td.lb-col-metric .lb-metric-val {
-    font-size: 15px;
+    font-size: 14px;
   }
   #view-leaderboard .data-table tbody tr td[colspan] {
     grid-column: 1 / -1;
     padding: 16px 8px;
     text-align: center;
+  }
+  .lb-my-rank.is-sticky-bottom {
+    position: sticky;
+    bottom: calc(74px + env(safe-area-inset-bottom, 0px));
+    z-index: 30;
+    box-shadow: 0 8px 22px rgba(15, 23, 42, 0.14);
+  }
+}
+
+@media (max-width: 359px) {
+  .lb-tabs .lb-tab-btn {
+    font-size: 12px;
+    padding: 6px 4px;
+  }
+  #view-leaderboard .data-table tbody tr {
+    grid-template-columns: 26px 32px minmax(0, 1fr) auto;
+    column-gap: 6px;
+  }
+  #view-leaderboard .data-table tbody tr td.lb-col-user .lb-user-avatar {
+    width: 30px;
+    height: 30px;
+  }
+  #view-leaderboard .data-table tbody tr td.lb-col-metric .lb-metric-val {
+    font-size: 13px;
   }
 }
 
@@ -6510,20 +6750,30 @@ body.sheet-lock {
   background: #e2e8f0;
 }
 
-/* Leaderboard Top 3 Podium */
+/* Leaderboard Top 3 Podium (Option 1: 1fr : 1.22fr : 1fr with 2-line clamp & 0px overflow) */
 .lb-podium {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
-  margin-top: 14px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.22fr) minmax(0, 1fr);
+  gap: 7px;
+  margin-top: 12px;
   align-items: end;
+  width: 100%;
+}
+
+.lb-podium.is-two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  max-width: 280px;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .lb-podium-card {
+  min-width: 0;
+  overflow: hidden;
   background: #ffffff;
   border: 1.5px solid var(--border);
   border-radius: 14px;
-  padding: 12px 8px;
+  padding: 10px 6px;
   text-align: center;
   display: flex;
   flex-direction: column;
@@ -6531,11 +6781,21 @@ body.sheet-lock {
   gap: 4px;
 }
 
+.lb-podium-card.is-me {
+  box-shadow: 0 0 0 2px rgba(238, 77, 45, 0.28);
+}
+
 .lb-podium-card.rank-1 {
   background: linear-gradient(180deg, #fffbeb 0%, #ffffff 100%);
   border-color: #fbbf24;
-  padding: 16px 8px;
-  box-shadow: 0 8px 20px rgba(245, 158, 11, 0.14);
+  padding: 14px 6px 12px;
+  box-shadow: 0 6px 16px rgba(245, 158, 11, 0.14);
+}
+
+.lb-podium-card.rank-1 .lb-podium-avatar {
+  width: 44px;
+  height: 44px;
+  border-color: #fbbf24;
 }
 
 .lb-podium-card.rank-2 {
@@ -6548,11 +6808,190 @@ body.sheet-lock {
   border-color: #fdba74;
 }
 
+.lb-title-badge {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: var(--shopee-light);
+  border: 1px solid #fed7aa;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.mobile-nav-icon .nav-icon-fill {
+  fill: currentColor;
+  opacity: 0;
+  transition: opacity 0.18s ease;
+}
+
+.mobile-nav-item.active .mobile-nav-icon .nav-icon-fill {
+  opacity: 0.18;
+}
+
+.mobile-nav-item.active .mobile-nav-icon svg {
+  transform: translateY(-1px);
+  transition: transform 0.18s ease;
+}
+
 .lb-podium-medal {
-  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10.5px;
   font-weight: 800;
-  padding: 2px 8px;
+  padding: 2px 7px;
   border-radius: 999px;
+  white-space: nowrap;
+}
+
+.lb-medal-svg {
+  flex-shrink: 0;
+  display: block;
+}
+
+/* VIP Tiers Benefits Card & Shop CTA below Leaderboard */
+.lb-vip-card {
+  margin-top: 12px;
+  padding: 14px;
+  border-radius: 16px;
+}
+
+.lb-vip-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.lb-vip-head h3 {
+  margin: 0;
+  font-size: 14.5px;
+  font-weight: 800;
+  color: var(--text-main);
+}
+
+.lb-vip-head span {
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+.lb-vip-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.lb-vip-item {
+  min-width: 0;
+  padding: 10px 8px;
+  border-radius: 12px;
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.lb-vip-item.is-current {
+  background: var(--shopee-light);
+  border-color: #fdba74;
+}
+
+.lb-vip-item-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+}
+
+.lb-vip-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-main);
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lb-vip-rate {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--shopee);
+  white-space: nowrap;
+}
+
+.lb-vip-spend {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lb-vip-now-tag {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--shopee);
+}
+
+.lb-cta-card {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #fff7ed 0%, #ffffff 100%);
+  border: 1px solid #fed7aa;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.lb-cta-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.lb-cta-text strong {
+  font-size: 13.5px;
+  color: var(--text-main);
+}
+
+.lb-cta-text span {
+  font-size: 12px;
+  color: var(--text-sub);
+  line-height: 1.35;
+}
+
+.lb-cta-btn {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .lb-vip-card {
+    padding: 12px;
+  }
+  .lb-vip-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .lb-cta-card {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+  .lb-cta-btn {
+    width: 100%;
+    justify-content: center;
+  }
 }
 
 .rank-1 .lb-podium-medal { background: #fef3c7; color: #b45309; }
@@ -6560,20 +6999,78 @@ body.sheet-lock {
 .rank-3 .lb-podium-medal { background: #ffedd5; color: #c2410c; }
 
 .lb-podium-name {
-  font-size: 12.5px;
+  font-size: 11.5px;
   font-weight: 700;
+  line-height: 1.28;
   color: var(--text-main);
+  width: 100%;
   max-width: 100%;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-height: 2.56em;
+  word-break: break-word;
+}
+
+.lb-podium-card.rank-1 .lb-podium-name {
+  font-size: 12px;
+}
+
+.lb-podium-tier {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  color: #c2410c;
+  font-size: 10.5px;
+  font-weight: 700;
+  max-width: 100%;
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+}
+
+.lb-podium-tier svg {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
 }
 
 .lb-podium-val {
-  font-size: 13px;
+  font-size: clamp(11px, 3.1vw, 13px);
   font-weight: 800;
   color: var(--shopee);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 359px) {
+  .lb-podium {
+    gap: 5px;
+  }
+  .lb-podium-card {
+    padding: 8px 4px;
+    border-radius: 12px;
+  }
+  .lb-podium-card.rank-1 {
+    padding: 11px 4px 9px;
+  }
+  .lb-podium-avatar {
+    width: 34px;
+    height: 34px;
+    margin: 2px auto 4px;
+  }
+  .lb-podium-card.rank-1 .lb-podium-avatar {
+    width: 40px;
+    height: 40px;
+  }
 }
 
 /* FAQ Accordion */
