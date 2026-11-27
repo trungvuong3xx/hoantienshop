@@ -77,6 +77,9 @@ app.use(
         imgSrc: [
           "'self'",
           'data:',
+          'blob:',
+          'https://*.public.blob.vercel-storage.com',
+          'https://*.supabase.co',
           'https://api.qrserver.com',
           'https://img.vietqr.io',
           'https://*.shopee.vn',

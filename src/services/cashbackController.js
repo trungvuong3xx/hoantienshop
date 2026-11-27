@@ -7,6 +7,12 @@ const logger = require('../utils/logger');
 const { SENSITIVE_SETTING_KEYS } = require('../utils/secretCrypto');
 const { resolveMailConfig, sendPasswordResetOtpEmail } = require('./mailService');
 const {
+  validateAvatarBuffer,
+  saveAvatar,
+  getAvatar,
+  deleteAvatar
+} = require('./avatarStorageService');
+const {
   ensureDbLoaded,
   runWithStateContext,
   revokeUserSessions,
@@ -1572,6 +1578,7 @@ function registerCashbackRoutes(app) {
           userId: u.id,
           code: u.code,
           displayName: maskLeaderboardDisplay(u),
+          avatarUrl: u.avatarUrl || '',
           vipTier: tier.code,
           vipTierName: tier.name,
           vipTierIcon: tier.icon,
@@ -1610,6 +1617,7 @@ function registerCashbackRoutes(app) {
       rank: idx + 1,
       code: entry.code,
       displayName: entry.displayName,
+      avatarUrl: entry.avatarUrl || '',
       vipTier: entry.vipTier,
       vipTierName: entry.vipTierName,
       vipTierIcon: entry.vipTierIcon,
@@ -1786,6 +1794,108 @@ function registerCashbackRoutes(app) {
     await saveDb(db);
     logger.logLeave('POST /api/user/profile', { userCode: user.code });
     return res.json({ user: sanitizeUser(user) });
+  }));
+
+  // 5.0b. Upload User Avatar (Authenticated user only, updates own avatar, real magic-byte MIME validation)
+  const avatarUploadLimiter = createRateLimiter({
+    windowMs: 15 * 60 * 1000,
+    max: 15,
+    keyPrefix: 'avatar-upload',
+    failClosed: false,
+    keyGenerator(req) {
+      const user = getAuthUser(req);
+      return user ? `user:${user.id}` : `ip:${getClientIp(req)}`;
+    }
+  });
+  const avatarRawParser = express.raw({
+    type: ['image/jpeg', 'image/png', 'image/webp', 'application/octet-stream'],
+    limit: '2mb'
+  });
+
+  app.post(
+    '/api/user/avatar',
+    avatarUploadLimiter,
+    (req, res, next) => {
+      const user = getAuthUser(req);
+      if (!user) {
+        return res.status(401).json({ error: 'Vui lòng đăng nhập để thay đổi ảnh đại diện.' });
+      }
+      return avatarRawParser(req, res, (err) => {
+        if (err) {
+          if (err.type === 'entity.too.large' || err.status === 413) {
+            return res.status(413).json({ error: 'Ảnh vượt quá dung lượng cho phép (tối đa 2 MB sau khi nén).' });
+          }
+          return res.status(400).json({ error: 'Không thể đọc dữ liệu ảnh tải lên.' });
+        }
+        return next();
+      });
+    },
+    asyncHandler(async (req, res) => {
+      logger.logEnter('POST /api/user/avatar');
+      const user = getAuthUser(req);
+      if (!user) {
+        return res.status(401).json({ error: 'Vui lòng đăng nhập để thay đổi ảnh đại diện.' });
+      }
+
+      const buffer = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
+      const check = validateAvatarBuffer(buffer);
+      if (!check.ok) {
+        logger.warning('POST /api/user/avatar', 'Rejected invalid avatar upload', {
+          userId: user.id,
+          status: check.status,
+          bytes: buffer.length
+        });
+        return res.status(check.status).json({ error: check.error });
+      }
+
+      const db = ensureDbLoaded();
+      const dbUser = db.users.find((u) => u.id === user.id && !u.isDeleted);
+      if (!dbUser) {
+        return res.status(404).json({ error: 'Không tìm thấy tài khoản.' });
+      }
+
+      const previousAvatarUrl = dbUser.avatarUrl || '';
+      const saved = await saveAvatar(dbUser.id, buffer, check.mimeType);
+      dbUser.avatarUrl = saved.avatarUrl;
+
+      try {
+        await saveDb(db);
+      } catch (dbErr) {
+        // Roll back newly saved avatar object if DB persistence fails
+        await deleteAvatar(saved.avatarUrl, dbUser.id);
+        throw dbErr;
+      }
+
+      // Clean up previous avatar after DB save succeeds to avoid orphaned storage files
+      if (previousAvatarUrl && previousAvatarUrl !== saved.avatarUrl) {
+        await deleteAvatar(previousAvatarUrl, dbUser.id);
+      }
+
+      logger.logLeave('POST /api/user/avatar', {
+        userCode: dbUser.code,
+        driver: saved.driver,
+        mimeType: check.mimeType,
+        bytes: buffer.length
+      });
+      return res.json({
+        user: sanitizeUser(dbUser),
+        avatarUrl: dbUser.avatarUrl
+      });
+    })
+  );
+
+  // Serve stored avatar binary with immutable caching and strict nosniff header
+  app.get('/api/avatars/:avatarId', asyncHandler(async (req, res) => {
+    const avatarId = String(req.params.avatarId || '').trim();
+    const record = await getAvatar(avatarId);
+    if (!record) {
+      return res.status(404).json({ error: 'Không tìm thấy ảnh đại diện.' });
+    }
+    res.setHeader('Content-Type', record.mimeType);
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
+    return res.send(record.data);
   }));
 
   // 5.1. Change User Password (Verifies current password, rotates tokenVersion & refreshes session cookie)

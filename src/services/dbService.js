@@ -331,6 +331,7 @@ function sanitizeUser(user) {
       : null,
     totalApprovedSpend: Math.max(0, Math.round(Number(user.totalApprovedSpend || 0))),
     vipTier: user.vipTier || 'bronze',
+    avatarUrl: user.avatarUrl || '',
     createdAt: user.createdAt || ''
   };
 }
@@ -1125,6 +1126,16 @@ async function initPostgresIfConfigured() {
         ALTER TABLE users ADD COLUMN IF NOT EXISTS custom_cashback_percent NUMERIC NULL;
         ALTER TABLE users ADD COLUMN IF NOT EXISTS total_approved_spend BIGINT DEFAULT 0;
         ALTER TABLE users ADD COLUMN IF NOT EXISTS vip_tier TEXT DEFAULT 'bronze';
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT;
+        CREATE TABLE IF NOT EXISTS user_avatars (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL,
+          mime_type TEXT NOT NULL,
+          data BYTEA NOT NULL,
+          size_bytes INTEGER NOT NULL,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_user_avatars_user_id ON user_avatars(user_id);
         UPDATE orders SET platform = 'shopee' WHERE platform IS NULL OR platform = '';
         ALTER TABLE orders ALTER COLUMN platform SET DEFAULT 'shopee';
         ALTER TABLE orders ALTER COLUMN platform SET NOT NULL;
@@ -1446,7 +1457,7 @@ async function batchSyncUsers(client, users) {
     for (const u of chunk) {
       if (!u || !u.id) continue;
       valuePlaceholders.push(
-        `($${pIdx}, $${pIdx + 1}, $${pIdx + 2}, $${pIdx + 3}, $${pIdx + 4}, $${pIdx + 5}, $${pIdx + 6}, $${pIdx + 7}, $${pIdx + 8}, $${pIdx + 9}, $${pIdx + 10}, $${pIdx + 11}, $${pIdx + 12}, $${pIdx + 13}, $${pIdx + 14}, $${pIdx + 15}, $${pIdx + 16}, $${pIdx + 17}, $${pIdx + 18}, $${pIdx + 19}, $${pIdx + 20}, $${pIdx + 21}, $${pIdx + 22}, $${pIdx + 23}, $${pIdx + 24})`
+        `($${pIdx}, $${pIdx + 1}, $${pIdx + 2}, $${pIdx + 3}, $${pIdx + 4}, $${pIdx + 5}, $${pIdx + 6}, $${pIdx + 7}, $${pIdx + 8}, $${pIdx + 9}, $${pIdx + 10}, $${pIdx + 11}, $${pIdx + 12}, $${pIdx + 13}, $${pIdx + 14}, $${pIdx + 15}, $${pIdx + 16}, $${pIdx + 17}, $${pIdx + 18}, $${pIdx + 19}, $${pIdx + 20}, $${pIdx + 21}, $${pIdx + 22}, $${pIdx + 23}, $${pIdx + 24}, $${pIdx + 25})`
       );
       params.push(
         u.id,
@@ -1475,9 +1486,10 @@ async function batchSyncUsers(client, users) {
           : null,
         Math.max(0, Math.round(Number(u.totalApprovedSpend || 0))),
         String(u.vipTier || 'bronze'),
+        u.avatarUrl || '',
         u.createdAt ? new Date(u.createdAt) : new Date()
       );
-      pIdx += 25;
+      pIdx += 26;
     }
 
     if (valuePlaceholders.length === 0) continue;
@@ -1488,7 +1500,7 @@ async function batchSyncUsers(client, users) {
         referred_by, balance_available, balance_pending, total_earned,
         total_withdrawn, bank_name, bank_account, bank_owner, account_locked,
         is_deleted, deleted_at, deleted_by_admin_id, has_negative_balance, custom_cashback_percent,
-        total_approved_spend, vip_tier, created_at
+        total_approved_spend, vip_tier, avatar_url, created_at
       )
       VALUES ${valuePlaceholders.join(', ')}
       ON CONFLICT (id) DO UPDATE SET
@@ -1514,7 +1526,8 @@ async function batchSyncUsers(client, users) {
         has_negative_balance = EXCLUDED.has_negative_balance,
         custom_cashback_percent = EXCLUDED.custom_cashback_percent,
         total_approved_spend = EXCLUDED.total_approved_spend,
-        vip_tier = EXCLUDED.vip_tier
+        vip_tier = EXCLUDED.vip_tier,
+        avatar_url = EXCLUDED.avatar_url
     `;
     await client.query(query, params);
   }
@@ -1970,9 +1983,9 @@ async function persistUserToPostgres(user, customClient = null) {
         referred_by, balance_available, balance_pending, total_earned,
         total_withdrawn, bank_name, bank_account, bank_owner, account_locked,
         is_deleted, deleted_at, deleted_by_admin_id, has_negative_balance, custom_cashback_percent,
-        total_approved_spend, vip_tier, created_at
+        total_approved_spend, vip_tier, avatar_url, created_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)
       ON CONFLICT (id) DO UPDATE SET
         code = EXCLUDED.code,
         name = EXCLUDED.name,
@@ -1996,7 +2009,8 @@ async function persistUserToPostgres(user, customClient = null) {
         has_negative_balance = EXCLUDED.has_negative_balance,
         custom_cashback_percent = EXCLUDED.custom_cashback_percent,
         total_approved_spend = EXCLUDED.total_approved_spend,
-        vip_tier = EXCLUDED.vip_tier
+        vip_tier = EXCLUDED.vip_tier,
+        avatar_url = EXCLUDED.avatar_url
       RETURNING *;
     `;
     const params = [
@@ -2026,6 +2040,7 @@ async function persistUserToPostgres(user, customClient = null) {
         : null,
       Math.max(0, Math.round(Number(user.totalApprovedSpend || 0))),
       String(user.vipTier || 'bronze'),
+      user.avatarUrl || '',
       user.createdAt ? new Date(user.createdAt) : new Date()
     ];
     const res = await client.query(query, params);

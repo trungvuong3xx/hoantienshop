@@ -64,9 +64,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link id="webFont" media="print" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/styles.css?v=2.9.6" />
+  <link rel="stylesheet" href="/styles.css?v=2.9.7" />
   <link rel="stylesheet" href="/selectPopup.css?v=3" />
-  <script src="/app.js?v=2.9.9" defer></script>
+  <script src="/app.js?v=2.9.10" defer></script>
   <script src="/selectPopup.js?v=3" defer></script>
 </head>
 <body>
@@ -95,6 +95,7 @@
             </button>
           </div>
           <div class="user-chip" data-nav="wallet" title="Mở Ví hoàn tiền của bạn">
+            <span class="header-user-avatar" id="headerUserAvatar" aria-hidden="true">U</span>
             <span class="user-name-label" id="headerUserName">Tài khoản</span>
             <span class="user-balance-pill" id="headerUserBalance">0đ</span>
           </div>
@@ -700,7 +701,14 @@
         <!-- User Profile Card -->
         <div class="account-profile-card">
           <div class="profile-main-row">
-            <div class="profile-avatar" id="accountAvatarInitial" aria-hidden="true">U</div>
+            <button type="button" class="profile-avatar-btn" id="accountAvatarBtn" title="Nhấn để thay đổi ảnh đại diện" aria-label="Thay đổi ảnh đại diện">
+              <span class="profile-avatar" id="accountAvatarInitial" aria-hidden="true">U</span>
+              <span class="profile-avatar-cam" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+              </span>
+              <span class="profile-avatar-spinner hidden" id="accountAvatarSpinner" aria-hidden="true"></span>
+            </button>
+            <input type="file" id="avatarFileInput" class="hidden" accept="image/jpeg,image/png,image/webp" aria-label="Chọn ảnh đại diện từ thiết bị" />
             <div class="profile-info">
               <h2 id="accountUserName">Thành viên</h2>
               <div class="profile-sub-row">
@@ -2199,10 +2207,11 @@
     </button>
     <button type="button" class="nav-btn mobile-nav-item" data-nav="account">
       <span class="mobile-nav-icon" aria-hidden="true">
-        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <svg id="mobileNavAccountIconSvg" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="8" r="4"></circle>
           <path d="M4 20c0-4 3.6-6 8-6s8 2 8 6"></path>
         </svg>
+        <span id="mobileNavAccountAvatar" class="mobile-nav-avatar hidden"></span>
       </span>
       <span class="mobile-nav-label">Tôi</span>
     </button>
@@ -2297,6 +2306,34 @@
         </button>
       </div>
       <div id="iosA2hsBody" class="ios-a2hs-body"></div>
+    </div>
+  </div>
+
+  <!-- Avatar Crop & Preview Modal (Mobile-First) -->
+  <div id="avatarCropModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="avatarCropTitle">
+    <div class="modal-box avatar-crop-modal">
+      <div class="modal-head">
+        <h3 id="avatarCropTitle">Cập nhật ảnh đại diện</h3>
+        <button type="button" class="modal-close-btn" id="avatarCropCloseBtn" aria-label="Đóng">✕</button>
+      </div>
+      <div class="avatar-crop-body">
+        <p class="avatar-crop-hint">Kéo ảnh để căn giữa khuôn mặt, dùng thanh trượt để phóng to/thu nhỏ.</p>
+        <div class="avatar-crop-stage" id="avatarCropStage">
+          <canvas id="avatarCropCanvas" width="320" height="320" aria-label="Xem trước ảnh đại diện"></canvas>
+          <div class="avatar-crop-ring" aria-hidden="true"></div>
+        </div>
+        <div class="avatar-crop-controls">
+          <span class="avatar-zoom-icon" aria-hidden="true">−</span>
+          <input type="range" id="avatarZoomSlider" min="1" max="3" step="0.02" value="1" aria-label="Thu phóng ảnh đại diện" />
+          <span class="avatar-zoom-icon" aria-hidden="true">+</span>
+          <button type="button" class="btn btn-ghost btn-xs" id="avatarCropResetBtn">Đặt lại</button>
+        </div>
+        <p id="avatarCropError" class="avatar-crop-error hidden" role="alert"></p>
+        <div class="avatar-crop-actions">
+          <button type="button" class="btn btn-ghost" id="avatarCropCancelBtn">Hủy</button>
+          <button type="button" class="btn btn-primary" id="avatarCropConfirmBtn">Lưu ảnh đại diện</button>
+        </div>
+      </div>
     </div>
   </div>
 

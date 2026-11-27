@@ -25,6 +25,7 @@ function mapUserRow(row) { return {
         : null,
       totalApprovedSpend: Math.round(Number(row.total_approved_spend || 0)),
       vipTier: row.vip_tier || 'bronze',
+      avatarUrl: row.avatar_url || '',
       createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString()
     }; }
 module.exports = { mapUserRow };

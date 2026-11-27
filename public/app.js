@@ -887,6 +887,56 @@ function syncAccountBankPasswordRequirement() {
   return required;
 }
 
+function isSafeAvatarUrl(url) {
+  if (!url || typeof url !== 'string') return false;
+  const trimmed = url.trim();
+  return trimmed.startsWith('/api/avatars/') || trimmed.startsWith('https://');
+}
+
+function renderAvatarEl(el, avatarUrl, fallbackInitial, altText = 'Ảnh đại diện') {
+  if (!el) return;
+  const safeInitial = String(fallbackInitial || 'U').trim().charAt(0).toUpperCase() || 'U';
+  if (isSafeAvatarUrl(avatarUrl)) {
+    const existingImg = el.querySelector('img');
+    if (existingImg && existingImg.getAttribute('src') === avatarUrl) return;
+    el.textContent = '';
+    const img = document.createElement('img');
+    img.src = avatarUrl;
+    img.alt = altText;
+    img.loading = 'lazy';
+    img.decoding = 'async';
+    img.onerror = () => {
+      el.textContent = safeInitial;
+    };
+    el.appendChild(img);
+  } else {
+    el.textContent = safeInitial;
+  }
+}
+
+function syncUserAvatarEverywhere(user) {
+  const displayName = user?.name || 'Thành viên';
+  const initial = displayName.trim().charAt(0).toUpperCase() || 'U';
+  const avatarUrl = user && isSafeAvatarUrl(user.avatarUrl) ? user.avatarUrl : '';
+
+  renderAvatarEl(document.getElementById('accountAvatarInitial'), avatarUrl, initial, displayName);
+  renderAvatarEl(document.getElementById('headerUserAvatar'), avatarUrl, initial, displayName);
+
+  const mobileAvatarEl = document.getElementById('mobileNavAccountAvatar');
+  const mobileIconSvg = document.getElementById('mobileNavAccountIconSvg');
+  if (mobileAvatarEl && mobileIconSvg) {
+    if (user && avatarUrl) {
+      renderAvatarEl(mobileAvatarEl, avatarUrl, initial, displayName);
+      mobileAvatarEl.classList.remove('hidden');
+      mobileIconSvg.classList.add('hidden');
+    } else {
+      mobileAvatarEl.textContent = '';
+      mobileAvatarEl.classList.add('hidden');
+      mobileIconSvg.classList.remove('hidden');
+    }
+  }
+}
+
 function syncAccountProfileUi({ populateForm = false } = {}) {
   if (!currentUser) return;
   const setTxt = (id, txt) => {
@@ -894,8 +944,7 @@ function syncAccountProfileUi({ populateForm = false } = {}) {
     if (el) el.textContent = txt;
   };
   const displayName = currentUser.name || 'Thành viên';
-  const initial = displayName.trim().charAt(0).toUpperCase() || 'U';
-  setTxt('accountAvatarInitial', initial);
+  syncUserAvatarEverywhere(currentUser);
   setTxt('accountUserName', displayName);
   setTxt('accountUserPhone', currentUser.phone || 'Chưa cập nhật SĐT');
   setTxt('accountUserCode', currentUser.code || '...');
@@ -985,6 +1034,7 @@ function syncAuthUi() {
     }
   } else {
     document.body.classList.remove('is-authenticated');
+    syncUserAvatarEverywhere(null);
     navAuthArea?.classList.remove('hidden');
     navUserArea?.classList.add('hidden');
     navAdminBtn?.classList.add('hidden');
@@ -5812,9 +5862,14 @@ function renderLeaderboardTable(mode = 'spend') {
         .map((item) => {
           const val = activeLeaderboardTab === 'cashback' ? item.totalCashback : item.totalSpend;
           const medalLabel = item.rank === 1 ? 'TOP 1' : item.rank === 2 ? 'TOP 2' : 'TOP 3';
+          const initial = String(item.displayName || 'U').trim().charAt(0).toUpperCase() || 'U';
+          const avatarInner = isSafeAvatarUrl(item.avatarUrl)
+            ? `<img src="${escapeHtml(item.avatarUrl)}" alt="${escapeHtml(item.displayName)}" loading="lazy" />`
+            : escapeHtml(initial);
           return `
             <div class="lb-podium-card rank-${item.rank}">
               <span class="lb-podium-medal">${medalLabel}</span>
+              <div class="lb-podium-avatar">${avatarInner}</div>
               <div class="lb-podium-name" title="${escapeHtml(item.displayName)}">${escapeHtml(item.displayName)}</div>
               <div class="lb-podium-val">${fmtVnd(val)}</div>
             </div>
@@ -5834,12 +5889,21 @@ function renderLeaderboardTable(mode = 'spend') {
       const metricVal = activeLeaderboardTab === 'cashback' ? item.totalCashback : item.totalSpend;
       const isMe = currentUser && item.code && currentUser.code === item.code;
       const shortTier = String(item.vipTierName || '').replace(/^Thành viên\s+/i, '');
+      const initial = String(item.displayName || 'U').trim().charAt(0).toUpperCase() || 'U';
+      const avatarInner = isSafeAvatarUrl(item.avatarUrl)
+        ? `<img src="${escapeHtml(item.avatarUrl)}" alt="${escapeHtml(item.displayName)}" loading="lazy" />`
+        : escapeHtml(initial);
       return `
         <tr class="${isMe ? 'is-me' : ''}">
           <td class="lb-col-rank"><span class="${medalCls}">#${item.rank}</span></td>
           <td class="lb-col-user">
-            <strong>${escapeHtml(item.displayName)}${isMe ? ' (Bạn)' : ''}</strong>
-            <div class="lb-user-code" style="font-size:12px;color:#64748b;">${escapeHtml(item.code)}</div>
+            <div class="lb-user-row">
+              <span class="lb-user-avatar">${avatarInner}</span>
+              <div>
+                <strong>${escapeHtml(item.displayName)}${isMe ? ' (Bạn)' : ''}</strong>
+                <div class="lb-user-code" style="font-size:12px;color:#64748b;">${escapeHtml(item.code)}</div>
+              </div>
+            </div>
           </td>
           <td class="lb-col-tier"><span class="lb-tier-pill">${renderVipBadgeSvg(item.vipTier || item.vipTierIcon, false)}<span>${escapeHtml(shortTier || item.vipTierName || '')}</span></span></td>
           <td class="lb-col-metric"><strong class="lb-metric-val">${fmtVnd(metricVal)}</strong></td>
@@ -6101,5 +6165,322 @@ on('walletQuickHistoryBtn', 'click', () => {
     panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 });
+
+// ================= USER AVATAR CROPPER & UPLOADER =================
+(function initUserAvatarUploader() {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return;
+
+  const MAX_SOURCE_BYTES = 5 * 1024 * 1024; // 5 MB source image limit
+  const OUTPUT_SIZE = 320; // Crisp 320x320 circular avatar
+  const ALLOWED_TYPES = new Set(['image/jpeg', 'image/jpg', 'image/png', 'image/webp']);
+
+  const avatarBtn = document.getElementById('accountAvatarBtn');
+  const fileInput = document.getElementById('avatarFileInput');
+  const spinnerEl = document.getElementById('accountAvatarSpinner');
+  const cropModal = document.getElementById('avatarCropModal');
+  const cropStage = document.getElementById('avatarCropStage');
+  const cropCanvas = document.getElementById('avatarCropCanvas');
+  const zoomSlider = document.getElementById('avatarZoomSlider');
+  const resetBtn = document.getElementById('avatarCropResetBtn');
+  const closeBtn = document.getElementById('avatarCropCloseBtn');
+  const cancelBtn = document.getElementById('avatarCropCancelBtn');
+  const confirmBtn = document.getElementById('avatarCropConfirmBtn');
+  const errorEl = document.getElementById('avatarCropError');
+
+  if (!avatarBtn || !fileInput || !cropModal || !cropCanvas) return;
+
+  let isAvatarUploading = false;
+  let activeImage = null;
+  let activeObjectUrl = null;
+  let baseScale = 1;
+  let zoom = 1;
+  let offsetX = 0;
+  let offsetY = 0;
+  let dragStart = null;
+
+  function setCropError(msg) {
+    if (!errorEl) return;
+    if (msg) {
+      errorEl.textContent = msg;
+      errorEl.classList.remove('hidden');
+    } else {
+      errorEl.textContent = '';
+      errorEl.classList.add('hidden');
+    }
+  }
+
+  function revokeActiveObjectUrl() {
+    if (activeObjectUrl) {
+      try {
+        URL.revokeObjectURL(activeObjectUrl);
+      } catch {}
+      activeObjectUrl = null;
+    }
+  }
+
+  function clampOffsets() {
+    if (!activeImage) return;
+    const drawW = activeImage.naturalWidth * baseScale * zoom;
+    const drawH = activeImage.naturalHeight * baseScale * zoom;
+    const maxOffsetX = Math.max(0, (drawW - OUTPUT_SIZE) / 2);
+    const maxOffsetY = Math.max(0, (drawH - OUTPUT_SIZE) / 2);
+    offsetX = Math.max(-maxOffsetX, Math.min(maxOffsetX, offsetX));
+    offsetY = Math.max(-maxOffsetY, Math.min(maxOffsetY, offsetY));
+  }
+
+  function renderCropPreview() {
+    if (!activeImage || !cropCanvas) return;
+    const ctx = cropCanvas.getContext('2d');
+    if (!ctx) return;
+    clampOffsets();
+    ctx.clearRect(0, 0, OUTPUT_SIZE, OUTPUT_SIZE);
+    ctx.fillStyle = '#0f172a';
+    ctx.fillRect(0, 0, OUTPUT_SIZE, OUTPUT_SIZE);
+
+    const drawW = activeImage.naturalWidth * baseScale * zoom;
+    const drawH = activeImage.naturalHeight * baseScale * zoom;
+    const dx = (OUTPUT_SIZE - drawW) / 2 + offsetX;
+    const dy = (OUTPUT_SIZE - drawH) / 2 + offsetY;
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(activeImage, dx, dy, drawW, drawH);
+  }
+
+  function closeCropModal() {
+    if (isAvatarUploading) return;
+    cropModal.classList.add('hidden');
+    setCropError('');
+    activeImage = null;
+    dragStart = null;
+    revokeActiveObjectUrl();
+    fileInput.value = '';
+  }
+
+  function openCropModalWithImage(img) {
+    activeImage = img;
+    // Cover scale: fills the 320x320 square without stretching or distorting aspect ratio
+    baseScale = Math.max(OUTPUT_SIZE / img.naturalWidth, OUTPUT_SIZE / img.naturalHeight);
+    zoom = 1;
+    offsetX = 0;
+    offsetY = 0;
+    if (zoomSlider) zoomSlider.value = '1';
+    setCropError('');
+    cropModal.classList.remove('hidden');
+    renderCropPreview();
+  }
+
+  function validateSelectedFile(file) {
+    if (!file) return null;
+    const type = String(file.type || '').toLowerCase();
+    const extMatch = /\.(jpe?g|png|webp)$/i.test(file.name || '');
+    if ((!type || !ALLOWED_TYPES.has(type)) && !extMatch) {
+      return 'Định dạng ảnh chưa hỗ trợ. Vui lòng chọn ảnh JPG, PNG hoặc WEBP.';
+    }
+    if (file.size <= 0) {
+      return 'File ảnh bị lỗi hoặc trống. Vui lòng chọn ảnh khác.';
+    }
+    if (file.size > MAX_SOURCE_BYTES) {
+      return 'Ảnh quá lớn (tối đa 5 MB). Vui lòng chọn ảnh nhẹ hơn.';
+    }
+    return null;
+  }
+
+  function exportCompressedBlob() {
+    return new Promise((resolve, reject) => {
+      cropCanvas.toBlob(
+        (webpBlob) => {
+          if (webpBlob && webpBlob.type === 'image/webp' && webpBlob.size > 0) {
+            return resolve(webpBlob);
+          }
+          // Fallback to JPEG on browsers without WebP canvas encoding (e.g. older iOS Safari)
+          cropCanvas.toBlob(
+            (jpegBlob) => {
+              if (jpegBlob && jpegBlob.size > 0) return resolve(jpegBlob);
+              return reject(new Error('Không thể xử lý ảnh trên trình duyệt này.'));
+            },
+            'image/jpeg',
+            0.86
+          );
+        },
+        'image/webp',
+        0.86
+      );
+    });
+  }
+
+  avatarBtn.addEventListener('click', () => {
+    if (!authToken || !currentUser) {
+      showToast('Vui lòng đăng nhập để thay đổi ảnh đại diện.');
+      return;
+    }
+    if (isAvatarUploading) {
+      showToast('Đang tải ảnh đại diện lên, vui lòng chờ giây lát...');
+      return;
+    }
+    fileInput.value = '';
+    fileInput.click();
+  });
+
+  fileInput.addEventListener('change', () => {
+    const file = fileInput.files?.[0];
+    if (!file) return; // User cancelled picker -> no changes
+
+    const errMsg = validateSelectedFile(file);
+    if (errMsg) {
+      showToast(errMsg);
+      fileInput.value = '';
+      return;
+    }
+
+    revokeActiveObjectUrl();
+    const url = URL.createObjectURL(file);
+    activeObjectUrl = url;
+
+    const img = new Image();
+    img.onload = () => {
+      if (!img.naturalWidth || !img.naturalHeight) {
+        revokeActiveObjectUrl();
+        showToast('Ảnh bị lỗi hoặc không đọc được. Vui lòng chọn ảnh khác.');
+        fileInput.value = '';
+        return;
+      }
+      openCropModalWithImage(img);
+    };
+    img.onerror = () => {
+      revokeActiveObjectUrl();
+      showToast('File ảnh bị hỏng hoặc không hợp lệ. Vui lòng chọn ảnh JPG, PNG hoặc WEBP.');
+      fileInput.value = '';
+    };
+    img.src = url;
+  });
+
+  // Pointer/Touch drag to pan inside circular crop stage
+  if (cropStage) {
+    cropStage.addEventListener('pointerdown', (e) => {
+      if (!activeImage || isAvatarUploading) return;
+      e.preventDefault();
+      cropStage.setPointerCapture?.(e.pointerId);
+      dragStart = { x: e.clientX, y: e.clientY, startOffsetX: offsetX, startOffsetY: offsetY };
+    });
+
+    cropStage.addEventListener('pointermove', (e) => {
+      if (!dragStart || !activeImage) return;
+      const stageRect = cropStage.getBoundingClientRect();
+      const ratio = OUTPUT_SIZE / Math.max(1, stageRect.width);
+      offsetX = dragStart.startOffsetX + (e.clientX - dragStart.x) * ratio;
+      offsetY = dragStart.startOffsetY + (e.clientY - dragStart.y) * ratio;
+      renderCropPreview();
+    });
+
+    const endDrag = () => {
+      dragStart = null;
+    };
+    cropStage.addEventListener('pointerup', endDrag);
+    cropStage.addEventListener('pointercancel', endDrag);
+  }
+
+  zoomSlider?.addEventListener('input', () => {
+    zoom = Math.max(1, Math.min(3, Number(zoomSlider.value || 1)));
+    renderCropPreview();
+  });
+
+  resetBtn?.addEventListener('click', () => {
+    zoom = 1;
+    offsetX = 0;
+    offsetY = 0;
+    if (zoomSlider) zoomSlider.value = '1';
+    renderCropPreview();
+  });
+
+  closeBtn?.addEventListener('click', closeCropModal);
+  cancelBtn?.addEventListener('click', closeCropModal);
+  cropModal.addEventListener('click', (e) => {
+    if (e.target === cropModal) closeCropModal();
+  });
+
+  confirmBtn?.addEventListener('click', async () => {
+    if (!activeImage || isAvatarUploading) return;
+    if (!authToken || !currentUser) {
+      setCropError('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+      return;
+    }
+
+    isAvatarUploading = true;
+    setCropError('');
+    confirmBtn.disabled = true;
+    confirmBtn.textContent = 'Đang tải ảnh...';
+    if (cancelBtn) cancelBtn.disabled = true;
+    spinnerEl?.classList.remove('hidden');
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 25000);
+
+    try {
+      const blob = await exportCompressedBlob();
+      const headers = { 'Content-Type': blob.type || 'image/webp' };
+      if (authToken && authToken !== '__cookie_session__') {
+        headers.Authorization = `Bearer ${authToken}`;
+      }
+
+      const res = await fetch('/api/user/avatar', {
+        method: 'POST',
+        headers,
+        body: blob,
+        credentials: 'same-origin',
+        signal: controller.signal
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || `Không thể lưu ảnh đại diện (${res.status}).`);
+      }
+
+      if (data.user) {
+        currentUser = { ...currentUser, ...data.user };
+      } else if (data.avatarUrl) {
+        currentUser = { ...currentUser, avatarUrl: data.avatarUrl };
+      }
+      safeStorage.set(USER_KEY, JSON.stringify(currentUser));
+      syncUserAvatarEverywhere(currentUser);
+
+      // Sync own avatar immediately inside cached leaderboard if already loaded
+      if (latestLeaderboardData && currentUser.code) {
+        const patchList = (arr) => {
+          if (!Array.isArray(arr)) return;
+          for (const item of arr) {
+            if (item && item.code === currentUser.code) {
+              item.avatarUrl = currentUser.avatarUrl || '';
+            }
+          }
+        };
+        patchList(latestLeaderboardData.topBySpend);
+        patchList(latestLeaderboardData.topByCashback);
+        if (latestLeaderboardData.myRankSpend) latestLeaderboardData.myRankSpend.avatarUrl = currentUser.avatarUrl || '';
+        if (latestLeaderboardData.myRankCashback) latestLeaderboardData.myRankCashback.avatarUrl = currentUser.avatarUrl || '';
+        renderLeaderboardTable(activeLeaderboardTab);
+      }
+
+      isAvatarUploading = false;
+      closeCropModal();
+      showToast('Đã cập nhật ảnh đại diện thành công!');
+    } catch (err) {
+      const isNetworkErr =
+        err?.name === 'AbortError' ||
+        err instanceof TypeError ||
+        String(err?.message || '').includes('Failed to fetch');
+      const friendlyMsg = isNetworkErr
+        ? 'Mất kết nối mạng khi tải ảnh. Kiểm tra Wi-Fi/4G rồi bấm Lưu để thử lại.'
+        : (err?.message || 'Không thể tải ảnh đại diện. Vui lòng thử lại.');
+      setCropError(friendlyMsg);
+      showToast(friendlyMsg);
+    } finally {
+      clearTimeout(timeoutId);
+      isAvatarUploading = false;
+      confirmBtn.disabled = false;
+      confirmBtn.textContent = 'Lưu ảnh đại diện';
+      if (cancelBtn) cancelBtn.disabled = false;
+      spinnerEl?.classList.add('hidden');
+    }
+  });
+})();
 
 renderRecentConvertedLinks();
