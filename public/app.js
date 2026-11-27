@@ -250,6 +250,7 @@ async function copyText(text, msg = 'Đã sao chép thành công!') {
 }
 
 function showConnectionNotice(message) {
+  if (typeof document === 'undefined' || document.visibilityState === 'hidden') return;
   let notice = document.getElementById('connectionNotice');
   if (!notice) {
     notice = document.createElement('aside');
@@ -269,6 +270,15 @@ function showConnectionNotice(message) {
     document.body.prepend(notice);
   }
   notice.firstChild.textContent = message;
+}
+
+function hideConnectionNotice() {
+  if (typeof document === 'undefined') return;
+  document.getElementById('connectionNotice')?.remove();
+}
+
+if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+  window.addEventListener('online', hideConnectionNotice);
 }
 
 let refreshInFlight = null;
@@ -366,10 +376,13 @@ async function apiFetch(url, options = {}) {
       await clearSession({ skipLogoutApi: true });
     }
     if (!res.ok) {
-      if (res.status >= 500) {
+      if (res.status >= 500 && !options.silentConnectionNotice) {
         showConnectionNotice('Máy chủ đang gặp lỗi. Vui lòng thử lại sau vài phút.');
       }
       throw new Error(data.error || `Lỗi kết nối (${res.status})`);
+    }
+    if (typeof hideConnectionNotice === 'function') {
+      hideConnectionNotice();
     }
     return data;
   } catch (err) {
@@ -380,14 +393,37 @@ async function apiFetch(url, options = {}) {
         throw err;
       }
       const message = 'Kết nối quá lâu. Hãy kiểm tra Wi-Fi/4G/5G rồi tải lại trang. Nếu vừa gửi yêu cầu, hãy kiểm tra kết quả trước khi gửi lại.';
-      showConnectionNotice(message);
+      if (!options.silentConnectionNotice) {
+        showConnectionNotice(message);
+      }
       throw new Error(message);
     }
-    if (err instanceof TypeError || String(err.message).includes('Failed to fetch')) {
+    const errMsg = String(err?.message || '');
+    const isNetworkErr =
+      err instanceof TypeError ||
+      errMsg.includes('Failed to fetch') ||
+      errMsg.includes('Load failed') ||
+      errMsg.includes('NetworkError');
+    if (isNetworkErr) {
+      const method = String(options.method || 'GET').toUpperCase();
+      const canRetryGet =
+        method === 'GET' &&
+        !options._retriedNetwork &&
+        !options.signal?.aborted &&
+        navigator.onLine !== false;
+      if (canRetryGet) {
+        await new Promise((r) => setTimeout(r, 400));
+        if (!options.signal?.aborted) {
+          return apiFetch(url, { ...options, _retriedNetwork: true });
+        }
+      }
+      const isHiddenTab = typeof document !== 'undefined' && document.visibilityState === 'hidden';
       const message = navigator.onLine === false
         ? 'Thiết bị đang mất mạng. Hãy bật Wi-Fi hoặc 4G/5G, tắt chế độ máy bay rồi tải lại trang.'
         : 'Không thể kết nối đến máy chủ. Hãy thử đổi Wi-Fi/4G/5G hoặc thử lại sau vài phút.';
-      showConnectionNotice(message);
+      if (!options.silentConnectionNotice && !isHiddenTab) {
+        showConnectionNotice(message);
+      }
       throw new Error(message);
     }
     throw err;
@@ -1221,7 +1257,7 @@ function applyPublicSettings(data) {
 // Public Config
 async function initPublicConfig() {
   try {
-    const data = await apiFetch('/api/public-config');
+    const data = await apiFetch('/api/public-config', { silentConnectionNotice: true });
     applyPublicSettings(data);
   } catch (err) {
     console.warn('Init public config notice:', err);
@@ -1721,7 +1757,8 @@ async function fetchInstantPreview(rawText) {
     const res = await apiFetch('/api/preview', {
       method: 'POST',
       body: JSON.stringify({ url }),
-      signal
+      signal,
+      silentConnectionNotice: true
     });
 
     if (signal.aborted) return;
@@ -2001,20 +2038,6 @@ async function handleGetCashbackLink(rawOptions) {
                    <strong class="cp-cashback-value">Có hoàn tiền</strong>
                  </div>`;
 
-          const itemEffectivePrice =
-            (isShopee || isTikTok) && item.price > 0 && item.estimatedCashback > 0
-              ? Math.max(0, Math.round(item.price) - Math.round(item.estimatedCashback))
-              : 0;
-          const shopeeNetPriceHtml =
-            itemEffectivePrice > 0
-              ? `<div class="cp-net-price-formula">
-                   <div class="cp-net-top-row">
-                     <span class="cp-net-label">Giá thực trả sau hoàn</span>
-                     <strong class="cp-net-final">${fmtVnd(itemEffectivePrice)}</strong>
-                   </div>
-                 </div>`
-              : '';
-
           const rawTitle = item.productName || item.title || '';
           const displayItemTitle =
             rawTitle && !rawTitle.match(/^Sản phẩm (Shopee|TikTok)/i)
@@ -2058,7 +2081,6 @@ async function handleGetCashbackLink(rawOptions) {
                 </div>
 
                 ${estCashbackStripHtml}
-                ${shopeeNetPriceHtml}
 
                 <!-- Nút Mua Hàng to rõ -->
                 <div class="cp-cta-block">
@@ -2283,8 +2305,6 @@ function renderTikTokComparisonResults(data, sourceItem, targetPlatform = 'tikto
         prod.commissionRate > 0 ? ` (${Number(prod.commissionRate).toFixed(1).replace(/\.0$/, '')}%)` : '';
       const grossCommText = prod.grossCommission > 0 ? `${fmtVnd(prod.grossCommission)}${commRateText}` : 'Đang cập nhật';
       const cashbackText = prod.estimatedCashback > 0 ? `+ ${fmtVnd(prod.estimatedCashback)}` : '0đ';
-      const effectiveText = fmtVnd(prod.effectivePrice);
-      const formulaText = `${fmtVnd(prod.price)} − ${fmtVnd(prod.estimatedCashback)} = ${effectiveText}`;
 
       return `
         <div class="tt-compare-card ${isBestDeal ? 'is-best-deal' : ''}" data-tt-product-id="${escapeHtml(pid)}">
@@ -2309,10 +2329,6 @@ function renderTikTokComparisonResults(data, sourceItem, targetPlatform = 'tikto
             <div class="tt-compare-price-row is-cashback">
               <span>Tiền hoàn khách nhận</span>
               <strong>${cashbackText}</strong>
-            </div>
-            <div class="tt-compare-price-row is-effective">
-              <span>Giá thực trả sau hoàn</span>
-              <strong>${effectiveText}</strong>
             </div>
           </div>
 
@@ -2455,7 +2471,8 @@ async function loadCrossPlatformComparison(targetPlatform, sourceItem) {
     const data = await apiFetch(ui.searchEndpoint, {
       method: 'POST',
       body: JSON.stringify(payload),
-      signal: controller.signal
+      signal: controller.signal,
+      silentConnectionNotice: true
     });
 
     if (controller.signal.aborted) return;
