@@ -2619,7 +2619,8 @@ body:has(#view-admin.active) .floating-zalo {
     box-shadow: 0 8px 20px rgba(238, 77, 45, 0.28);
   }
 
-  body.is-authenticated .quick-guide-strip {
+  body.is-authenticated .quick-guide-strip,
+  body.is-authenticated .hero-brand-banner .hero-desc {
     display: none;
   }
 
@@ -2627,23 +2628,15 @@ body:has(#view-admin.active) .floating-zalo {
     min-height: 40px;
   }
 
-  .hb-tabs {
-    padding-right: 54px;
-  }
-
-  .hb-tab {
-    min-height: 42px;
-  }
-
   .btn-paste-inline {
     padding: 0 12px;
-    min-height: 38px;
-    height: 38px;
+    min-height: 36px;
+    height: 36px;
     border-radius: 8px;
   }
 
   .btn-cta {
-    height: 46px;
+    height: 48px;
     font-size: 14.5px;
     border-radius: 12px;
   }
@@ -3168,10 +3161,29 @@ body:has(#view-admin.active) .floating-zalo {
   animation: viewFadeSlide 0.16s ease;
 }
 
-.hb-timeline-list {
+.hb-timeline-list,
+#view-home .rules-grid {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+#view-home .rule-item {
+  align-items: flex-start;
+  padding: 12px 14px;
+  border-radius: 12px;
+}
+
+#view-home .rule-num {
+  width: 26px;
+  height: 26px;
+  font-size: 12.5px;
+  margin-top: 2px;
+}
+
+#view-home .rule-item h4 {
+  font-size: 13.5px;
+  margin-bottom: 2px;
 }
 
 .hb-timeline-row {
@@ -3219,6 +3231,43 @@ body:has(#view-admin.active) .floating-zalo {
   font-size: 12.5px;
   color: var(--text-sub);
   margin: 0;
+}
+
+.handbook-footer {
+  margin-top: 2px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: center;
+}
+
+.handbook-faq-link {
+  width: 100%;
+  justify-content: center;
+  min-height: 40px;
+  padding: 8px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--bg-soft);
+  color: var(--text-main);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+@media (hover: hover) {
+  .handbook-faq-link:hover {
+    background: #fff5f2;
+    border-color: #fed7aa;
+    color: var(--shopee);
+  }
+}
+
+.handbook-faq-link:active {
+  background: #ffedd5;
+  color: var(--shopee);
 }
 
 /* Tab 3 (Wallet): Riokupon-Inspired Orange Gradient Hero Card */
@@ -6488,6 +6537,11 @@ body:has(#view-admin.active) .floating-zalo {
   --bg-page: #e6ecf3;
 }
 
+#view-home {
+  max-width: 1040px;
+  margin: 0 auto;
+}
+
 .hero-card {
   background: transparent;
   border: none;
@@ -6501,14 +6555,23 @@ body:has(#view-admin.active) .floating-zalo {
   width: 100%;
   background: linear-gradient(135deg, #dc2626 0%, #ee4d2d 55%, #f97316 100%);
   color: #ffffff;
-  border-radius: 24px;
-  padding: 28px 24px 80px;
+  border-radius: 22px;
+  padding: 20px 22px 64px;
   text-align: center;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   box-shadow: 0 10px 24px rgba(238, 77, 45, 0.22);
+}
+
+body.is-authenticated .hero-brand-banner {
+  padding: 16px 22px 58px;
+  gap: 8px;
+}
+
+body.is-authenticated .hero-brand-banner .hero-desc {
+  display: none;
 }
 
 .hero-brand-banner .hero-pill {
@@ -6546,14 +6609,14 @@ body:has(#view-admin.active) .floating-zalo {
 }
 
 .hero-action-card {
-  width: calc(100% - 36px);
-  max-width: 780px;
-  margin: -58px auto 0;
+  width: calc(100% - 32px);
+  max-width: 820px;
+  margin: -48px auto 0;
   background: #ffffff;
   border: 2px solid #fb923c;
   border-radius: 20px;
-  padding: 18px 20px;
-  box-shadow: 0 16px 32px -6px rgba(15, 23, 42, 0.22), 0 4px 10px rgba(238, 77, 45, 0.14);
+  padding: 16px 18px;
+  box-shadow: 0 16px 32px -6px rgba(15, 23, 42, 0.2), 0 4px 10px rgba(238, 77, 45, 0.12);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -6564,7 +6627,7 @@ body:has(#view-admin.active) .floating-zalo {
 
 .hero-paste-label {
   width: 100%;
-  max-width: 760px;
+  max-width: 780px;
   font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.04em;
@@ -6574,9 +6637,10 @@ body:has(#view-admin.active) .floating-zalo {
   margin-bottom: -2px;
 }
 
-/* Flex Input Box — prevents X / Paste buttons from ever overlapping URL text */
+/* Flex Input Box — exact 50px Desktop / 48px Mobile parity with CTA button */
 .hero-action-card .search-bar-wrap {
   margin-top: 2px;
+  align-items: stretch;
 }
 
 .hero-action-card .search-input-group {
@@ -6585,9 +6649,11 @@ body:has(#view-admin.active) .floating-zalo {
   gap: 6px;
   background: #f8fafc;
   border: 2px solid #cbd5e1;
-  border-radius: 14px;
-  padding: 0 8px 0 14px;
-  min-height: 52px;
+  border-radius: 13px;
+  padding: 0 7px 0 14px;
+  height: 50px;
+  min-height: 50px;
+  box-sizing: border-box;
   transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
 }
 
@@ -6600,7 +6666,7 @@ body:has(#view-admin.active) .floating-zalo {
 .hero-action-card .search-input-group input {
   flex: 1;
   min-width: 0;
-  height: 48px;
+  height: 100%;
   padding: 0;
   border: none;
   border-radius: 0;
@@ -6609,6 +6675,12 @@ body:has(#view-admin.active) .floating-zalo {
   font-size: 14.5px;
   font-weight: 600;
   color: #0f172a;
+}
+
+.hero-action-card .btn-cta {
+  height: 50px;
+  min-height: 50px;
+  border-radius: 13px;
 }
 
 .hero-action-card .search-input-group input:focus {
@@ -6627,26 +6699,33 @@ body:has(#view-admin.active) .floating-zalo {
 }
 
 .hero-action-card .btn-paste-inline {
-  background: #0f172a;
-  border: 1px solid #0f172a;
-  color: #ffffff;
+  background: #fff1ec;
+  border: 1.5px solid #fdba74;
+  color: #c2410c;
   font-weight: 700;
   padding: 6px 12px;
   min-height: 36px;
   border-radius: 10px;
+  gap: 5px;
+}
+
+.hero-action-card .btn-paste-inline .svg-icon {
+  color: #ea580c;
+  flex-shrink: 0;
 }
 
 @media (hover: hover) {
   .hero-action-card .btn-paste-inline:hover {
-    background: #1e293b;
-    border-color: #1e293b;
-    color: #ffffff;
+    background: #ffedd5;
+    border-color: #fb923c;
+    color: #9a3412;
   }
 }
 
 .hero-action-card .btn-paste-inline:active {
-  background: #020617;
-  color: #ffffff;
+  background: #fed7aa;
+  border-color: #f97316;
+  color: #9a3412;
 }
 
 /* Soften Hero CTA when Result Card is open so "Mở Shopee/TikTok (Mua ngay)" stays dominant */
@@ -6773,23 +6852,59 @@ body:has(#conversionResultSection:not(.hidden)) .floating-zalo {
     gap: 0;
   }
   .hero-brand-banner {
-    border-radius: 20px;
-    padding: 16px 14px 70px;
-    gap: 8px;
+    border-radius: 18px;
+    padding: 14px 12px 58px;
+    gap: 6px;
+  }
+  body.is-authenticated .hero-brand-banner {
+    padding: 12px 12px 54px;
   }
   .hero-action-card {
-    width: calc(100% - 16px);
-    margin: -54px auto 0;
-    padding: 14px;
-    border-radius: 18px;
+    width: calc(100% - 14px);
+    margin: -46px auto 0;
+    padding: 13px;
+    border-radius: 16px;
+  }
+  .hero-action-card .search-input-group,
+  .hero-action-card .btn-cta {
+    height: 48px;
+    min-height: 48px;
+    border-radius: 12px;
   }
   .hero-action-card .search-input-group {
-    min-height: 52px;
     padding: 0 6px 0 12px;
   }
   .hero-action-card .search-input-group input {
     font-size: 15px;
-    height: 48px;
+    height: 100%;
+  }
+  .handbook-tabs {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+    overflow: visible;
+    padding: 4px;
+    background: var(--bg-soft);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+  }
+  .handbook-tabs .hb-tab {
+    width: 100%;
+    min-width: 0;
+    min-height: 38px;
+    padding: 7px 6px;
+    font-size: 12.5px;
+    border-radius: 10px;
+    border-color: transparent;
+    background: transparent;
+    text-align: center;
+    justify-content: center;
+  }
+  .handbook-tabs .hb-tab.active {
+    background: var(--shopee);
+    border-color: var(--shopee);
+    color: #ffffff;
+    box-shadow: 0 3px 10px rgba(238, 77, 45, 0.24);
   }
   .cashback-product-card {
     padding: 0;
@@ -7705,19 +7820,36 @@ details.faq-accordion[open] p {
     max-width: calc(100vw - 28px);
   }
 
-  /* Compact Horizontal Snap Rules Strip on Mobile Home */
+  /* Vertical Rules List on Mobile Home (matches Timeline tab) */
   #view-home .rules-grid {
     display: flex;
-    overflow-x: auto;
-    scroll-snap-type: x mandatory;
+    flex-direction: column;
     gap: 10px;
-    padding-bottom: 6px;
-    -webkit-overflow-scrolling: touch;
+    overflow: visible;
+    padding-bottom: 0;
   }
 
   #view-home .rules-grid > * {
-    flex: 0 0 82%;
-    scroll-snap-align: start;
+    flex: none;
+    width: 100%;
+  }
+
+  #view-home .rule-item {
+    align-items: flex-start;
+    padding: 12px 14px;
+    border-radius: 12px;
+  }
+
+  #view-home .rule-num {
+    width: 26px;
+    height: 26px;
+    font-size: 12.5px;
+    margin-top: 2px;
+  }
+
+  #view-home .rule-item h4 {
+    font-size: 13.5px;
+    margin-bottom: 2px;
   }
 }
 

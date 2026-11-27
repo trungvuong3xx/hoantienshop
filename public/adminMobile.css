@@ -667,11 +667,15 @@
     border-radius: 10px;
   }
   #view-admin .admin-action-group {
+    position: relative;
     display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
+    flex-wrap: nowrap;
+    gap: 8px;
     align-items: center;
     justify-content: flex-end;
+  }
+  #view-admin .admin-action-group:has(.admin-more-actions[open]) {
+    padding-bottom: 54px;
   }
   #view-admin .admin-more-actions {
     display: block;
@@ -691,22 +695,32 @@
     background: #f8fafc;
     color: #475569;
     list-style: none;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease;
   }
   #view-admin .admin-more-actions > summary::-webkit-details-marker { display: none; }
   #view-admin .admin-more-actions:not([open]) > div { display: none; }
-  #view-admin .admin-more-actions[open] {
-    flex: 1 0 100%;
-  }
+  /* Keep "..." fixed beside Approve on Row 1; expand secondary actions into 1 crisp full-width row below */
   #view-admin .admin-more-actions[open] > summary {
-    margin-left: auto;
-    display: flex;
     background: #e2e8f0;
+    border-color: #94a3b8;
+    color: #0f172a;
   }
   #view-admin .admin-more-actions[open] > div {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
     gap: 8px;
-    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px dashed #e2e8f0;
+  }
+  #view-admin .admin-more-actions[open] > div .btn {
+    width: 100%;
+    justify-content: center;
+    padding: 0 8px;
   }
 
   /* ===== 10. SETTINGS ACCORDIONS & SAVE BAR ===== */
