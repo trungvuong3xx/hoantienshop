@@ -427,10 +427,37 @@ async function resolveHostIps(hostname, timeoutMs = DEFAULT_DNS_TIMEOUT_MS) {
   }
 }
 
-const URL_WITH_SCHEME_REGEX = /https?:\/\/[^\s<>"')\]}]+/gi;
+const URL_WITH_SCHEME_REGEX = /https?:\/\/[^\s<>"'`]+/gi;
 const SCHEMELESS_SHORT_REGEX =
   /(?:^|[\s<>"'(\[])((?:s\.shopee\.vn|vn\.shp\.ee|shp\.ee|shope\.ee|vt\.tiktok\.com|vm\.tiktok\.com)\/[a-zA-Z0-9_\-/?=&#.]+)/gi;
-const TRAILING_PUNCTUATION_REGEX = /[.,;:!?"'»`’”\)\]\}\…]+$/;
+const TRAILING_PUNCTUATION_REGEX = /[.,;:!?"'»`’”\…]+$/;
+
+function trimTrailingUrlPunctuation(rawUrl) {
+  let s = String(rawUrl || '').trim();
+  while (s.length > 0) {
+    const stripped = s.replace(TRAILING_PUNCTUATION_REGEX, '');
+    if (stripped !== s) {
+      s = stripped;
+      continue;
+    }
+    const lastChar = s[s.length - 1];
+    if (lastChar === ')' || lastChar === ']' || lastChar === '}') {
+      const openChar = lastChar === ')' ? '(' : lastChar === ']' ? '[' : '{';
+      let opens = 0;
+      let closes = 0;
+      for (const ch of s) {
+        if (ch === openChar) opens++;
+        else if (ch === lastChar) closes++;
+      }
+      if (closes > opens) {
+        s = s.slice(0, -1);
+        continue;
+      }
+    }
+    break;
+  }
+  return s.trim();
+}
 
 function extractUrlsFromText(text) {
   const textLen = text && typeof text === 'string' ? text.length : 0;
@@ -458,7 +485,7 @@ function extractUrlsFromText(text) {
 
     const cleaned = [];
     for (const raw of candidates) {
-      const trimmed = raw.replace(TRAILING_PUNCTUATION_REGEX, '').trim();
+      const trimmed = trimTrailingUrlPunctuation(raw);
       if (!trimmed) continue;
       try {
         const parsed = new URL(trimmed);

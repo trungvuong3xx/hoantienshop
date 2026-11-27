@@ -1645,8 +1645,22 @@ let lastPreviewedGuestUrl = '';
 
 function extractConvertibleUrlCandidate(rawText) {
   if (!rawText || typeof rawText !== 'string') return '';
-  const schemeMatch = rawText.match(/https?:\/\/[^\s<>"')\]}]+/i);
-  if (schemeMatch) return schemeMatch[0];
+  const schemeMatch = rawText.match(/https?:\/\/[^\s<>"'`]+/i);
+  if (schemeMatch) {
+    let s = schemeMatch[0].replace(/[.,;:!?"'»`’”\…]+$/, '');
+    while (s.length > 0 && [')', ']', '}'].includes(s[s.length - 1])) {
+      const closeCh = s[s.length - 1];
+      const openCh = closeCh === ')' ? '(' : closeCh === ']' ? '[' : '{';
+      const opens = (s.split(openCh).length - 1);
+      const closes = (s.split(closeCh).length - 1);
+      if (closes > opens) {
+        s = s.slice(0, -1).replace(/[.,;:!?"'»`’”\…]+$/, '');
+      } else {
+        break;
+      }
+    }
+    return s;
+  }
   const shortMatch = rawText.match(
     /(?:^|[\s<>"'(\[])((?:s\.shopee\.vn|vn\.shp\.ee|shp\.ee|shope\.ee|vt\.tiktok\.com|vm\.tiktok\.com)\/[a-zA-Z0-9_\-/?=&#.]+)/i
   );
