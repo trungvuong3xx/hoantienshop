@@ -28,10 +28,21 @@ body:has(.notif-dropdown:not(.hidden)) .shiba-companion-layer,
 body:has(.order-detail-overlay.is-open) .shiba-companion-layer,
 body:has(.referral-sheet-overlay.is-open) .shiba-companion-layer,
 body:has(.withdraw-sheet-overlay.is-open) .shiba-companion-layer,
+body:has(#lbShareModal:not(.hidden)) .shiba-companion-layer,
+body:has(#lbVipSheetOverlay.is-open) .shiba-companion-layer,
 body:has(#pwaInstallBanner:not(.hidden)) .shiba-companion-layer {
   opacity: 0 !important;
   pointer-events: none !important;
   transform: translateY(20px) !important;
+}
+
+/* On Mobile Leaderboard, hide Shiba so it never overlaps the Share button, Sticky Rank Bar or CTA */
+@media (max-width: 960px) {
+  body:has(#view-leaderboard.active) .shiba-companion-layer {
+    opacity: 0 !important;
+    pointer-events: none !important;
+    transform: translateY(20px) !important;
+  }
 }
 
 .shiba-actor {

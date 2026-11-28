@@ -1,0 +1,762 @@
+[
+  {
+    "id": "cos_01",
+    "category": "cosmetics",
+    "sourceTitle": "[CHÍNH HÃNG] Kem Chống Nắng La Roche Posay Anthelios UVMune 400 SPF50+ 50ml",
+    "sourcePrice": 380000,
+    "targetTitle": "Kem Chống Nắng La Roche-Posay Anthelios UVMune 400 Invisible Fluid SPF50+ 50ml",
+    "targetPrice": 355000,
+    "expected": "exact",
+    "note": "Same brand (hyphenated), same line UVMune 400, same SPF50+, same 50ml"
+  },
+  {
+    "id": "cos_02",
+    "category": "cosmetics",
+    "sourceTitle": "[CHÍNH HÃNG] Kem Chống Nắng La Roche Posay Anthelios UVMune 400 SPF50+ 50ml",
+    "sourcePrice": 380000,
+    "targetTitle": "Kem Dưỡng Phục Hồi La Roche Posay Cicaplast Baume B5+ 50ml",
+    "targetPrice": 340000,
+    "expected": "wrong",
+    "note": "Same brand & 50ml, completely different product line (Cicaplast B5 vs Anthelios)"
+  },
+  {
+    "id": "cos_03",
+    "category": "cosmetics",
+    "sourceTitle": "[CHÍNH HÃNG] Kem Chống Nắng La Roche Posay Anthelios UVMune 400 SPF50+ 50ml",
+    "sourcePrice": 380000,
+    "targetTitle": "Kem Chống Nắng Anessa Perfect UV Sunscreen Skincare Milk SPF50+ 50ml",
+    "targetPrice": 370000,
+    "expected": "wrong",
+    "note": "Different brand (La Roche Posay vs Anessa), same category & 50ml — tests short/multi-word brand guard"
+  },
+  {
+    "id": "cos_04",
+    "category": "cosmetics",
+    "sourceTitle": "Kem Chống Nắng La Roche Posay Anthelios UVMune 400 SPF50+ 50ml",
+    "sourcePrice": 380000,
+    "targetTitle": "Kem Chống Nắng La Roche Posay Anthelios UVMune 400 SPF50+ 15ml Mini",
+    "targetPrice": 150000,
+    "expected": "wrong",
+    "note": "Volume mismatch 50ml vs 15ml mini"
+  },
+  {
+    "id": "cos_05",
+    "category": "cosmetics",
+    "sourceTitle": "Son Dưỡng Dior Addict Lip Glow Màu 001 Pink 3.2g",
+    "sourcePrice": 790000,
+    "targetTitle": "Son Dưỡng Môi Dior Addict Lip Glow 001 Hồng Tự Nhiên 3.2g Chính Hãng",
+    "targetPrice": 760000,
+    "expected": "exact",
+    "note": "Short brand Dior (4 chars), exact shade 001 & 3.2g"
+  },
+  {
+    "id": "cos_06",
+    "category": "cosmetics",
+    "sourceTitle": "Son Dưỡng Dior Addict Lip Glow Màu 001 Pink 3.2g",
+    "sourcePrice": 790000,
+    "targetTitle": "Son Dưỡng YSL Candy Glaze Lip Gloss Stick Màu 001 3.2g",
+    "targetPrice": 780000,
+    "expected": "wrong",
+    "note": "Short brand mismatch Dior (4) vs YSL (3)"
+  },
+  {
+    "id": "cos_07",
+    "category": "cosmetics",
+    "sourceTitle": "Sữa Rửa Mặt CeraVe Foaming Cleanser Da Dầu 236ml",
+    "sourcePrice": 310000,
+    "targetTitle": "Sữa Rửa Mặt Cerave Cho Da Dầu Foaming Facial Cleanser 236 ml",
+    "targetPrice": 295000,
+    "expected": "exact",
+    "note": "Exact match with spacing 236 ml vs 236ml"
+  },
+  {
+    "id": "cos_08",
+    "category": "cosmetics",
+    "sourceTitle": "Sữa Rửa Mặt CeraVe Foaming Cleanser Da Dầu 236ml",
+    "sourcePrice": 310000,
+    "targetTitle": "Sữa Rửa Mặt CeraVe Foaming Cleanser Da Dầu 473ml",
+    "targetPrice": 460000,
+    "expected": "wrong",
+    "note": "Volume mismatch 236ml vs 473ml"
+  },
+  {
+    "id": "cos_09",
+    "category": "cosmetics",
+    "sourceTitle": "Sữa Rửa Mặt Hada Labo Advanced Nourish 80g",
+    "sourcePrice": 85000,
+    "targetTitle": "Kem Rửa Mặt Hada Labo Dưỡng Ẩm Tối Ưu Advanced Nourish 80gr",
+    "targetPrice": 79000,
+    "expected": "exact",
+    "note": "Multi-word short brand Hada Labo (4+4), 80g vs 80gr"
+  },
+  {
+    "id": "cos_10",
+    "category": "cosmetics",
+    "sourceTitle": "Sữa Rửa Mặt Hada Labo Advanced Nourish 80g",
+    "sourcePrice": 85000,
+    "targetTitle": "Sữa Rửa Mặt Senka Perfect Whip Collagen 80g",
+    "targetPrice": 82000,
+    "expected": "wrong",
+    "note": "Brand mismatch Hada Labo vs Senka (5 chars)"
+  },
+  {
+    "id": "cos_11",
+    "category": "cosmetics",
+    "sourceTitle": "Nước Tẩy Trang Bioderma Sensibio H2O Hồng 500ml",
+    "sourcePrice": 365000,
+    "targetTitle": "Bioderma Sensibio H2O Micellar Water 500ml Nắp Hồng Da Nhạy Cảm",
+    "targetPrice": 345000,
+    "expected": "exact",
+    "note": "Synonym Nước Tẩy Trang <-> Micellar Water, same Bioderma Sensibio H2O 500ml"
+  },
+  {
+    "id": "cos_12",
+    "category": "cosmetics",
+    "sourceTitle": "Nước Tẩy Trang Bioderma Sensibio H2O Hồng 500ml",
+    "sourcePrice": 365000,
+    "targetTitle": "Nước Tẩy Trang Garnier Micellar Cleansing Water 500ml Hồng",
+    "targetPrice": 210000,
+    "expected": "wrong",
+    "note": "Brand mismatch Bioderma vs Garnier"
+  },
+  {
+    "id": "cos_13",
+    "category": "cosmetics",
+    "sourceTitle": "Nước Tẩy Trang Loreal 3in1 Làm Sạch Sâu 400ml Xanh Dương",
+    "sourcePrice": 169000,
+    "targetTitle": "Nước Tẩy Trang L'Oreal Paris Micellar Water 3-in-1 400ml",
+    "targetPrice": 159000,
+    "expected": "exact",
+    "note": "Loreal vs L'Oreal Paris, 3in1 vs 3-in-1, 400ml"
+  },
+  {
+    "id": "cos_14",
+    "category": "cosmetics",
+    "sourceTitle": "Sữa Tắm Dove Dưỡng Ẩm Sâu Deeply Nourishing 900g",
+    "sourcePrice": 165000,
+    "targetTitle": "Sữa Tắm Dưỡng Thể Dove Deeply Nourishing 900g Chai Lớn",
+    "targetPrice": 155000,
+    "expected": "exact",
+    "note": "Short brand Dove (4 chars), 900g"
+  },
+  {
+    "id": "cos_15",
+    "category": "cosmetics",
+    "sourceTitle": "Sữa Tắm Dove Dưỡng Ẩm Sâu Deeply Nourishing 900g",
+    "sourcePrice": 165000,
+    "targetTitle": "Sữa Tắm Olay B3 Vitamin C Dưỡng Trắng 900g",
+    "targetPrice": 175000,
+    "expected": "wrong",
+    "note": "Short brand mismatch Dove (4) vs Olay (4)"
+  },
+  {
+    "id": "cos_16",
+    "category": "cosmetics",
+    "sourceTitle": "Sữa Dưỡng Thể Nivea Extra Bright 10 Super Vitamins SPF15 320ml",
+    "sourcePrice": 135000,
+    "targetTitle": "Sữa Dưỡng Thể Nivea Sáng Da Extra Bright 10 Super Vitamins 320ml",
+    "targetPrice": 125000,
+    "expected": "exact",
+    "note": "Short brand Nivea (5 chars), 320ml"
+  },
+  {
+    "id": "cos_17",
+    "category": "cosmetics",
+    "sourceTitle": "Sữa Dưỡng Thể Nivea Extra Bright 10 Super Vitamins SPF15 320ml",
+    "sourcePrice": 135000,
+    "targetTitle": "Sữa Dưỡng Thể Vaseline Healthy Bright UV Extra Brightening 320ml",
+    "targetPrice": 139000,
+    "expected": "wrong",
+    "note": "Brand mismatch Nivea (5) vs Vaseline (8)"
+  },
+  {
+    "id": "cos_18",
+    "category": "cosmetics",
+    "sourceTitle": "Phấn Nước Laneige Neo Cushion Matte 15g Fullsize Tông 21N",
+    "sourcePrice": 620000,
+    "targetTitle": "Lõi Thay Thế Phấn Nước Laneige Neo Cushion Matte Refill 15g Tông 21N",
+    "targetPrice": 390000,
+    "expected": "wrong",
+    "note": "Fullsize vs Refill / Lõi thay thế must be rejected"
+  },
+  {
+    "id": "cos_19",
+    "category": "cosmetics",
+    "sourceTitle": "Tẩy Da Chết Cà Phê Đắk Lắk Cocoon 200ml",
+    "sourcePrice": 115000,
+    "targetTitle": "Cà Phê Đắk Lắk Làm Sạch Da Chết Cơ Thể Cocoon 200ml Chính Hãng",
+    "targetPrice": 109000,
+    "expected": "exact",
+    "note": "Same Cocoon coffee scrub 200ml"
+  },
+  {
+    "id": "cos_20",
+    "category": "cosmetics",
+    "sourceTitle": "Tẩy Da Chết Cà Phê Đắk Lắk Cocoon 200ml",
+    "sourcePrice": 115000,
+    "targetTitle": "Combo 2 Hũ Tẩy Da Chết Cà Phê Đắk Lắk Cocoon 200ml",
+    "targetPrice": 215000,
+    "expected": "wrong",
+    "note": "Single vs Combo 2"
+  },
+  {
+    "id": "cos_21",
+    "category": "cosmetics",
+    "sourceTitle": "Son Kem Lì 3CE Velvet Lip Tint Màu Taupe 4g",
+    "sourcePrice": 245000,
+    "targetTitle": "Son Kem 3CE Velvet Lip Tint 4g Màu Taupe Đỏ Nâu",
+    "targetPrice": 229000,
+    "expected": "exact",
+    "note": "Alphanumeric brand 3CE (3 chars), exact shade Taupe"
+  },
+  {
+    "id": "cos_22",
+    "category": "cosmetics",
+    "sourceTitle": "Son Kem Lì 3CE Velvet Lip Tint Màu Taupe 4g",
+    "sourcePrice": 245000,
+    "targetTitle": "Son Kem Lì Romand Zero Velvet Tint 5.5g",
+    "targetPrice": 175000,
+    "expected": "wrong",
+    "note": "Brand mismatch 3CE vs Romand + weight mismatch"
+  },
+  {
+    "id": "cos_23",
+    "category": "cosmetics",
+    "sourceTitle": "Serum B5 GoodnDoc Hydra B5 30ml Phục Hồi Da",
+    "sourcePrice": 320000,
+    "targetTitle": "Tinh Chất Phục Hồi GoodnDoc Hydra B5 Serum 30ml",
+    "targetPrice": 305000,
+    "expected": "exact",
+    "note": "Synonym Tinh Chất <-> Serum, GoodnDoc Hydra B5 30ml"
+  },
+  {
+    "id": "cos_24",
+    "category": "cosmetics",
+    "sourceTitle": "Serum B5 GoodnDoc Hydra B5 30ml Phục Hồi Da",
+    "sourcePrice": 320000,
+    "targetTitle": "Serum B5 La Roche Posay Hyalu B5 30ml Phục Hồi Da",
+    "targetPrice": 780000,
+    "expected": "wrong",
+    "note": "Brand mismatch GoodnDoc vs La Roche Posay"
+  },
+  {
+    "id": "cos_25",
+    "category": "cosmetics",
+    "sourceTitle": "Kem Chống Nắng Skin1004 Madagascar Centella Air-Fit Suncream Plus SPF50+ 50ml",
+    "sourcePrice": 235000,
+    "targetTitle": "Kem Chống Nắng Skin1004 Rau Má Madagascar Centella SPF50+ 50ml",
+    "targetPrice": 219000,
+    "expected": "exact",
+    "note": "Alphanumeric brand Skin1004, same 50ml"
+  },
+  {
+    "id": "cos_26",
+    "category": "cosmetics",
+    "sourceTitle": "Kem Chống Nắng Skin1004 Madagascar Centella Air-Fit Suncream Plus SPF50+ 50ml",
+    "sourcePrice": 235000,
+    "targetTitle": "Kem Chống Nắng Skin1004 Madagascar Centella SPF30 50ml",
+    "targetPrice": 210000,
+    "expected": "wrong",
+    "note": "SPF mismatch SPF50+ vs SPF30"
+  },
+  {
+    "id": "elec_01",
+    "category": "electronics",
+    "sourceTitle": "Củ Sạc Nhanh Anker 312 20W Type-C PD A2670 Chính Hãng",
+    "sourcePrice": 189000,
+    "targetTitle": "Củ Sạc Anker 20W 312 Type C A2670 Sạc Nhanh PD",
+    "targetPrice": 175000,
+    "expected": "exact",
+    "note": "Short brand Anker (5 chars), model 312/A2670, 20W"
+  },
+  {
+    "id": "elec_02",
+    "category": "electronics",
+    "sourceTitle": "Củ Sạc Nhanh Anker 312 20W Type-C PD A2670 Chính Hãng",
+    "sourcePrice": 189000,
+    "targetTitle": "Củ Sạc Nhanh Baseus Compact Quick Charger 20W Type-C PD",
+    "targetPrice": 159000,
+    "expected": "wrong",
+    "note": "Brand mismatch Anker (5) vs Baseus (6)"
+  },
+  {
+    "id": "elec_03",
+    "category": "electronics",
+    "sourceTitle": "Củ Sạc Nhanh Anker 312 20W Type-C PD A2670 Chính Hãng",
+    "sourcePrice": 189000,
+    "targetTitle": "Củ Sạc Nhanh Anker 313 45W Type-C PD A2643",
+    "targetPrice": 320000,
+    "expected": "wrong",
+    "note": "Same brand Anker, different wattage 20W vs 45W & model 312 vs 313"
+  },
+  {
+    "id": "elec_04",
+    "category": "electronics",
+    "sourceTitle": "Pin Sạc Dự Phòng Baseus Bipow 10000mAh 20W Sạc Nhanh",
+    "sourcePrice": 329000,
+    "targetTitle": "Sạc Dự Phòng Baseus Bipow Digital Display 10000mAh 20W",
+    "targetPrice": 309000,
+    "expected": "exact",
+    "note": "Same Baseus Bipow 10000mAh 20W"
+  },
+  {
+    "id": "elec_05",
+    "category": "electronics",
+    "sourceTitle": "Pin Sạc Dự Phòng Baseus Bipow 10000mAh 20W Sạc Nhanh",
+    "sourcePrice": 329000,
+    "targetTitle": "Pin Sạc Dự Phòng Baseus Bipow 20000mAh 20W Sạc Nhanh",
+    "targetPrice": 449000,
+    "expected": "wrong",
+    "note": "Battery capacity mismatch 10000mAh vs 20000mAh"
+  },
+  {
+    "id": "elec_06",
+    "category": "electronics",
+    "sourceTitle": "Tai Nghe Bluetooth Sony WH-1000XM5 Chống Ồn Chủ Động",
+    "sourcePrice": 6490000,
+    "targetTitle": "Tai Nghe Chụp Tai Sony WH1000XM5 Chống Ồn Chính Hãng",
+    "targetPrice": 6190000,
+    "expected": "exact",
+    "note": "Short brand Sony (4 chars), hyphenated model WH-1000XM5 vs WH1000XM5"
+  },
+  {
+    "id": "elec_07",
+    "category": "electronics",
+    "sourceTitle": "Tai Nghe Bluetooth Sony WH-1000XM5 Chống Ồn Chủ Động",
+    "sourcePrice": 6490000,
+    "targetTitle": "Tai Nghe Bluetooth Sony WH-1000XM4 Chống Ồn Chủ Động",
+    "targetPrice": 4990000,
+    "expected": "wrong",
+    "note": "Model mismatch XM5 vs XM4"
+  },
+  {
+    "id": "elec_08",
+    "category": "electronics",
+    "sourceTitle": "Tai Nghe Bluetooth Sony WH-1000XM5 Chống Ồn Chủ Động",
+    "sourcePrice": 6490000,
+    "targetTitle": "Tai Nghe Bluetooth Bose QuietComfort Ultra Chống Ồn",
+    "targetPrice": 7900000,
+    "expected": "wrong",
+    "note": "Short brand mismatch Sony (4) vs Bose (4)"
+  },
+  {
+    "id": "elec_09",
+    "category": "electronics",
+    "sourceTitle": "Chuột Không Dây Logitech M331 Silent Plus Chính Hãng",
+    "sourcePrice": 319000,
+    "targetTitle": "Chuột Không Dây Yên Tĩnh Logitech M331 Silent Plus",
+    "targetPrice": 299000,
+    "expected": "exact",
+    "note": "Same Logitech M331"
+  },
+  {
+    "id": "elec_10",
+    "category": "electronics",
+    "sourceTitle": "Chuột Không Dây Logitech M331 Silent Plus Chính Hãng",
+    "sourcePrice": 319000,
+    "targetTitle": "Chuột Không Dây Logitech M221 Silent Chính Hãng",
+    "targetPrice": 249000,
+    "expected": "wrong",
+    "note": "Model mismatch M331 vs M221"
+  },
+  {
+    "id": "elec_11",
+    "category": "electronics",
+    "sourceTitle": "Cáp Sạc Nhanh Ugreen Type-C to Lightning 20W 1m MFi",
+    "sourcePrice": 185000,
+    "targetTitle": "Dây Cáp Sạc Ugreen Type C sang Lightning 20W Dài 1m Chuẩn MFi",
+    "targetPrice": 169000,
+    "expected": "exact",
+    "note": "Same Ugreen Type-C to Lightning 20W 1m"
+  },
+  {
+    "id": "elec_12",
+    "category": "electronics",
+    "sourceTitle": "Cáp Sạc Nhanh Ugreen Type-C to Lightning 20W 1m MFi",
+    "sourcePrice": 185000,
+    "targetTitle": "Cáp Sạc Nhanh Anker PowerLine Type-C to Lightning 20W 1m",
+    "targetPrice": 195000,
+    "expected": "wrong",
+    "note": "Brand mismatch Ugreen vs Anker"
+  },
+  {
+    "id": "elec_13",
+    "category": "electronics",
+    "sourceTitle": "Ốp Lưng iPhone 15 Pro Max MagSafe Trong Suốt Chính Hãng",
+    "sourcePrice": 149000,
+    "targetTitle": "Ốp Lưng MagSafe Trong Suốt Cho iPhone15 Pro Max",
+    "targetPrice": 129000,
+    "expected": "exact",
+    "note": "iPhone 15 vs iPhone15 spacing"
+  },
+  {
+    "id": "elec_14",
+    "category": "electronics",
+    "sourceTitle": "Ốp Lưng iPhone 15 Pro Max MagSafe Trong Suốt Chính Hãng",
+    "sourcePrice": 149000,
+    "targetTitle": "Ốp Lưng iPhone 14 Pro Max MagSafe Trong Suốt Chính Hãng",
+    "targetPrice": 129000,
+    "expected": "wrong",
+    "note": "Model mismatch iPhone 15 vs iPhone 14"
+  },
+  {
+    "id": "elec_15",
+    "category": "electronics",
+    "sourceTitle": "Tai Nghe Apple AirPods Pro 2 USB-C Chính Hãng VN/A",
+    "sourcePrice": 5690000,
+    "targetTitle": "Tai Nghe Không Dây Apple AirPods Pro Gen 2 Type-C VN/A",
+    "targetPrice": 5490000,
+    "expected": "exact",
+    "note": "AirPods Pro 2 vs AirPods Pro Gen 2"
+  },
+  {
+    "id": "elec_16",
+    "category": "electronics",
+    "sourceTitle": "Tai Nghe Apple AirPods Pro 2 USB-C Chính Hãng VN/A",
+    "sourcePrice": 5690000,
+    "targetTitle": "Tai Nghe Apple AirPods 3 Hộp Sạc Lightning VN/A",
+    "targetPrice": 3990000,
+    "expected": "wrong",
+    "note": "Model mismatch AirPods Pro 2 vs AirPods 3"
+  },
+  {
+    "id": "elec_17",
+    "category": "electronics",
+    "sourceTitle": "Ổ Cứng Di Động SSD Samsung T7 1TB USB 3.2",
+    "sourcePrice": 2490000,
+    "targetTitle": "Ổ Cứng SSD Di Động Samsung Portable T7 1TB",
+    "targetPrice": 2350000,
+    "expected": "exact",
+    "note": "Exact Samsung T7 1TB"
+  },
+  {
+    "id": "elec_18",
+    "category": "electronics",
+    "sourceTitle": "Ổ Cứng Di Động SSD Samsung T7 1TB USB 3.2",
+    "sourcePrice": 2490000,
+    "targetTitle": "Ổ Cứng Di Động SSD Samsung T7 2TB USB 3.2",
+    "targetPrice": 3990000,
+    "expected": "wrong",
+    "note": "Storage mismatch 1TB vs 2TB"
+  },
+  {
+    "id": "elec_19",
+    "category": "electronics",
+    "sourceTitle": "Loa Bluetooth JBL Go 4 Chống Nước IP67 Chính Hãng",
+    "sourcePrice": 990000,
+    "targetTitle": "Loa Di Động Bluetooth JBL Go 4 IP67",
+    "targetPrice": 920000,
+    "expected": "exact",
+    "note": "Short brand JBL (3 chars), model Go 4"
+  },
+  {
+    "id": "elec_20",
+    "category": "electronics",
+    "sourceTitle": "Loa Bluetooth JBL Go 4 Chống Nước IP67 Chính Hãng",
+    "sourcePrice": 990000,
+    "targetTitle": "Loa Bluetooth JBL Go 3 Chống Nước IP67 Chính Hãng",
+    "targetPrice": 790000,
+    "expected": "wrong",
+    "note": "Model mismatch JBL Go 4 vs JBL Go 3"
+  },
+  {
+    "id": "baby_01",
+    "category": "mom_baby",
+    "sourceTitle": "Set 10 Khăn Sữa Xô Muslin Cao Cấp Cho Bé Sơ Sinh",
+    "sourcePrice": 89000,
+    "targetTitle": "10 Khăn Sữa Xô Muslin 6 Lớp Mềm Mịn Cho Bé",
+    "targetPrice": 79000,
+    "expected": "exact",
+    "note": "Pack vs Count equivalence: Set 10 Khăn <-> 10 Khăn must NOT be rejected!"
+  },
+  {
+    "id": "baby_02",
+    "category": "mom_baby",
+    "sourceTitle": "N.ú.m T.i Silicon Siêu Mềm Moyuum Hàn Quốc Số 2",
+    "sourcePrice": 125000,
+    "targetTitle": "Núm Ti Silicon Moyuum Nội Địa Hàn Quốc Size 2",
+    "targetPrice": 115000,
+    "expected": "exact",
+    "note": "Obfuscated N.ú.m T.i -> Núm Ti, Moyuum"
+  },
+  {
+    "id": "baby_03",
+    "category": "mom_baby",
+    "sourceTitle": "Bình Sữa PPSU Moyuum 270ml Hàn Quốc Chính Hãng",
+    "sourcePrice": 315000,
+    "targetTitle": "Bình Sữa Moyuum PPSU Cổ Rộng 170ml Hàn Quốc",
+    "targetPrice": 285000,
+    "expected": "wrong",
+    "note": "Volume mismatch 270ml vs 170ml"
+  },
+  {
+    "id": "baby_04",
+    "category": "mom_baby",
+    "sourceTitle": "Bỉm Tã Quần Huggies Skin Perfect Size L 68 Miếng",
+    "sourcePrice": 335000,
+    "targetTitle": "Tã Quần Huggies Skin Perfect L68 Miếng Cho Bé",
+    "targetPrice": 315000,
+    "expected": "exact",
+    "note": "Same Huggies Skin Perfect 68 miếng"
+  },
+  {
+    "id": "baby_05",
+    "category": "mom_baby",
+    "sourceTitle": "Bỉm Tã Quần Huggies Skin Perfect Size L 68 Miếng",
+    "sourcePrice": 335000,
+    "targetTitle": "Bỉm Tã Quần Bobby Lõi Nén Thần Kỳ Size L 68 Miếng",
+    "targetPrice": 325000,
+    "expected": "wrong",
+    "note": "Brand mismatch Huggies vs Bobby (5 chars)"
+  },
+  {
+    "id": "baby_06",
+    "category": "mom_baby",
+    "sourceTitle": "Sữa Bột Aptamil Profutura Úc Số 3 900g",
+    "sourcePrice": 790000,
+    "targetTitle": "Sữa Aptamil Úc Profutura Số 3 Lon 900g Chính Hãng",
+    "targetPrice": 765000,
+    "expected": "exact",
+    "note": "Same Aptamil Profutura 3 900g"
+  },
+  {
+    "id": "baby_07",
+    "category": "mom_baby",
+    "sourceTitle": "Sữa Bột Aptamil Profutura Úc Số 3 900g",
+    "sourcePrice": 790000,
+    "targetTitle": "Sữa Bột Meiji Growing Up Formula 900g",
+    "targetPrice": 520000,
+    "expected": "wrong",
+    "note": "Brand mismatch Aptamil vs Meiji (5 chars)"
+  },
+  {
+    "id": "home_01",
+    "category": "home",
+    "sourceTitle": "Nồi Chiên Không Dầu Lock&Lock EJF357BLK 5.2 Lít",
+    "sourcePrice": 1890000,
+    "targetTitle": "Nồi Chiên Không Dầu LocknLock EJF357BLK 5.2L",
+    "targetPrice": 1790000,
+    "expected": "exact",
+    "note": "Lock&Lock vs LocknLock, 5.2 Lít vs 5.2L, exact model EJF357BLK"
+  },
+  {
+    "id": "home_02",
+    "category": "home",
+    "sourceTitle": "Nồi Chiên Không Dầu Lock&Lock EJF357BLK 5.2 Lít",
+    "sourcePrice": 1890000,
+    "targetTitle": "Nồi Chiên Không Dầu Philips HD9252 4.1L",
+    "targetPrice": 1950000,
+    "expected": "wrong",
+    "note": "Brand + model + volume mismatch"
+  },
+  {
+    "id": "home_03",
+    "category": "home",
+    "sourceTitle": "Bình Giữ Nhiệt Lock&Lock LHC4267 897ml Có Quai Xách",
+    "sourcePrice": 329000,
+    "targetTitle": "Bình Giữ Nhiệt LocknLock LHC4267 897ml",
+    "targetPrice": 309000,
+    "expected": "exact",
+    "note": "Same Lock&Lock LHC4267 897ml"
+  },
+  {
+    "id": "home_04",
+    "category": "home",
+    "sourceTitle": "Bình Giữ Nhiệt Lock&Lock LHC4267 897ml Có Quai Xách",
+    "sourcePrice": 329000,
+    "targetTitle": "Bình Giữ Nhiệt Elmich Inox 304 900ml Có Quai Xách",
+    "targetPrice": 299000,
+    "expected": "wrong",
+    "note": "Brand mismatch Lock&Lock vs Elmich"
+  },
+  {
+    "id": "home_05",
+    "category": "home",
+    "sourceTitle": "Nước Giặt OMO Matic Cửa Trước Túi 3.6kg",
+    "sourcePrice": 189000,
+    "targetTitle": "Nước Giặt OMO Matic Bền Đẹp Cửa Trước 3.6 kg",
+    "targetPrice": 179000,
+    "expected": "exact",
+    "note": "Short brand OMO (3 chars), 3.6kg vs 3.6 kg"
+  },
+  {
+    "id": "home_06",
+    "category": "home",
+    "sourceTitle": "Nước Giặt OMO Matic Cửa Trước Túi 3.6kg",
+    "sourcePrice": 189000,
+    "targetTitle": "Nước Giặt Ariel Matic Cửa Trước Túi 3.6kg",
+    "targetPrice": 185000,
+    "expected": "wrong",
+    "note": "Short brand mismatch OMO (3) vs Ariel (5)"
+  },
+  {
+    "id": "home_07",
+    "category": "home",
+    "sourceTitle": "Nước Giặt OMO Matic Cửa Trước Túi 3.6kg",
+    "sourcePrice": 189000,
+    "targetTitle": "Combo 2 Túi Nước Giặt OMO Matic Cửa Trước 3.6kg",
+    "targetPrice": 359000,
+    "expected": "wrong",
+    "note": "Single vs Combo 2"
+  },
+  {
+    "id": "home_08",
+    "category": "home",
+    "sourceTitle": "Máy Sấy Tóc Panasonic EH-ND11 1000W Chính Hãng",
+    "sourcePrice": 249000,
+    "targetTitle": "Máy Sấy Tóc Panasonic EHND11 Công Suất 1000W",
+    "targetPrice": 229000,
+    "expected": "exact",
+    "note": "Same Panasonic EH-ND11 1000W"
+  },
+  {
+    "id": "home_09",
+    "category": "home",
+    "sourceTitle": "Máy Sấy Tóc Panasonic EH-ND11 1000W Chính Hãng",
+    "sourcePrice": 249000,
+    "targetTitle": "Máy Sấy Tóc Philips BHC010 1200W Chính Hãng",
+    "targetPrice": 259000,
+    "expected": "wrong",
+    "note": "Brand + model + wattage mismatch"
+  },
+  {
+    "id": "home_10",
+    "category": "home",
+    "sourceTitle": "Bàn Chải Điện Oral-B Vitality 100 CrossAction Chính Hãng",
+    "sourcePrice": 499000,
+    "targetTitle": "Bàn Chải Đánh Răng Điện Oral B Vitality 100 Cross Action",
+    "targetPrice": 469000,
+    "expected": "exact",
+    "note": "Oral-B vs Oral B, CrossAction vs Cross Action"
+  },
+  {
+    "id": "home_11",
+    "category": "home",
+    "sourceTitle": "Bàn Chải Điện Oral-B Vitality 100 CrossAction Chính Hãng",
+    "sourcePrice": 499000,
+    "targetTitle": "Đầu Bàn Chải Thay Thế Oral-B CrossAction Bộ 4 Đầu",
+    "targetPrice": 289000,
+    "expected": "wrong",
+    "note": "Full device vs replacement head (Đầu thay thế)"
+  },
+  {
+    "id": "fash_01",
+    "category": "fashion",
+    "sourceTitle": "Áo Thun Nam Coolmate Cotton Compact 100% Cổ Tròn",
+    "sourcePrice": 179000,
+    "targetTitle": "Áo Phông Nam Coolmate Cotton Compact Cổ Tròn Mềm Mịn",
+    "targetPrice": 159000,
+    "expected": "exact",
+    "note": "Synonym Áo Thun <-> Áo Phông, Coolmate Cotton Compact"
+  },
+  {
+    "id": "fash_02",
+    "category": "fashion",
+    "sourceTitle": "Áo Thun Nam Coolmate Cotton Compact 100% Cổ Tròn",
+    "sourcePrice": 179000,
+    "targetTitle": "Áo Thun Nam Yody Cotton Compact Cổ Tròn",
+    "targetPrice": 169000,
+    "expected": "wrong",
+    "note": "Brand mismatch Coolmate vs Yody (4 chars)"
+  },
+  {
+    "id": "fash_03",
+    "category": "fashion",
+    "sourceTitle": "Giày Thể Thao Biti's Hunter X LiteDash Nam Chính Hãng",
+    "sourcePrice": 899000,
+    "targetTitle": "Giày Sneaker Nam Bitis Hunter X LiteDash",
+    "targetPrice": 849000,
+    "expected": "exact",
+    "note": "Biti's vs Bitis, Giày Thể Thao <-> Sneaker"
+  },
+  {
+    "id": "fash_04",
+    "category": "fashion",
+    "sourceTitle": "Giày Thể Thao Biti's Hunter X LiteDash Nam Chính Hãng",
+    "sourcePrice": 899000,
+    "targetTitle": "Giày Thể Thao Nike Air Force 1 Nam",
+    "targetPrice": 1200000,
+    "expected": "wrong",
+    "note": "Brand mismatch Biti's vs Nike (4 chars)"
+  },
+  {
+    "id": "fash_05",
+    "category": "fashion",
+    "sourceTitle": "Combo 3 Bộ Pijama Nữ Mặc Nhà Lụa Satin Cao Cấp",
+    "sourcePrice": 180000,
+    "targetTitle": "[Peinn] Combo 3 Bộ Pijama Nữ Mặc Nhà Lụa Satin Mềm Mịn",
+    "targetPrice": 165000,
+    "expected": "exact",
+    "note": "Combo 3 vs Combo 3"
+  },
+  {
+    "id": "fash_06",
+    "category": "fashion",
+    "sourceTitle": "Combo 3 Bộ Pijama Nữ Mặc Nhà Lụa Satin Cao Cấp",
+    "sourcePrice": 180000,
+    "targetTitle": "Combo 5 Bộ Pijama Nữ Mặc Nhà Lụa Satin Cao Cấp",
+    "targetPrice": 250000,
+    "expected": "wrong",
+    "note": "Combo 3 vs Combo 5"
+  },
+  {
+    "id": "fash_07",
+    "category": "fashion",
+    "sourceTitle": "Bộ Pijama Nữ Mặc Nhà Lụa Satin Cao Cấp",
+    "sourcePrice": 120000,
+    "targetTitle": "Combo 3 Bộ Pijama Nữ Mặc Nhà Lụa Satin Cao Cấp",
+    "targetPrice": 180000,
+    "expected": "wrong",
+    "note": "Single vs Combo 3"
+  },
+  {
+    "id": "fash_08",
+    "category": "fashion",
+    "sourceTitle": "Dép Sục Crocs Classic Clog Chính Hãng Màu Đen",
+    "sourcePrice": 890000,
+    "targetTitle": "Dép Crocs Classic Clog Màu Đen Chống Trượt",
+    "targetPrice": 820000,
+    "expected": "exact",
+    "note": "Short brand Crocs (5 chars), Classic Clog"
+  },
+  {
+    "id": "fash_09",
+    "category": "fashion",
+    "sourceTitle": "Dép Sục Crocs Classic Clog Chính Hãng Màu Đen",
+    "sourcePrice": 890000,
+    "targetTitle": "Dép Bánh Mì EVA Đế Cao Chống Trượt Màu Đen",
+    "targetPrice": 99000,
+    "expected": "wrong",
+    "note": "Brand Crocs vs generic EVA slipper + price outlier"
+  },
+  {
+    "id": "fash_10",
+    "category": "fashion",
+    "sourceTitle": "Balo Laptop 15.6 Inch Chống Nước Tomtoc A64",
+    "sourcePrice": 1290000,
+    "targetTitle": "Balo Đựng Laptop 15.6 Inch Tomtoc A64 Chống Sốc",
+    "targetPrice": 1190000,
+    "expected": "exact",
+    "note": "Same Tomtoc A64 15.6 inch"
+  },
+  {
+    "id": "fash_11",
+    "category": "fashion",
+    "sourceTitle": "Balo Laptop 15.6 Inch Chống Nước Tomtoc A64",
+    "sourcePrice": 1290000,
+    "targetTitle": "Balo Laptop 14 Inch Chống Nước Tomtoc A64",
+    "targetPrice": 1190000,
+    "expected": "wrong",
+    "note": "Dimension mismatch 15.6 inch vs 14 inch"
+  },
+  {
+    "id": "fash_12",
+    "category": "fashion",
+    "sourceTitle": "Kính Mát Gentle Monster Lilit 01 Đen Chính Hãng",
+    "sourcePrice": 4200000,
+    "targetTitle": "Kính Râm Gentle Monster Lilit 01 Gọng Đen",
+    "targetPrice": 3990000,
+    "expected": "exact",
+    "note": "Synonym Kính Mát <-> Kính Râm, Gentle Monster Lilit 01"
+  }
+]

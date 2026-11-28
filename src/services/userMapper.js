@@ -26,6 +26,10 @@ function mapUserRow(row) { return {
       totalApprovedSpend: Math.round(Number(row.total_approved_spend || 0)),
       vipTier: row.vip_tier || 'bronze',
       avatarUrl: row.avatar_url || '',
+      hideFromLeaderboard: Boolean(row.hide_from_leaderboard),
+      leaderboardAnonymous: Boolean(row.leaderboard_anonymous),
+      leaderboardHideAmount: Boolean(row.leaderboard_hide_amount),
+      lbNotifyDisabled: Boolean(row.lb_notify_disabled),
       createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString()
     }; }
 module.exports = { mapUserRow };

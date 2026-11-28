@@ -64,9 +64,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link id="webFont" media="print" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/styles.css?v=2.9.21" />
+  <link rel="stylesheet" href="/styles.css?v=2.9.30" />
   <link rel="stylesheet" href="/selectPopup.css?v=5" />
-  <script src="/app.js?v=2.9.21" defer></script>
+  <script src="/app.js?v=2.9.28" defer></script>
   <script src="/selectPopup.js?v=4" defer></script>
 </head>
 <body>
@@ -212,6 +212,40 @@
         <div id="resultCardsList" class="result-cards-grid"></div>
         <div id="tiktokCompareSection" class="tt-compare-section hidden" aria-live="polite"></div>
       </div>
+
+      <!-- Homepage Deal Discovery Shelf ("Săn Deal Hoàn Tiền Cao" - Lazy Loaded) -->
+      <section id="homeDealsSection" class="panel home-deals-section" aria-label="Săn Deal Hoàn Tiền Cao">
+        <div class="home-deals-head">
+          <div class="home-deals-title-wrap">
+            <h2 class="home-deals-title">🔥 Săn Deal Hoàn Tiền Cao</h2>
+            <p class="home-deals-sub" id="homeDealsSub">Gợi ý sản phẩm nổi bật từ Shopee &amp; TikTok Shop</p>
+          </div>
+          <div class="home-deals-group-tabs" id="homeDealsGroupTabs" role="tablist" aria-label="Nhóm sản phẩm nổi bật">
+            <button type="button" class="hd-group-tab active" data-deal-group="worth_buying" role="tab" aria-selected="true">Đáng mua</button>
+            <button type="button" class="hd-group-tab" data-deal-group="trending" role="tab" aria-selected="false">Bán chạy &amp; Hot</button>
+            <button type="button" class="hd-group-tab" data-deal-group="high_cashback" role="tab" aria-selected="false">Hoàn tiền cao</button>
+          </div>
+        </div>
+
+        <div class="home-deals-cat-strip" id="homeDealsCatStrip" role="tablist" aria-label="Ngành hàng">
+          <button type="button" class="hd-cat-pill active" data-deal-cat="all" role="tab" aria-selected="true">Tất cả</button>
+          <button type="button" class="hd-cat-pill" data-deal-cat="cosmetics" role="tab" aria-selected="false">Mỹ phẩm</button>
+          <button type="button" class="hd-cat-pill" data-deal-cat="home" role="tab" aria-selected="false">Gia dụng</button>
+          <button type="button" class="hd-cat-pill" data-deal-cat="electronics" role="tab" aria-selected="false">Điện tử</button>
+          <button type="button" class="hd-cat-pill" data-deal-cat="mom_baby" role="tab" aria-selected="false">Mẹ &amp; Bé</button>
+          <button type="button" class="hd-cat-pill" data-deal-cat="fashion" role="tab" aria-selected="false">Thời trang</button>
+        </div>
+
+        <div id="homeDealsGrid" class="home-deals-grid" aria-live="polite"></div>
+
+        <div id="homeDealsMoreWrap" class="home-deals-more-wrap hidden">
+          <button type="button" id="homeDealsMoreBtn" class="hd-more-btn">Xem thêm sản phẩm</button>
+        </div>
+
+        <p id="homeDealsDisclaimer" class="home-deals-disclaimer">
+          Giá và tiền hoàn mang tính tham khảo, chưa bao gồm voucher cá nhân. Cashback thực nhận phụ thuộc điều kiện xác nhận đơn hàng và chính sách Affiliate.
+        </p>
+      </section>
 
       <!-- Compact Cashback Handbook -->
       <div class="panel handbook-card">
@@ -891,6 +925,89 @@
                 </span>
                 <span class="shiba-switch-track" aria-hidden="true"><span class="shiba-switch-thumb"></span></span>
               </button>
+
+              <button type="button" class="account-row-btn" id="toggleLeaderboardPrivacyBtn" aria-pressed="true">
+                <span class="menu-item-left">
+                  <span class="menu-ico menu-ico-indigo" aria-hidden="true">
+                    <svg class="svg-icon" viewBox="0 0 24 24" width="18" height="18" fill="none">
+                      <path d="M7 4h10v6a5 5 0 0 1-10 0V4Z" fill="currentColor" opacity="0.18" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+                      <path d="M12 15v4M8.5 19h7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                    </svg>
+                  </span>
+                  <span class="account-row-texts">
+                    <span class="account-row-title">Hiển thị trên Bảng xếp hạng</span>
+                    <span class="account-row-sub" id="toggleLeaderboardPrivacyLabel">Đang hiển thị công khai</span>
+                  </span>
+                </span>
+                <span class="shiba-switch-track" aria-hidden="true"><span class="shiba-switch-thumb"></span></span>
+              </button>
+
+              <button type="button" class="account-row-btn" id="toggleLbAnonymousBtn" aria-pressed="false">
+                <span class="menu-item-left">
+                  <span class="menu-ico menu-ico-slate" aria-hidden="true">
+                    <svg class="svg-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z"/>
+                      <circle cx="12" cy="12" r="2.5"/>
+                      <path d="m4 4 16 16"/>
+                    </svg>
+                  </span>
+                  <span class="account-row-texts">
+                    <span class="account-row-title">Chế độ ẩn danh trên BXH</span>
+                    <span class="account-row-sub" id="toggleLbAnonymousLabel">Hiện tên đầy đủ của bạn</span>
+                  </span>
+                </span>
+                <span class="shiba-switch-track" aria-hidden="true"><span class="shiba-switch-thumb"></span></span>
+              </button>
+
+              <button type="button" class="account-row-btn" id="toggleLbHideAmountBtn" aria-pressed="false">
+                <span class="menu-item-left">
+                  <span class="menu-ico menu-ico-emerald" aria-hidden="true">
+                    <svg class="svg-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                      <rect x="3" y="11" width="18" height="10" rx="2"/>
+                      <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                    </svg>
+                  </span>
+                  <span class="account-row-texts">
+                    <span class="account-row-title">Ẩn số tiền trên BXH</span>
+                    <span class="account-row-sub" id="toggleLbHideAmountLabel">Đang hiển thị số tiền</span>
+                  </span>
+                </span>
+                <span class="shiba-switch-track" aria-hidden="true"><span class="shiba-switch-thumb"></span></span>
+              </button>
+
+              <button type="button" class="account-row-btn" id="toggleLbCelebrateBtn" aria-pressed="true">
+                <span class="menu-item-left">
+                  <span class="menu-ico menu-ico-amber" aria-hidden="true">
+                    <svg class="svg-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M5.8 11.3 2 22l10.7-3.79"/>
+                      <path d="M4 3h.01M22 8h.01M15 2h.01M22 20h.01"/>
+                      <path d="m22 2-2.24.75a2.9 2.9 0 0 0-1.96 3.12c.1.86-.57 1.63-1.45 1.63h-.38c-.86 0-1.6.6-1.76 1.44L14 10"/>
+                      <path d="m11 13 2 2"/>
+                    </svg>
+                  </span>
+                  <span class="account-row-texts">
+                    <span class="account-row-title">Hiệu ứng chúc mừng lên hạng</span>
+                    <span class="account-row-sub" id="toggleLbCelebrateLabel">Đang bật pháo giấy &amp; Shiba</span>
+                  </span>
+                </span>
+                <span class="shiba-switch-track" aria-hidden="true"><span class="shiba-switch-thumb"></span></span>
+              </button>
+
+              <button type="button" class="account-row-btn" id="toggleLbNotifyBtn" aria-pressed="true">
+                <span class="menu-item-left">
+                  <span class="menu-ico menu-ico-orange" aria-hidden="true">
+                    <svg class="svg-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/>
+                      <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>
+                    </svg>
+                  </span>
+                  <span class="account-row-texts">
+                    <span class="account-row-title">Thông báo biến động BXH</span>
+                    <span class="account-row-sub" id="toggleLbNotifyLabel">Nhắc khi bị vượt hoặc sắp lên hạng</span>
+                  </span>
+                </span>
+                <span class="shiba-switch-track" aria-hidden="true"><span class="shiba-switch-thumb"></span></span>
+              </button>
             </div>
           </div>
 
@@ -1091,68 +1208,159 @@
 
     <!-- ==================== VIEW: PUBLIC LEADERBOARD ==================== -->
     <section id="view-leaderboard" class="view-section">
-      <div class="panel lb-panel">
-        <div class="panel-head-row lb-head-row">
-          <div>
-            <h2 class="inline-icon-row">
-              <span class="lb-title-badge" aria-hidden="true">
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="none">
-                  <path d="M7 4h10v6a5 5 0 0 1-10 0V4Z" fill="#EE4D2D" opacity="0.18"/>
-                  <path d="M7 4h10v6a5 5 0 0 1-10 0V4Z" stroke="#EE4D2D" stroke-width="1.9" stroke-linejoin="round"/>
-                  <path d="M7 6H4.5a1.5 1.5 0 0 0-1.5 1.5v1A3.5 3.5 0 0 0 6.5 12H7M17 6h2.5A1.5 1.5 0 0 1 21 7.5v1a3.5 3.5 0 0 1-3.5 3.5H17" stroke="#EE4D2D" stroke-width="1.8" stroke-linecap="round"/>
-                  <path d="M12 15v4M8.5 19h7" stroke="#EE4D2D" stroke-width="2" stroke-linecap="round"/>
-                </svg>
-              </span>
-              <span>Bảng Xếp Hạng</span>
-            </h2>
-            <p class="panel-sub-inline lb-subtitle">Vinh danh thành viên dẫn đầu (chỉ tính đơn đã duyệt).</p>
-          </div>
-          <div class="lb-tabs" role="tablist" aria-label="Chế độ xếp hạng">
-            <button type="button" role="tab" aria-selected="true" class="btn btn-primary btn-sm lb-tab-btn active" data-lb-tab="spend">Tổng giá trị đơn</button>
-            <button type="button" role="tab" aria-selected="false" class="btn btn-outline btn-sm lb-tab-btn" data-lb-tab="cashback">Tổng tiền hoàn</button>
+      <div class="lb-layout">
+        <!-- Main Column: Stage + Top 3 Podium + Rising White List Sheet -->
+        <div class="lb-main-col">
+          <div class="lb-stage-shell">
+            <div class="lb-stage-top">
+              <div class="lb-stage-head">
+                <div class="lb-stage-titles">
+                  <span class="lb-season-pill" id="lbSeasonBadge">Toàn thời gian</span>
+                  <h2 id="lbHeroTitle">Đại Gia LiLa</h2>
+                  <p class="lb-stage-tagline" id="lbTagline">Ai là đại gia mua sắm của LiLa?</p>
+                </div>
+              </div>
+
+              <!-- 2 Main Title Tabs: Đại Gia LiLa & Vua Hoàn Tiền -->
+              <div class="lb-mode-tabs" role="tablist" aria-label="Bảng vinh danh LiLa">
+                <button type="button" role="tab" aria-selected="true" class="lb-mode-btn active" data-lb-tab="spend">
+                  <svg class="svg-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true">
+                    <path d="M3.5 17.5 5 8l4.5 3.5L12 6l2.5 5.5L19 8l1.5 9.5a1.5 1.5 0 0 1-1.5 1.5H5a1.5 1.5 0 0 1-1.5-1.5Z" fill="currentColor" opacity="0.25" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+                  </svg>
+                  <span>Đại Gia LiLa</span>
+                </button>
+                <button type="button" role="tab" aria-selected="false" class="lb-mode-btn" data-lb-tab="cashback">
+                  <svg class="svg-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true">
+                    <circle cx="12" cy="12" r="8.5" fill="currentColor" opacity="0.22" stroke="currentColor" stroke-width="1.8"/>
+                    <path d="M12 7.5v9M14.5 9.8c0-1-1.1-1.8-2.5-1.8s-2.5.8-2.5 1.8c0 1.2 1.2 1.6 2.5 1.9 1.3.3 2.5.7 2.5 1.9 0 1-1.1 1.9-2.5 1.9s-2.5-.8-2.5-1.9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                  </svg>
+                  <span>Vua Hoàn Tiền</span>
+                </button>
+              </div>
+
+              <!-- Segmented Period Filter: Tuần này | Tháng này | Toàn thời gian -->
+              <div id="lbPeriodTabs" class="lb-period-tabs" role="tablist" aria-label="Bộ lọc thời gian xếp hạng">
+                <button type="button" role="tab" aria-selected="false" class="lb-period-btn" data-lb-period="weekly">Tuần này</button>
+                <button type="button" role="tab" aria-selected="false" class="lb-period-btn" data-lb-period="monthly">Tháng này</button>
+                <button type="button" role="tab" aria-selected="true" class="lb-period-btn active" data-lb-period="all_time">Toàn thời gian</button>
+              </div>
+
+              <!-- Top 3 Pedestal Podium -->
+              <div id="leaderboardPodium" class="lb-podium hidden" aria-label="Top 3 thành viên dẫn đầu"></div>
+            </div>
+
+            <!-- Rising White Sheet for Ranks #4+ -->
+            <div class="lb-sheet">
+              <div class="lb-sheet-notch" aria-hidden="true"><span></span></div>
+              <div id="leaderboardListHeading" class="lb-list-heading hidden"></div>
+
+              <div id="leaderboardTableWrap" class="table-responsive lb-table-wrap">
+                <table class="data-table lb-data-table">
+                  <thead>
+                    <tr>
+                      <th style="width: 78px;">Hạng</th>
+                      <th>Thành viên</th>
+                      <th>Cấp bậc</th>
+                      <th id="lbMetricHeader">Tổng mua sắm</th>
+                    </tr>
+                  </thead>
+                  <tbody id="leaderboardTableBody">
+                    <tr><td colspan="4"><div class="skeleton-row"><div class="skeleton-line w-60"></div><div class="skeleton-line w-30"></div></div></td></tr>
+                    <tr><td colspan="4"><div class="skeleton-row"><div class="skeleton-line w-50"></div><div class="skeleton-line w-30"></div></div></td></tr>
+                    <tr><td colspan="4"><div class="skeleton-row"><div class="skeleton-line w-40"></div><div class="skeleton-line w-30"></div></div></td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div id="leaderboardSheetNote" class="lb-sheet-note hidden"></div>
+            </div>
           </div>
         </div>
 
-        <div id="leaderboardMyRank" class="lb-my-rank hidden" aria-live="polite"></div>
-        <div id="leaderboardPodium" class="lb-podium hidden" aria-label="Top 3 thành viên"></div>
-        <div id="leaderboardListHeading" class="lb-list-heading hidden"></div>
+        <!-- Right Sidebar on Desktop (Stacks neatly below on Mobile) -->
+        <aside class="lb-side-col">
+          <!-- Personal Achievement & Badges Card -->
+          <div id="leaderboardSideMyCard" class="panel lb-side-my-card hidden" aria-live="polite"></div>
 
-        <div id="leaderboardTableWrap" class="table-responsive lb-table-wrap">
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th style="width: 70px;">Hạng</th>
-                <th>Thành viên</th>
-                <th>Cấp bậc</th>
-                <th id="lbMetricHeader">Tổng giá trị đơn</th>
-              </tr>
-            </thead>
-            <tbody id="leaderboardTableBody">
-              <tr><td colspan="4"><div class="skeleton-row"><div class="skeleton-line w-60"></div><div class="skeleton-line w-30"></div></div></td></tr>
-              <tr><td colspan="4"><div class="skeleton-row"><div class="skeleton-line w-50"></div><div class="skeleton-line w-30"></div></div></td></tr>
-              <tr><td colspan="4"><div class="skeleton-row"><div class="skeleton-line w-40"></div><div class="skeleton-line w-30"></div></div></td></tr>
-            </tbody>
-          </table>
-        </div>
+          <!-- Real VIP Tiers Benefits Card -->
+          <div id="leaderboardVipCard" class="panel lb-vip-card hidden" aria-label="Quyền lợi hạng thành viên VIP"></div>
+
+          <!-- Compact Shop CTA -->
+          <div class="lb-cta-card">
+            <div class="lb-cta-text">
+              <strong>Đua Top nhận mức hoàn tiền cao hơn</strong>
+              <span>Chỉ tính đơn đã duyệt, công bằng &amp; minh bạch.</span>
+            </div>
+            <button type="button" class="btn btn-primary btn-sm lb-cta-btn" data-nav="home">Tạo link ngay</button>
+          </div>
+        </aside>
       </div>
 
-      <!-- Real VIP Tiers Benefits Card -->
-      <div id="leaderboardVipCard" class="panel lb-vip-card hidden" aria-label="Quyền lợi hạng thành viên VIP"></div>
-
-      <!-- Compact Shop CTA -->
-      <div class="lb-cta-card">
-        <div class="lb-cta-text">
-          <strong>Đua Top nhận mức hoàn tiền cao hơn</strong>
-          <span>Mua sắm qua link LiLa để tích lũy đơn duyệt và ghi tên lên Bảng xếp hạng.</span>
-        </div>
-        <button type="button" class="btn btn-primary btn-sm lb-cta-btn" data-nav="home">Tạo link ngay</button>
-      </div>
+      <!-- Sticky Floating "My Rank" Bar (Mobile-first, auto-hides when .is-me is in viewport) -->
+      <div id="leaderboardMyRank" class="lb-my-rank hidden" aria-live="polite"></div>
 
       <button type="button" id="lbBackToTopBtn" class="lb-back-top hidden" aria-label="Quay về đầu bảng xếp hạng">
         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m18 15-6-6-6 6"/></svg>
         <span>Lên đầu</span>
       </button>
     </section>
+
+    <!-- VIP Tiers Benefits Bottom Sheet (Item 5) -->
+    <div id="lbVipSheetOverlay" class="lb-vip-sheet-overlay" role="dialog" aria-modal="true" aria-labelledby="lbVipSheetTitle" aria-hidden="true">
+      <div class="lb-vip-sheet-card">
+        <div class="lb-vip-sheet-handle" aria-hidden="true"><span></span></div>
+        <div class="lb-vip-sheet-head">
+          <div>
+            <h3 id="lbVipSheetTitle">Cấp bậc &amp; Quyền lợi thành viên</h3>
+            <p>Tự động nâng hạng theo tổng giá trị đơn đã duyệt</p>
+          </div>
+          <button type="button" class="modal-close" id="closeLbVipSheetBtn" aria-label="Đóng">×</button>
+        </div>
+        <div id="lbVipSheetBody" class="lb-vip-sheet-body"></div>
+      </div>
+    </div>
+
+    <!-- Rank-Up Celebration Modal & Lightweight Confetti Layer (Item 8) -->
+    <div id="lbConfettiLayer" class="lb-confetti-layer hidden" aria-hidden="true"></div>
+    <div id="lbCelebrateModal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="lbCelebrateTitle">
+      <div class="modal-card lb-celebrate-card">
+        <div class="lb-celebrate-shiba" aria-hidden="true">
+          <img src="/icon.svg" alt="" width="76" height="76" />
+        </div>
+        <h3 id="lbCelebrateTitle">Chúc mừng bạn lên hạng!</h3>
+        <p id="lbCelebrateSub">Tiếp tục mua sắm qua LiLa để giữ vững phong độ nhé.</p>
+        <div class="lb-celebrate-actions">
+          <button type="button" class="btn btn-primary" id="lbCelebrateShareBtn">Chia sẻ ảnh</button>
+          <button type="button" class="btn btn-outline" id="closeLbCelebrateBtn">Tuyệt vời</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Share Achievement PNG Modal (P3 + Item 10 QR & 9:16 / 1:1) -->
+    <div id="lbShareModal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="lbShareModalTitle">
+      <div class="modal-card lb-share-modal-card">
+        <div class="modal-header">
+          <h3 id="lbShareModalTitle">Chia sẻ thành tích LiLa</h3>
+          <button type="button" class="modal-close" id="closeLbShareModalBtn" aria-label="Đóng">×</button>
+        </div>
+        <div class="lb-share-ratio-tabs" role="tablist" aria-label="Tỷ lệ ảnh chia sẻ">
+          <button type="button" role="tab" aria-selected="true" class="lb-share-ratio-btn active" data-lb-share-ratio="story">Story (9:16)</button>
+          <button type="button" role="tab" aria-selected="false" class="lb-share-ratio-btn" data-lb-share-ratio="square">Bài đăng (1:1)</button>
+        </div>
+        <div class="lb-share-preview-wrap">
+          <canvas id="lbShareCanvas" width="1080" height="1920" class="lb-share-canvas"></canvas>
+        </div>
+        <label class="lb-share-privacy-check" for="lbShareHideAmountCheck">
+          <input type="checkbox" id="lbShareHideAmountCheck" />
+          <span>Ẩn số tiền cụ thể trên ảnh (chỉ hiện Thứ hạng &amp; Danh hiệu)</span>
+        </label>
+        <div id="lbShareStatsHint" class="lb-share-stats-hint hidden"></div>
+        <div class="lb-share-actions">
+          <button type="button" class="btn btn-primary" id="lbShareNativeBtn">Chia sẻ ngay</button>
+          <button type="button" class="btn btn-outline" id="lbShareDownloadBtn">Tải ảnh PNG</button>
+          <button type="button" class="btn btn-outline" id="lbShareCopyLinkBtn">Sao chép link</button>
+        </div>
+      </div>
+    </div>
 
     <!-- ==================== VIEW 3: GUIDE & FAQ ==================== -->
     <section id="view-guide" class="view-section">
@@ -1783,6 +1991,110 @@
             </div>
             <div style="margin-top: 10px;">
               <button type="button" class="btn btn-primary btn-sm" id="admSaveVipTiersBtn">Lưu Bảng Hạng VIP</button>
+            </div>
+          </div>
+
+          <!-- Card 2C: Leaderboard Season Configuration -->
+          <div class="panel admin-card">
+            <div class="admin-card-head">
+              <span class="admin-card-icon" aria-hidden="true">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4h10v6a5 5 0 0 1-10 0V4Z"/><path d="M12 15v4M8.5 19h7"/></svg>
+              </span>
+              <div>
+                <h3>2C. Cấu Hình Mùa Giải Bảng Xếp Hạng</h3>
+                <p class="panel-sub-inline">Mặc định để Không thời hạn khi còn ít thành viên; có thể chuyển sang Tuần, Tháng hoặc Năm bất cứ lúc nào.</p>
+              </div>
+            </div>
+            <div class="form-stack" style="margin-top: 10px;">
+              <div class="form-group">
+                <label for="admLbSeasonMode">Chu kỳ mùa giải</label>
+                <select id="admLbSeasonMode">
+                  <option value="all_time">Không thời hạn (Toàn thời gian — Mặc định)</option>
+                  <option value="weekly">Theo Tuần (Thứ 2 → Chủ Nhật)</option>
+                  <option value="monthly">Theo Tháng (Ngày 01 → Cuối tháng)</option>
+                  <option value="yearly">Theo Năm (01/01 → 31/12)</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="admLbSeasonName">Tên hiển thị mùa giải (tùy chọn)</label>
+                <input type="text" id="admLbSeasonName" maxlength="60" placeholder="VD: Bảng Vinh Danh LiLa hoặc Đua Top Tháng 12..." />
+              </div>
+              <div class="form-group">
+                <label for="admLbShowAllTimeTab" style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:0;font-weight:600;">
+                  <input type="checkbox" id="admLbShowAllTimeTab" checked style="width:18px;height:18px;margin:0;cursor:pointer;" />
+                  <span>Hiển thị thêm tab "Toàn thời gian" song song khi bật Tuần / Tháng / Năm</span>
+                </label>
+              </div>
+              <hr style="border:none;border-top:1px solid var(--border);margin:6px 0;" />
+              <div class="form-group">
+                <label for="admLbRewardsEnabled" style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:0;font-weight:700;">
+                  <input type="checkbox" id="admLbRewardsEnabled" style="width:18px;height:18px;margin:0;cursor:pointer;" />
+                  <span>Bật Phần thưởng Top 3 theo kỳ (hiện badge quà trên Podium &amp; CTA)</span>
+                </label>
+              </div>
+              <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:6px;">
+                <button type="button" class="btn btn-outline btn-xs" id="admLbPresetZeroCostBtn">Mẫu 0đ tiền mặt (+3% / +2% / +1%)</button>
+                <button type="button" class="btn btn-outline btn-xs" id="admLbPresetWalletBtn">Mẫu Thưởng Ví (50k / 30k / 15k)</button>
+              </div>
+              <div class="form-group">
+                <label for="admLbRewardType">Loại phần thưởng</label>
+                <select id="admLbRewardType">
+                  <option value="cashback_boost">Cộng +% hoàn tiền tạm thời (0đ tiền mặt — khuyên dùng khi ít user)</option>
+                  <option value="wallet_bonus">Thưởng cộng thẳng vào Ví / Voucher (VNĐ)</option>
+                  <option value="badge_only">Chỉ vinh danh Huy hiệu độc quyền</option>
+                </select>
+              </div>
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;">
+                <div class="form-group" style="margin-bottom:0;">
+                  <label for="admLbRewardsMinSpend">Ngưỡng chi tiêu tối thiểu (VNĐ)</label>
+                  <input type="number" id="admLbRewardsMinSpend" min="0" step="50000" value="500000" />
+                </div>
+                <div class="form-group" style="margin-bottom:0;">
+                  <label for="admLbRewardsBoostDays">Số ngày hiệu lực (+%)</label>
+                  <input type="number" id="admLbRewardsBoostDays" min="1" max="90" value="7" />
+                </div>
+                <div class="form-group" style="margin-bottom:0;">
+                  <label for="admLbRewardsBudgetLimit">Ngân sách tối đa/kỳ (VNĐ)</label>
+                  <input type="number" id="admLbRewardsBudgetLimit" min="0" step="10000" value="100000" />
+                </div>
+              </div>
+              <div class="table-responsive" style="margin-top:8px;">
+                <table class="data-table admin-data-table">
+                  <thead>
+                    <tr>
+                      <th style="width:68px;">Hạng</th>
+                      <th>Giá trị (% hoặc VNĐ)</th>
+                      <th>Huy hiệu độc quyền</th>
+                      <th>Nhãn hiển thị trên Podium</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td><strong>Top 1</strong></td>
+                      <td><input type="number" id="admLbRewardVal1" min="0" value="3" /></td>
+                      <td><input type="text" id="admLbRewardBadge1" maxlength="32" value="Quán Quân Kỳ" /></td>
+                      <td><input type="text" id="admLbRewardTop1" maxlength="60" placeholder="Để trống tự tạo từ giá trị..." /></td>
+                    </tr>
+                    <tr>
+                      <td><strong>Top 2</strong></td>
+                      <td><input type="number" id="admLbRewardVal2" min="0" value="2" /></td>
+                      <td><input type="text" id="admLbRewardBadge2" maxlength="32" value="Á Quân Kỳ" /></td>
+                      <td><input type="text" id="admLbRewardTop2" maxlength="60" placeholder="Để trống tự tạo từ giá trị..." /></td>
+                    </tr>
+                    <tr>
+                      <td><strong>Top 3</strong></td>
+                      <td><input type="number" id="admLbRewardVal3" min="0" value="1" /></td>
+                      <td><input type="text" id="admLbRewardBadge3" maxlength="32" value="Top 3 Kỳ" /></td>
+                      <td><input type="text" id="admLbRewardTop3" maxlength="60" placeholder="Để trống tự tạo từ giá trị..." /></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;">
+                <button type="button" class="btn btn-primary btn-sm" id="admSaveLbSeasonBtn">Lưu Mùa Giải &amp; Phần Thưởng</button>
+                <button type="button" class="btn btn-outline btn-sm" id="admDistributeLbSpendBtn">Chốt thưởng Top 3 Đại Gia</button>
+                <button type="button" class="btn btn-outline btn-sm" id="admDistributeLbCashbackBtn">Chốt thưởng Top 3 Vua Hoàn Tiền</button>
+              </div>
             </div>
           </div>
 

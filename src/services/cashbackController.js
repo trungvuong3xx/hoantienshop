@@ -1,4 +1,5 @@
 const { acceptWebhookReceipt } = require('./webhookReceiptService');
+const { getHomeDeals } = require('./deals/dealDiscoveryService');
 const { mapUserRow } = require('./userMapper');
 const { sameOrder, orderId, migrateLegacyOrderIdentity } = require('./orderIdentity');
 const crypto = require('crypto');
@@ -55,7 +56,10 @@ const {
   resolveUserCashbackRate,
   getNormalizedVipTiers,
   resolveVipTier,
-  setTierUpgradeListener
+  setTierUpgradeListener,
+  VALID_LEADERBOARD_SEASON_MODES,
+  getNormalizedLeaderboardSeason,
+  getNormalizedLeaderboardRewards
 } = require('./dbService');
 const {
   createNotification,
@@ -604,6 +608,8 @@ function upsertNetworkOrder(db, {
   return created;
 }
 
+let leaderboardRankNotifyHook = null;
+
 function notifyOrderEvent(order, eventType) {
   if (!order || !order.userId) return;
   const plat = order.platform === 'tiktok' ? 'TikTok' : 'Shopee';
@@ -636,6 +642,14 @@ function notifyOrderEvent(order, eventType) {
   }).catch((err) => {
     logger.warning('notifyOrderEvent', 'Failed to create order notification', { error: err.message });
   });
+
+  if (eventType === 'approved' && typeof leaderboardRankNotifyHook === 'function') {
+    try {
+      leaderboardRankNotifyHook(order.userId);
+    } catch (err) {
+      logger.warning('notifyOrderEvent', 'Leaderboard rank notification skipped', { error: err.message });
+    }
+  }
 }
 
 function notifyWithdrawalEvent(wd, status) {
@@ -1130,6 +1144,17 @@ function registerCashbackRoutes(app) {
       };
 
       db.users.push(newUser);
+      if (validReferrerCode && String(req.body?.refSource || '').trim() === 'lb_share') {
+        if (!db.settings.leaderboardShareStats || typeof db.settings.leaderboardShareStats !== 'object') {
+          db.settings.leaderboardShareStats = {};
+        }
+        const key = String(validReferrerCode).toUpperCase();
+        const prev = db.settings.leaderboardShareStats[key] || { clicks: 0, registrations: 0 };
+        db.settings.leaderboardShareStats[key] = {
+          clicks: Number(prev.clicks || 0),
+          registrations: Number(prev.registrations || 0) + 1
+        };
+      }
       await saveDb(db);
 
       const token = createToken(newUser);
@@ -1551,9 +1576,108 @@ function registerCashbackRoutes(app) {
     return res.json({ status: 'ok', ...result });
   }));
 
-  // 4.06. Public Leaderboard (Top Approved Spend & Top Approved Cashback, 5-min cache, PII masked)
+  // 4.06. Public Leaderboard (Đại Gia LiLa & Vua Hoàn Tiền, Season Engine, Privacy, Badges & Snapshots)
   const LEADERBOARD_CACHE_TTL_MS = 5 * 60 * 1000;
-  let leaderboardCache = { version: -1, expiresAt: 0, rankedSpend: [], rankedCashback: [] };
+  let leaderboardCache = { version: -1, expiresAt: 0, byPeriod: {} };
+
+  const VN_OFFSET_MS = 7 * 60 * 60 * 1000;
+
+  function getVietnamDateParts(nowMs = Date.now()) {
+    const d = new Date(nowMs + VN_OFFSET_MS);
+    return {
+      year: d.getUTCFullYear(),
+      month: d.getUTCMonth(), // 0-11
+      day: d.getUTCDate(),
+      dow: d.getUTCDay() // 0=Sun..6=Sat
+    };
+  }
+
+  function getVietnamDateKey(nowMs = Date.now()) {
+    const p = getVietnamDateParts(nowMs);
+    const mm = String(p.month + 1).padStart(2, '0');
+    const dd = String(p.day).padStart(2, '0');
+    return `${p.year}-${mm}-${dd}`;
+  }
+
+  function resolveSeasonWindow(seasonCfg, requestedPeriod, nowMs = Date.now()) {
+    const defaultMode = seasonCfg.mode || 'all_time';
+    let effectiveMode = defaultMode;
+    if (requestedPeriod === 'all_time') {
+      effectiveMode = 'all_time';
+    } else if (requestedPeriod === 'weekly' || requestedPeriod === 'monthly' || requestedPeriod === 'yearly') {
+      effectiveMode = requestedPeriod;
+    }
+
+    if (effectiveMode === 'all_time') {
+      return {
+        mode: defaultMode,
+        activePeriod: 'all_time',
+        seasonName: seasonCfg.seasonName || 'Bảng Vinh Danh LiLa',
+        label: 'Toàn thời gian',
+        showAllTimeTab: true,
+        startMs: null,
+        endMs: null,
+        daysRemaining: null
+      };
+    }
+
+    const p = getVietnamDateParts(nowMs);
+    let startMs = null;
+    let endMs = null;
+    let label = '';
+
+    if (effectiveMode === 'weekly') {
+      const daysSinceMonday = (p.dow + 6) % 7;
+      const mondayUtc = Date.UTC(p.year, p.month, p.day - daysSinceMonday, 0, 0, 0, 0) - VN_OFFSET_MS;
+      const nextMondayUtc = mondayUtc + 7 * 24 * 60 * 60 * 1000;
+      startMs = mondayUtc;
+      endMs = nextMondayUtc;
+      label = 'Tuần này';
+    } else if (effectiveMode === 'monthly') {
+      startMs = Date.UTC(p.year, p.month, 1, 0, 0, 0, 0) - VN_OFFSET_MS;
+      endMs = Date.UTC(p.year, p.month + 1, 1, 0, 0, 0, 0) - VN_OFFSET_MS;
+      label = `Tháng ${p.month + 1}/${p.year}`;
+    } else if (effectiveMode === 'yearly') {
+      startMs = Date.UTC(p.year, 0, 1, 0, 0, 0, 0) - VN_OFFSET_MS;
+      endMs = Date.UTC(p.year + 1, 0, 1, 0, 0, 0, 0) - VN_OFFSET_MS;
+      label = `Năm ${p.year}`;
+    }
+
+    const daysRemaining = endMs !== null ? Math.max(0, Math.ceil((endMs - nowMs) / (24 * 60 * 60 * 1000))) : null;
+    return {
+      mode: defaultMode,
+      activePeriod: effectiveMode,
+      seasonName: seasonCfg.seasonName || `Mùa giải ${label}`,
+      label,
+      showAllTimeTab: true,
+      startMs,
+      endMs,
+      daysRemaining
+    };
+  }
+
+  function computeUserBadges({ totalSpend, totalCashback, approvedOrderCount, vipTier, isCashbackKing }) {
+    const badges = [];
+    if (approvedOrderCount >= 1) {
+      badges.push({ code: 'newbie', name: 'Tân binh LiLa', desc: 'Hoàn thành đơn duyệt đầu tiên' });
+    }
+    if (totalCashback >= 100000) {
+      badges.push({ code: 'cashback_hunter', name: 'Thợ Săn Cashback', desc: 'Đạt từ 100.000đ tiền hoàn' });
+    }
+    if (approvedOrderCount >= 10) {
+      badges.push({ code: 'deal_master', name: 'Chiến Thần Săn Deal', desc: 'Đạt từ 10 đơn hàng duyệt' });
+    }
+    if (totalSpend >= 6000000 || vipTier === 'gold' || vipTier === 'diamond') {
+      badges.push({ code: 'big_spender', name: 'Đại Gia LiLa', desc: 'Tổng mua sắm hợp lệ từ 6 triệu' });
+    }
+    if (isCashbackKing) {
+      badges.push({ code: 'cashback_king', name: 'Vua Hoàn Tiền', desc: 'Dẫn đầu bảng tiền hoàn' });
+    }
+    if (vipTier === 'diamond' || totalSpend >= 15000000) {
+      badges.push({ code: 'lila_legend', name: 'Huyền Thoại LiLa', desc: 'Đạt hạng Kim Cương (15 triệu+)' });
+    }
+    return badges;
+  }
 
   function maskLeaderboardDisplay(user) {
     const rawName = String(user?.name || '').trim();
@@ -1572,54 +1696,166 @@ function registerCashbackRoutes(app) {
     return user?.code || 'Thành viên';
   }
 
-  function computeLeaderboardData(db) {
+  function resolveOrderApprovalMs(o) {
+    const updated = o.updatedAt ? Date.parse(o.updatedAt) : NaN;
+    if (Number.isFinite(updated) && updated > 0) return updated;
+    const ev = Number(o.eventTime || 0);
+    if (Number.isFinite(ev) && ev > 0) return ev;
+    const created = o.createdAt ? Date.parse(o.createdAt) : NaN;
+    return Number.isFinite(created) && created > 0 ? created : 0;
+  }
+
+  function computeLeaderboardData(db, seasonWindow) {
     const tiers = getNormalizedVipTiers(db.settings);
     const spendMap = new Map();
     const cashbackMap = new Map();
+    const countMap = new Map();
+    const lastApprovedMap = new Map();
+
+    // Index userCode -> userId for legacy/CSV orders without userId (parity with recalculateUserWallet)
+    const codeToUserId = new Map();
+    for (const u of db.users || []) {
+      if (u && u.id && u.code) {
+        codeToUserId.set(String(u.code).toUpperCase(), u.id);
+      }
+    }
+
+    const filterByTime = seasonWindow && seasonWindow.startMs !== null && seasonWindow.endMs !== null;
 
     for (const o of db.orders || []) {
       if (String(o.status || '').toLowerCase() !== 'approved') continue;
-      const uid = o.userId;
+      if (o.clawbackAt) continue;
+      const uid = o.userId || (o.userCode ? codeToUserId.get(String(o.userCode).toUpperCase()) : null);
       if (!uid) continue;
+
+      const orderMs = resolveOrderApprovalMs(o);
+      if (filterByTime) {
+        if (!orderMs || orderMs < seasonWindow.startMs || orderMs >= seasonWindow.endMs) continue;
+      }
+
       const amt = Number(o.orderAmount || 0);
       const cb = Number(o.userCashbackAmount || 0);
+      let counted = false;
       if (Number.isFinite(amt) && amt > 0) {
         spendMap.set(uid, (spendMap.get(uid) || 0) + Math.round(amt));
+        counted = true;
       }
       if (Number.isFinite(cb) && cb > 0) {
         cashbackMap.set(uid, (cashbackMap.get(uid) || 0) + Math.round(cb));
+        counted = true;
+      }
+      if (counted) {
+        countMap.set(uid, (countMap.get(uid) || 0) + 1);
+        const prevLast = lastApprovedMap.get(uid) || 0;
+        if (orderMs > prevLast) lastApprovedMap.set(uid, orderMs);
       }
     }
 
     const activeUsers = (db.users || []).filter(
-      (u) => !u.isDeleted && !u.accountLocked && u.role !== 'admin'
+      (u) => !u.isDeleted && !u.accountLocked && u.role !== 'admin' && !u.hideFromLeaderboard
     );
 
     const rows = activeUsers
       .map((u) => {
         const totalSpend = spendMap.get(u.id) || 0;
         const totalCashback = cashbackMap.get(u.id) || 0;
-        const tier = resolveVipTier(totalSpend, db.settings) || tiers[0];
+        const approvedOrderCount = countMap.get(u.id) || 0;
+        const lastApprovedAt = lastApprovedMap.get(u.id) || 0;
+        // VIP tier always comes from user's overall approved spend
+        const tier = resolveVipTier(u.totalApprovedSpend || totalSpend, db.settings) || tiers[0];
         return {
           userId: u.id,
           code: u.code,
           displayName: maskLeaderboardDisplay(u),
           avatarUrl: u.avatarUrl || '',
+          leaderboardAnonymous: Boolean(u.leaderboardAnonymous),
+          leaderboardHideAmount: Boolean(u.leaderboardHideAmount),
           vipTier: tier.code,
           vipTierName: tier.name,
           vipTierIcon: tier.icon,
           totalSpend,
-          totalCashback
+          totalCashback,
+          approvedOrderCount,
+          lastApprovedAt
         };
       })
       .filter((r) => r.totalSpend > 0 || r.totalCashback > 0);
 
     const rankedSpend = [...rows]
       .filter((r) => r.totalSpend > 0)
-      .sort((a, b) => b.totalSpend - a.totalSpend || b.totalCashback - a.totalCashback);
+      .sort(
+        (a, b) =>
+          b.totalSpend - a.totalSpend ||
+          b.totalCashback - a.totalCashback ||
+          b.approvedOrderCount - a.approvedOrderCount ||
+          (a.lastApprovedAt || 0) - (b.lastApprovedAt || 0) ||
+          String(a.code || '').localeCompare(String(b.code || ''))
+      );
     const rankedCashback = [...rows]
       .filter((r) => r.totalCashback > 0)
-      .sort((a, b) => b.totalCashback - a.totalCashback || b.totalSpend - a.totalSpend);
+      .sort(
+        (a, b) =>
+          b.totalCashback - a.totalCashback ||
+          b.totalSpend - a.totalSpend ||
+          b.approvedOrderCount - a.approvedOrderCount ||
+          (a.lastApprovedAt || 0) - (b.lastApprovedAt || 0) ||
+          String(a.code || '').localeCompare(String(b.code || ''))
+      );
+
+    // Lightweight daily rank snapshots (stored in settings, max 7 days per period)
+    const todayKey = getVietnamDateKey();
+    const periodKey = seasonWindow?.activePeriod === 'season' ? `season_${seasonWindow.mode}` : 'all_time';
+    const snaps = (db.settings.leaderboardSnapshots && typeof db.settings.leaderboardSnapshots === 'object')
+      ? db.settings.leaderboardSnapshots
+      : {};
+    const periodSnaps = (snaps[periodKey] && typeof snaps[periodKey] === 'object') ? snaps[periodKey] : {};
+
+    // Find latest snapshot strictly before today for rankDelta comparison
+    const prevDates = Object.keys(periodSnaps).filter((d) => d < todayKey).sort();
+    const prevSnap = prevDates.length > 0 ? periodSnaps[prevDates[prevDates.length - 1]] : null;
+
+    // Record today's snapshot in-memory (persisted organically on next saveDb; prune > 7 days)
+    const todaySpendRanks = {};
+    rankedSpend.slice(0, 100).forEach((r, idx) => { todaySpendRanks[r.userId] = idx + 1; });
+    const todayCashbackRanks = {};
+    rankedCashback.slice(0, 100).forEach((r, idx) => { todayCashbackRanks[r.userId] = idx + 1; });
+
+    periodSnaps[todayKey] = { spend: todaySpendRanks, cashback: todayCashbackRanks };
+    const allDates = Object.keys(periodSnaps).sort();
+    while (allDates.length > 7) {
+      const oldest = allDates.shift();
+      delete periodSnaps[oldest];
+    }
+    snaps[periodKey] = periodSnaps;
+    db.settings.leaderboardSnapshots = snaps;
+
+    const topCashbackUserId = rankedCashback[0]?.userId || null;
+
+    rankedSpend.forEach((r, idx) => {
+      const prevRank = prevSnap?.spend?.[r.userId];
+      r.spendRankDelta = Number.isFinite(prevRank) ? prevRank - (idx + 1) : null;
+      r.badges = computeUserBadges({
+        totalSpend: r.totalSpend,
+        totalCashback: r.totalCashback,
+        approvedOrderCount: r.approvedOrderCount,
+        vipTier: r.vipTier,
+        isCashbackKing: r.userId === topCashbackUserId
+      });
+    });
+
+    rankedCashback.forEach((r, idx) => {
+      const prevRank = prevSnap?.cashback?.[r.userId];
+      r.cashbackRankDelta = Number.isFinite(prevRank) ? prevRank - (idx + 1) : null;
+      if (!r.badges) {
+        r.badges = computeUserBadges({
+          totalSpend: r.totalSpend,
+          totalCashback: r.totalCashback,
+          approvedOrderCount: r.approvedOrderCount,
+          vipTier: r.vipTier,
+          isCashbackKing: r.userId === topCashbackUserId
+        });
+      }
+    });
 
     return { rankedSpend, rankedCashback };
   }
@@ -1628,64 +1864,241 @@ function registerCashbackRoutes(app) {
     const db = ensureDbLoaded();
     const now = Date.now();
     const currentVer = getCurrentDbVersion();
-    const forceFresh = process.env.NODE_ENV === 'test' || leaderboardCache.version !== currentVer;
-    if (forceFresh || now > leaderboardCache.expiresAt) {
-      const computed = computeLeaderboardData(db);
+    const seasonCfg = getNormalizedLeaderboardSeason(db.settings);
+    const requestedPeriod = String(req.query?.period || 'season').trim().toLowerCase();
+    const seasonWindow = resolveSeasonWindow(seasonCfg, requestedPeriod, now);
+    const cacheKey = `${seasonWindow.mode}:${seasonWindow.activePeriod}:${getVietnamDateKey(now)}`;
+
+    const forceFresh = process.env.NODE_ENV === 'test' || leaderboardCache.version !== currentVer || now > leaderboardCache.expiresAt;
+    if (forceFresh) {
       leaderboardCache = {
         version: currentVer,
         expiresAt: now + LEADERBOARD_CACHE_TTL_MS,
-        rankedSpend: computed.rankedSpend,
-        rankedCashback: computed.rankedCashback
+        byPeriod: {}
       };
     }
-
-    const toPublicEntry = (entry, idx) => ({
-      rank: idx + 1,
-      code: entry.code,
-      displayName: entry.displayName,
-      avatarUrl: entry.avatarUrl || '',
-      vipTier: entry.vipTier,
-      vipTierName: entry.vipTierName,
-      vipTierIcon: entry.vipTierIcon,
-      totalSpend: entry.totalSpend,
-      totalCashback: entry.totalCashback
-    });
-
-    const topBySpend = leaderboardCache.rankedSpend.slice(0, 20).map(toPublicEntry);
-    const topByCashback = leaderboardCache.rankedCashback.slice(0, 20).map(toPublicEntry);
+    if (!leaderboardCache.byPeriod[cacheKey]) {
+      leaderboardCache.byPeriod[cacheKey] = computeLeaderboardData(db, seasonWindow);
+    }
+    const { rankedSpend, rankedCashback } = leaderboardCache.byPeriod[cacheKey];
 
     const authUser = getAuthUser(req);
+    const viewerId = authUser?.id || null;
+
+    const toPublicEntry = (entry, idx, kind, forSelf = false) => {
+      const isSelf = Boolean(forSelf || (viewerId && entry.userId === viewerId));
+      const maskAnon = Boolean(entry.leaderboardAnonymous && !isSelf);
+      const maskAmt = Boolean(entry.leaderboardHideAmount && !isSelf);
+      return {
+        rank: idx + 1,
+        code: maskAnon ? 'ANON' : entry.code,
+        displayName: maskAnon ? 'Người dùng ẩn danh' : entry.displayName,
+        avatarUrl: maskAnon ? '' : (entry.avatarUrl || ''),
+        isAnonymous: Boolean(entry.leaderboardAnonymous),
+        amountHidden: maskAmt,
+        isSelf,
+        vipTier: entry.vipTier,
+        vipTierName: entry.vipTierName,
+        vipTierIcon: entry.vipTierIcon,
+        totalSpend: maskAmt ? null : entry.totalSpend,
+        totalCashback: maskAmt ? null : entry.totalCashback,
+        approvedOrderCount: entry.approvedOrderCount || 0,
+        rankDelta: kind === 'cashback' ? (entry.cashbackRankDelta ?? null) : (entry.spendRankDelta ?? null),
+        badges: Array.isArray(entry.badges) ? entry.badges : []
+      };
+    };
+
+    const topBySpend = rankedSpend.slice(0, 20).map((e, i) => toPublicEntry(e, i, 'spend'));
+    const topByCashback = rankedCashback.slice(0, 20).map((e, i) => toPublicEntry(e, i, 'cashback'));
+
+    const myPrivacyHidden = Boolean(authUser && authUser.hideFromLeaderboard);
     let myRankSpend = null;
     let myRankCashback = null;
+    let myOverallSpend = 0;
+    let myVipTier = null;
     if (authUser) {
-      const sIdx = leaderboardCache.rankedSpend.findIndex((r) => r.userId === authUser.id);
-      const cIdx = leaderboardCache.rankedCashback.findIndex((r) => r.userId === authUser.id);
+      myOverallSpend = Math.max(0, Math.round(Number(authUser.totalApprovedSpend || 0)));
+      const resolvedTier = resolveVipTier(myOverallSpend, db.settings);
+      myVipTier = resolvedTier
+        ? { code: resolvedTier.code, name: resolvedTier.name, icon: resolvedTier.icon, cashbackPercent: resolvedTier.cashbackPercent }
+        : null;
+    }
+    if (authUser && !myPrivacyHidden) {
+      const sIdx = rankedSpend.findIndex((r) => r.userId === authUser.id);
+      const cIdx = rankedCashback.findIndex((r) => r.userId === authUser.id);
       if (sIdx >= 0) {
-        myRankSpend = toPublicEntry(leaderboardCache.rankedSpend[sIdx], sIdx);
+        myRankSpend = toPublicEntry(rankedSpend[sIdx], sIdx, 'spend');
+        const avgSpend = myRankSpend.approvedOrderCount > 0
+          ? Math.round(myRankSpend.totalSpend / myRankSpend.approvedOrderCount)
+          : 0;
+        myRankSpend.avgOrderValue = avgSpend;
         if (sIdx > 0) {
-          const above = leaderboardCache.rankedSpend[sIdx - 1];
+          const above = rankedSpend[sIdx - 1];
           myRankSpend.nextRank = sIdx;
           myRankSpend.gapToNextRank = Math.max(0, Math.round(above.totalSpend - myRankSpend.totalSpend));
+          myRankSpend.estimatedOrdersNeeded = avgSpend > 0 && myRankSpend.gapToNextRank > 0
+            ? Math.max(1, Math.ceil(myRankSpend.gapToNextRank / avgSpend))
+            : null;
+        } else if (rankedSpend.length > 1) {
+          const second = rankedSpend[1];
+          myRankSpend.leadOverSecond = Math.max(0, Math.round(myRankSpend.totalSpend - second.totalSpend));
+          myRankSpend.secondValue = second.totalSpend;
+          myRankSpend.leadPercent = Math.min(95, Math.max(50, Math.round((myRankSpend.totalSpend / Math.max(1, myRankSpend.totalSpend + second.totalSpend)) * 100)));
         }
       }
       if (cIdx >= 0) {
-        myRankCashback = toPublicEntry(leaderboardCache.rankedCashback[cIdx], cIdx);
+        myRankCashback = toPublicEntry(rankedCashback[cIdx], cIdx, 'cashback');
+        const avgCb = myRankCashback.approvedOrderCount > 0
+          ? Math.round(myRankCashback.totalCashback / myRankCashback.approvedOrderCount)
+          : 0;
+        myRankCashback.avgCashbackPerOrder = avgCb;
         if (cIdx > 0) {
-          const above = leaderboardCache.rankedCashback[cIdx - 1];
+          const above = rankedCashback[cIdx - 1];
           myRankCashback.nextRank = cIdx;
           myRankCashback.gapToNextRank = Math.max(0, Math.round(above.totalCashback - myRankCashback.totalCashback));
+          myRankCashback.estimatedOrdersNeeded = avgCb > 0 && myRankCashback.gapToNextRank > 0
+            ? Math.max(1, Math.ceil(myRankCashback.gapToNextRank / avgCb))
+            : null;
+        } else if (rankedCashback.length > 1) {
+          const second = rankedCashback[1];
+          myRankCashback.leadOverSecond = Math.max(0, Math.round(myRankCashback.totalCashback - second.totalCashback));
+          myRankCashback.secondValue = second.totalCashback;
+          myRankCashback.leadPercent = Math.min(95, Math.max(50, Math.round((myRankCashback.totalCashback / Math.max(1, myRankCashback.totalCashback + second.totalCashback)) * 100)));
         }
       }
     }
+
+    const myShareStats = authUser && authUser.code && db.settings.leaderboardShareStats
+      ? (db.settings.leaderboardShareStats[String(authUser.code).toUpperCase()] || { clicks: 0, registrations: 0 })
+      : { clicks: 0, registrations: 0 };
 
     return res.json({
       topBySpend,
       topByCashback,
       myRankSpend,
       myRankCashback,
+      myPrivacyHidden,
+      myOverallSpend,
+      myVipTier,
+      myShareStats,
+      totalParticipants: Math.max(rankedSpend.length, rankedCashback.length),
+      season: {
+        mode: seasonWindow.mode,
+        activePeriod: seasonWindow.activePeriod,
+        seasonName: seasonWindow.seasonName,
+        label: seasonWindow.label,
+        showAllTimeTab: seasonWindow.showAllTimeTab,
+        daysRemaining: seasonWindow.daysRemaining
+      },
+      rewards: getNormalizedLeaderboardRewards(db.settings),
       vipTiers: getNormalizedVipTiers(db.settings)
     });
   });
+
+  // Smart Leaderboard Notifications (Item 9): Overtake, Near Rank & Near VIP Tier (80-99%)
+  // Respects Quiet Hours (22:00 - 06:59 UTC+7), daily dedupeKey cap (max 2/day), & anonymous privacy.
+  function triggerLeaderboardRankNotifications(approvedUserId) {
+    if (!approvedUserId) return;
+    const nowMs = Date.now();
+    const vnDate = new Date(nowMs + VN_OFFSET_MS);
+    const vnHour = vnDate.getUTCHours();
+    if (vnHour >= 22 || vnHour < 7) return; // Quiet hours 22:00 - 06:59 VN
+
+    const db = ensureDbLoaded();
+    const todayKey = getVietnamDateKey(nowMs);
+    const seasonCfg = getNormalizedLeaderboardSeason(db.settings);
+    const seasonWindow = resolveSeasonWindow(seasonCfg, seasonCfg.mode || 'all_time', nowMs);
+    const { rankedSpend, rankedCashback } = computeLeaderboardData(db, seasonWindow);
+
+    const userById = new Map((db.users || []).map((u) => [u.id, u]));
+    const actor = userById.get(approvedUserId);
+    if (!actor || actor.isDeleted || actor.accountLocked || actor.role === 'admin') return;
+
+    const actorPublicName = actor.leaderboardAnonymous
+      ? 'Một thành viên ẩn danh'
+      : maskLeaderboardDisplay(actor);
+
+    // 1. Check Near Next Rank & Overtake on Spend and Cashback
+    const checkBoard = (ranked, tabKey, metricKey) => {
+      const idx = ranked.findIndex((r) => r.userId === approvedUserId);
+      if (idx < 0) return;
+      const myEntry = ranked[idx];
+
+      // 1a. Sắp lên hạng (within 15% or <= 100.000đ of person above)
+      if (idx > 0 && !actor.lbNotifyDisabled) {
+        const above = ranked[idx - 1];
+        const gap = Math.max(0, Math.round(above[metricKey] - myEntry[metricKey]));
+        const threshold = Math.max(100000, Math.round(above[metricKey] * 0.15));
+        if (gap > 0 && gap <= threshold) {
+          const boardName = tabKey === 'cashback' ? 'Vua Hoàn Tiền' : 'Đại Gia LiLa';
+          void createNotification({
+            userId: actor.id,
+            type: 'lb_near_rank',
+            title: `Sắp lên hạng #${idx} ${boardName}!`,
+            message: `Bạn chỉ còn ${gap.toLocaleString('vi-VN')}đ để lên hạng #${idx} bảng ${boardName}.`,
+            dedupeKey: `lb_near_rank:${actor.id}:${todayKey}`,
+            metadata: { targetView: 'leaderboard', lbTab: tabKey, targetRank: idx, gap }
+          }).catch(() => {});
+        }
+      }
+
+      // 1b. Bị vượt hạng (only notify user right below if actor actually overtook them vs previous rank)
+      if (idx + 1 < ranked.length) {
+        const overtaken = ranked[idx + 1];
+        const targetUser = userById.get(overtaken.userId);
+        const actorImproved = Number.isFinite(myEntry[tabKey === 'cashback' ? 'cashbackRankDelta' : 'spendRankDelta'])
+          ? myEntry[tabKey === 'cashback' ? 'cashbackRankDelta' : 'spendRankDelta'] > 0
+          : false;
+        const targetDropped = Number.isFinite(overtaken[tabKey === 'cashback' ? 'cashbackRankDelta' : 'spendRankDelta'])
+          ? overtaken[tabKey === 'cashback' ? 'cashbackRankDelta' : 'spendRankDelta'] < 0
+          : false;
+        if (targetUser && (actorImproved || targetDropped) && !targetUser.lbNotifyDisabled && !targetUser.isDeleted) {
+          const gapBack = Math.max(0, Math.round(myEntry[metricKey] - overtaken[metricKey]));
+          const boardName = tabKey === 'cashback' ? 'Vua Hoàn Tiền' : 'Đại Gia LiLa';
+          if (gapBack > 0) {
+            void createNotification({
+              userId: targetUser.id,
+              type: 'lb_overtaken',
+              title: `${actorPublicName} vừa vượt bạn trên BXH!`,
+              message: `Chỉ cần ${gapBack.toLocaleString('vi-VN')}đ để lấy lại hạng #${idx + 1} bảng ${boardName}.`,
+              dedupeKey: `lb_overtaken:${targetUser.id}:${todayKey}`,
+              metadata: { targetView: 'leaderboard', lbTab: tabKey, targetRank: idx + 1, gap: gapBack }
+            }).catch(() => {});
+          }
+        }
+      }
+    };
+
+    checkBoard(rankedSpend, 'spend', 'totalSpend');
+    checkBoard(rankedCashback, 'cashback', 'totalCashback');
+
+    // 2. Sắp lên cấp huy hiệu VIP (80% - 99% of next tier threshold)
+    if (!actor.lbNotifyDisabled) {
+      const tiers = getNormalizedVipTiers(db.settings);
+      const spend = Math.max(0, Math.round(Number(actor.totalApprovedSpend || 0)));
+      let currIdx = 0;
+      for (let i = 0; i < tiers.length; i += 1) {
+        if (spend >= Number(tiers[i].minSpend || 0)) currIdx = i;
+      }
+      const nextTier = tiers[currIdx + 1];
+      if (nextTier && nextTier.minSpend > 0) {
+        const ratio = spend / nextTier.minSpend;
+        if (ratio >= 0.8 && ratio < 1) {
+          const remain = Math.max(1, Math.round(nextTier.minSpend - spend));
+          const shortName = String(nextTier.name || '').replace(/^Thành viên\s+/i, '');
+          void createNotification({
+            userId: actor.id,
+            type: 'lb_near_vip',
+            title: `Sắp lên hạng ${shortName} (${nextTier.cashbackPercent}%)!`,
+            message: `Chỉ còn ${remain.toLocaleString('vi-VN')}đ đơn duyệt nữa là bạn chạm mốc hạng ${shortName}.`,
+            dedupeKey: `lb_near_vip:${actor.id}:${nextTier.code}:${todayKey}`,
+            metadata: { targetView: 'leaderboard', lbTab: 'spend', nextTier: nextTier.code, remain }
+          }).catch(() => {});
+        }
+      }
+    }
+  }
+  leaderboardRankNotifyHook = triggerLeaderboardRankNotifications;
 
   // 4.1. User Referral Network & Bounty Stats (10.000đ on referee 1st approved order)
   app.get('/api/user/referrals', (req, res) => {
@@ -1835,6 +2248,62 @@ function registerCashbackRoutes(app) {
     await saveDb(db);
     logger.logLeave('POST /api/user/profile', { userCode: user.code });
     return res.json({ user: sanitizeUser(user) });
+  }));
+
+  const leaderboardPrivacyLimiter = createRateLimiter({
+    windowMs: 15 * 60 * 1000,
+    max: 60,
+    keyPrefix: 'lb-privacy',
+    failClosed: false,
+    message: 'Bạn đang thao tác cài đặt quá nhanh. Vui lòng thử lại sau ít phút.'
+  });
+
+  // 5.0a. User Leaderboard Privacy Settings (1-tap toggles, no password required)
+  app.post('/api/user/leaderboard-privacy', leaderboardPrivacyLimiter, asyncHandler(async (req, res) => {
+    logger.logEnter('POST /api/user/leaderboard-privacy');
+    const user = getAuthUser(req);
+    if (!user) return res.status(401).json({ error: 'Chưa đăng nhập.' });
+    const db = ensureDbLoaded();
+    const body = req.body || {};
+    if (body.hideFromLeaderboard !== undefined) {
+      user.hideFromLeaderboard = Boolean(body.hideFromLeaderboard);
+    }
+    if (body.leaderboardAnonymous !== undefined) {
+      user.leaderboardAnonymous = Boolean(body.leaderboardAnonymous);
+    }
+    if (body.leaderboardHideAmount !== undefined) {
+      user.leaderboardHideAmount = Boolean(body.leaderboardHideAmount);
+    }
+    if (body.lbNotifyDisabled !== undefined) {
+      user.lbNotifyDisabled = Boolean(body.lbNotifyDisabled);
+    }
+    leaderboardCache.version = -1;
+    await saveDb(db);
+    logger.logLeave('POST /api/user/leaderboard-privacy', {
+      userCode: user.code,
+      hideFromLeaderboard: user.hideFromLeaderboard,
+      leaderboardAnonymous: user.leaderboardAnonymous,
+      leaderboardHideAmount: user.leaderboardHideAmount
+    });
+    return res.json({ status: 'ok', user: sanitizeUser(user) });
+  }));
+
+  // 5.0a2. Track Leaderboard Share Deep Link Hit (Item 10 attribution)
+  app.post('/api/referral/track-share-hit', leaderboardLimiter, asyncHandler(async (req, res) => {
+    const rawRef = String(req.body?.ref || '').trim().toUpperCase().slice(0, 24);
+    if (!rawRef) return res.json({ status: 'ok' });
+    const db = ensureDbLoaded();
+    const exists = (db.users || []).some((u) => !u.isDeleted && String(u.code || '').toUpperCase() === rawRef);
+    if (!exists) return res.json({ status: 'ok' });
+    if (!db.settings.leaderboardShareStats || typeof db.settings.leaderboardShareStats !== 'object') {
+      db.settings.leaderboardShareStats = {};
+    }
+    const prev = db.settings.leaderboardShareStats[rawRef] || { clicks: 0, registrations: 0 };
+    db.settings.leaderboardShareStats[rawRef] = {
+      clicks: Number(prev.clicks || 0) + 1,
+      registrations: Number(prev.registrations || 0)
+    };
+    return res.json({ status: 'ok' });
   }));
 
   // 5.0b. Upload User Avatar (Authenticated user only, updates own avatar, real magic-byte MIME validation)
@@ -2524,7 +2993,7 @@ function registerCashbackRoutes(app) {
       });
     } catch (err) {
       const code = err?.code || 'UPSTREAM_ERROR';
-      const status = code === 'RATE_LIMITED' ? 429 : code === 'TIMEOUT' ? 504 : 502;
+      const status = code === 'RATE_LIMITED' ? 429 : code === 'TIMEOUT' ? 504 : code === 'CIRCUIT_OPEN' ? 503 : 502;
       logger.warning('POST /api/compare/tiktok', 'Compare search failed', { code, error: err.message });
       return res.status(status).json({
         ok: false,
@@ -2544,7 +3013,7 @@ function registerCashbackRoutes(app) {
   app.post('/api/compare/tiktok/link', compareTikTokLinkLimiter, asyncHandler(async (req, res) => {
     logger.logEnter('POST /api/compare/tiktok/link');
     try {
-      const { productId } = req.body || {};
+      const { productId, verifyToken, matchScore, matchTier, source, dealGroup } = req.body || {};
       const cleanProductId = String(productId || '').trim();
       if (!/^\d{6,30}$/.test(cleanProductId)) {
         return res.status(400).json({
@@ -2570,8 +3039,8 @@ function registerCashbackRoutes(app) {
         });
       }
 
-      // Never accept arbitrary URLs from client: use server-verified detailLink or canonical TikTok product URL
-      const verified = getVerifiedTikTokProduct(cleanProductId);
+      // Never accept arbitrary URLs from client: use server-verified HMAC token / L1 cache or canonical TikTok product URL
+      const verified = getVerifiedTikTokProduct(cleanProductId, typeof verifyToken === 'string' ? verifyToken : '');
       const canonicalDetailUrl =
         verified?.detailLink ||
         `https://shop.tiktok.com/view/product/${cleanProductId}?region=VN&local=en`;
@@ -2588,6 +3057,10 @@ function registerCashbackRoutes(app) {
         userId: authUser ? authUser.id : null,
         userCode: authUser ? authUser.code : 'GUEST',
         platform: 'tiktok',
+        source: source === 'home_deal_shelf' ? 'home_deal_shelf' : 'compare_sp_to_tt',
+        dealGroup: typeof dealGroup === 'string' ? dealGroup.slice(0, 30) : null,
+        compareMatchScore: Number.isFinite(Number(matchScore)) ? Number(matchScore) : null,
+        compareMatchTier: typeof matchTier === 'string' ? matchTier.slice(0, 20) : null,
         originalUrl: canonicalDetailUrl,
         cleanUrl: canonicalDetailUrl,
         productId: atRes.productId || cleanProductId,
@@ -2692,7 +3165,7 @@ function registerCashbackRoutes(app) {
       });
     } catch (err) {
       const code = err?.code || 'UPSTREAM_ERROR';
-      const status = code === 'RATE_LIMITED' ? 429 : code === 'TIMEOUT' ? 504 : 502;
+      const status = code === 'RATE_LIMITED' ? 429 : code === 'TIMEOUT' ? 504 : code === 'CIRCUIT_OPEN' ? 503 : 502;
       logger.warning('POST /api/compare/shopee', 'Compare Shopee search failed', { code, error: err.message });
       return res.status(status).json({
         ok: false,
@@ -2712,7 +3185,7 @@ function registerCashbackRoutes(app) {
   app.post('/api/compare/shopee/link', compareShopeeLinkLimiter, asyncHandler(async (req, res) => {
     logger.logEnter('POST /api/compare/shopee/link');
     try {
-      const { itemId, shopId } = req.body || {};
+      const { itemId, shopId, verifyToken, matchScore, matchTier, source, dealGroup } = req.body || {};
       const cleanItemId = String(itemId || '').trim();
       const cleanShopId = String(shopId || '').trim();
 
@@ -2733,8 +3206,8 @@ function registerCashbackRoutes(app) {
       const s = db.settings || {};
       const authUser = getAuthUser(req);
 
-      // Never accept arbitrary URLs from client: use server-verified productLink or canonical Shopee product URL
-      const verified = getVerifiedShopeeProduct(cleanItemId);
+      // Never accept arbitrary URLs from client: use server-verified HMAC token / L1 cache or canonical Shopee product URL
+      const verified = getVerifiedShopeeProduct(cleanItemId, typeof verifyToken === 'string' ? verifyToken : '');
       const effectiveShopId = verified?.shopId || cleanShopId;
       const canonicalUrl =
         verified?.productLink ||
@@ -2769,6 +3242,10 @@ function registerCashbackRoutes(app) {
         userId: authUser ? authUser.id : null,
         userCode: authUser ? authUser.code : 'GUEST',
         platform: 'shopee',
+        source: source === 'home_deal_shelf' ? 'home_deal_shelf' : 'compare_tt_to_sp',
+        dealGroup: typeof dealGroup === 'string' ? dealGroup.slice(0, 30) : null,
+        compareMatchScore: Number.isFinite(Number(matchScore)) ? Number(matchScore) : null,
+        compareMatchTier: typeof matchTier === 'string' ? matchTier.slice(0, 20) : null,
         originalUrl: canonicalUrl,
         cleanUrl: canonicalUrl,
         productId: cleanItemId,
@@ -2797,6 +3274,60 @@ function registerCashbackRoutes(app) {
       return res.status(502).json({
         ok: false,
         error: 'Không thể tạo liên kết hoàn tiền Shopee lúc này. Vui lòng thử lại.'
+      });
+    }
+  }));
+
+  // 8.7. Homepage Deal Discovery Shelf ("Săn Deal Hoàn Tiền Cao" - L1 RAM + L2 Postgres Cache)
+  const homeDealsLimiter = createRateLimiter({
+    windowMs: 60000,
+    max: 40,
+    keyPrefix: 'home_deals',
+    failClosed: false
+  });
+
+  app.get('/api/deals/home', homeDealsLimiter, asyncHandler(async (req, res) => {
+    logger.logEnter('GET /api/deals/home');
+    try {
+      const group = typeof req.query.group === 'string' ? req.query.group.trim() : 'worth_buying';
+      const category = typeof req.query.category === 'string' ? req.query.category.trim() : 'all';
+      const limit = Number(req.query.limit || 16);
+
+      const db = ensureDbLoaded();
+      const s = db.settings || {};
+      const authUser = getAuthUser(req);
+      const cashbackPercent = resolveUserCashbackRate(authUser, s);
+      const taxDeductPercent = Number(s.taxDeductPercent ?? 10);
+      const addlivetagApiKey = (
+        s.addlivetagApiKey ||
+        process.env.ADDLIVETAG_API_KEY ||
+        DEFAULT_ADDLIVETAG_API_KEY
+      ).trim();
+      const accesstradeApiKey = (process.env.ACCESSTRADE_API_KEY || s.accesstradeApiKey || '').trim();
+
+      const result = await getHomeDeals({
+        group,
+        category,
+        limit,
+        cashbackPercent,
+        taxDeductPercent,
+        addlivetagApiKey,
+        accesstradeApiKey
+      });
+
+      logger.logLeave('GET /api/deals/home', {
+        group: result.group,
+        category: result.category,
+        count: result.items.length,
+        cacheLayer: result.cacheLayer
+      });
+
+      return res.json(result);
+    } catch (err) {
+      logger.warning('GET /api/deals/home', 'Home deals fetch failed', { error: err?.message });
+      return res.status(502).json({
+        ok: false,
+        error: 'Tạm thời chưa tải được kệ sản phẩm nổi bật.'
       });
     }
   }));
@@ -3288,6 +3819,8 @@ function registerCashbackRoutes(app) {
     const safeSettings = { ...db.settings };
     safeSettings.zaloGroupUrl = db.settings.zaloGroupUrl || DEFAULT_ZALO_GROUP_URL;
     safeSettings.zaloWidgetEnabled = db.settings.zaloWidgetEnabled ?? true;
+    safeSettings.leaderboardSeason = getNormalizedLeaderboardSeason(db.settings);
+    safeSettings.leaderboardRewards = getNormalizedLeaderboardRewards(db.settings);
     const secretEnvFallbacks = {
       postbackToken,
       shopeeAppSecret: process.env.SHOPEE_APP_SECRET || '',
@@ -3450,6 +3983,26 @@ function registerCashbackRoutes(app) {
       db.settings.vipTiers = normalized;
     }
 
+    if (body.leaderboardSeason && typeof body.leaderboardSeason === 'object') {
+      const rawMode = String(body.leaderboardSeason.mode || 'all_time').trim().toLowerCase();
+      if (!VALID_LEADERBOARD_SEASON_MODES.includes(rawMode)) {
+        return res.status(400).json({ error: 'Chế độ mùa giải BXH không hợp lệ (chỉ hỗ trợ all_time, weekly, monthly, yearly).' });
+      }
+      db.settings.leaderboardSeason = {
+        mode: rawMode,
+        seasonName: String(body.leaderboardSeason.seasonName || '').trim().slice(0, 60),
+        showAllTimeTab: body.leaderboardSeason.showAllTimeTab !== false
+      };
+      leaderboardCache.version = -1;
+    }
+
+    if (body.leaderboardRewards && typeof body.leaderboardRewards === 'object') {
+      db.settings.leaderboardRewards = getNormalizedLeaderboardRewards({
+        leaderboardRewards: body.leaderboardRewards
+      });
+      leaderboardCache.version = -1;
+    }
+
     let adminPasswordChangedUser = null;
     if (body.newAdminPassword) {
       const cleanNewPass = String(body.newAdminPassword).trim();
@@ -3489,6 +4042,104 @@ function registerCashbackRoutes(app) {
     }
     logger.logLeave('POST /api/admin/settings');
     return res.json({ status: 'ok' });
+  }));
+
+  // Admin: Distribute Leaderboard Top 3 Period Rewards (anti-fraud minSpend + budget cap + dedupe + audit)
+  app.post('/api/admin/leaderboard/distribute-rewards', requireAdmin, asyncHandler(async (req, res) => {
+    logger.logEnter('POST /api/admin/leaderboard/distribute-rewards');
+    const db = ensureDbLoaded();
+    const rewards = getNormalizedLeaderboardRewards(db.settings);
+    if (!rewards.enabled) {
+      return res.status(400).json({ error: 'Vui lòng bật "Phần thưởng Top 3 theo kỳ" và lưu cài đặt trước khi chốt thưởng.' });
+    }
+
+    const tab = String(req.body?.tab || 'spend').trim().toLowerCase() === 'cashback' ? 'cashback' : 'spend';
+    const seasonCfg = getNormalizedLeaderboardSeason(db.settings);
+    const periodParam = String(req.body?.period || seasonCfg.mode || 'all_time').trim().toLowerCase();
+    const seasonWindow = resolveSeasonWindow(seasonCfg, periodParam, Date.now());
+    const { rankedSpend, rankedCashback } = computeLeaderboardData(db, seasonWindow);
+    const ranked = tab === 'cashback' ? rankedCashback : rankedSpend;
+
+    const periodTag = `${seasonWindow.activePeriod}_${getVietnamDateKey()}_${tab}`;
+    const awardedLog = Array.isArray(db.settings.leaderboardAwardedPeriods) ? db.settings.leaderboardAwardedPeriods : [];
+    if (awardedLog.includes(periodTag)) {
+      return res.status(409).json({ error: `Kỳ ${seasonWindow.label} (${tab === 'cashback' ? 'Vua Hoàn Tiền' : 'Đại Gia LiLa'}) đã được chốt thưởng hôm nay rồi.` });
+    }
+
+    const rankKeys = ['top1', 'top2', 'top3'];
+    const eligible = ranked
+      .slice(0, 3)
+      .filter((r) => Number(r.totalSpend || 0) >= rewards.minSpend);
+
+    if (eligible.length === 0) {
+      return res.status(400).json({
+        error: `Chưa có thành viên Top 3 nào đạt ngưỡng chi tiêu tối thiểu ${rewards.minSpend.toLocaleString('vi-VN')}đ.`
+      });
+    }
+
+    let totalBudgetUsed = 0;
+    const winners = [];
+
+    for (let i = 0; i < eligible.length; i += 1) {
+      const entry = eligible[i];
+      const rankNum = i + 1;
+      const spec = rewards.ranks[rankKeys[i]];
+      const userObj = (db.users || []).find((u) => u.id === entry.userId && !u.isDeleted && !u.accountLocked);
+      if (!userObj || !spec) continue;
+
+      if (rewards.rewardType === 'wallet_bonus' && spec.value > 0) {
+        if (rewards.budgetLimit > 0 && totalBudgetUsed + spec.value > rewards.budgetLimit) {
+          return res.status(400).json({
+            error: `Tổng thưởng (${(totalBudgetUsed + spec.value).toLocaleString('vi-VN')}đ) vượt ngân sách tối đa/kỳ (${rewards.budgetLimit.toLocaleString('vi-VN')}đ).`
+          });
+        }
+        await withUserLock(userObj.id, async () => {
+          const refId = `lb_reward:${periodTag}:${userObj.id}`;
+          appendLedgerEntry(
+            userObj.id,
+            'referral_bonus',
+            spec.value,
+            refId,
+            `Thưởng Top #${rankNum} ${tab === 'cashback' ? 'Vua Hoàn Tiền' : 'Đại Gia LiLa'} (${seasonWindow.label}): +${spec.value.toLocaleString('vi-VN')}đ`
+          );
+          recalculateUserWallet(userObj.id, { persist: false });
+        });
+        totalBudgetUsed += spec.value;
+      }
+
+      const boardName = tab === 'cashback' ? 'Vua Hoàn Tiền' : 'Đại Gia LiLa';
+      void createNotification({
+        userId: userObj.id,
+        type: 'lb_reward_won',
+        title: `Chúc mừng Top #${rankNum} ${boardName}!`,
+        message: `Bạn nhận được phần thưởng "${spec.label}" & danh hiệu ${spec.badge} (${seasonWindow.label}).`,
+        dedupeKey: `lb_reward:${periodTag}:${userObj.id}`,
+        metadata: { targetView: 'leaderboard', lbTab: tab, rank: rankNum, reward: spec.label, badge: spec.badge }
+      }).catch(() => {});
+
+      winners.push({
+        rank: rankNum,
+        code: userObj.code,
+        name: userObj.name,
+        reward: spec.label,
+        badge: spec.badge
+      });
+    }
+
+    awardedLog.push(periodTag);
+    db.settings.leaderboardAwardedPeriods = awardedLog.slice(-60);
+
+    recordAuditLog(db, {
+      adminId: req.adminUser?.id || 'admin',
+      adminName: req.adminUser?.name || 'Quản Trị Viên',
+      action: 'distribute_leaderboard_rewards',
+      targetId: periodTag,
+      details: { tab, period: seasonWindow.activePeriod, rewardType: rewards.rewardType, totalBudgetUsed, winners }
+    });
+
+    await saveDb(db);
+    logger.logLeave('POST /api/admin/leaderboard/distribute-rewards', { winnersCount: winners.length, totalBudgetUsed });
+    return res.json({ status: 'ok', winners, totalBudgetUsed });
   }));
 
   app.post('/api/admin/orders', requireAdmin, asyncHandler(async (req, res) => {

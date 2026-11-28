@@ -544,13 +544,14 @@ async function searchShopeeProductOffersByKeyword(keyword, appId, appSecret, lim
 /**
  * Search Shopee products by keyword via AddLiveTag Market Search API (data.addlivetag.com/search/market.php).
  */
-async function searchAddlivetagShopeeMarket(keyword, apiKey, limit = 15) {
+async function searchAddlivetagShopeeMarket(keyword, apiKey, limit = 15, options = {}) {
   logger.logEnter('searchAddlivetagShopeeMarket', {
     keywordLength: String(keyword || '').length,
     limit
   });
   const cleanKeyword = String(keyword || '').trim();
   const cleanKey = String(apiKey || process.env.ADDLIVETAG_API_KEY || '').trim();
+  const timeoutMs = Number(options.timeoutMs) > 0 ? Number(options.timeoutMs) : 6500;
 
   if (!cleanKeyword) return [];
   if (!cleanKey) {
@@ -559,19 +560,24 @@ async function searchAddlivetagShopeeMarket(keyword, apiKey, limit = 15) {
     throw err;
   }
 
-  // Keep query concise (4-6 key tokens) so AddLiveTag full-text market search stays fast (<2s)
+  // Keep query concise (up to 6 key tokens + model/unit) so AddLiveTag search stays fast & relevant
   const rawTokens = cleanKeyword.split(/\s+/).filter((t) => t.length >= 2);
-  const unitToks = rawTokens.filter((t) => /\d+(?:ml|l|g|gr|kg|gb|tb|mah)/i.test(t));
+  const unitAndModelToks = rawTokens.filter(
+    (t) => /\d+(?:ml|l|g|gr|kg|gb|tb|mah|w|inch)/i.test(t) || (/[a-z]/i.test(t) && /\d/.test(t))
+  );
   const coreTokens = rawTokens
-    .filter((t) => !/^(la|sp|hc|vn)$/i.test(t) && !unitToks.includes(t))
+    .filter((t) => !/^(la|sp|hc|vn)$/i.test(t) && !unitAndModelToks.includes(t))
     .slice(0, 5);
-  const conciseKeyword = [...coreTokens, ...unitToks.slice(0, 1)].join(' ').trim() || cleanKeyword;
+  const conciseKeyword = [...coreTokens, ...unitAndModelToks.slice(0, 2)].join(' ').trim() || cleanKeyword;
+
+  const allowedSorts = new Set(['revenue_all', 'sold7d', 'sold30d', 'growth', 'sales']);
+  const safeSort = allowedSorts.has(options.sort) ? options.sort : 'revenue_all';
 
   const safeLimit = Math.min(30, Math.max(1, Number(limit) || 15));
   const url = new URL('https://data.addlivetag.com/search/market.php');
   url.searchParams.set('q', conciseKeyword);
   url.searchParams.set('limit', String(safeLimit));
-  url.searchParams.set('sort', 'revenue_all');
+  url.searchParams.set('sort', safeSort);
 
   let response;
   try {
@@ -582,7 +588,7 @@ async function searchAddlivetagShopeeMarket(keyword, apiKey, limit = 15) {
         Accept: 'application/json',
         'User-Agent': 'HoanTienShop/1.0'
       },
-      signal: AbortSignal.timeout(8500)
+      signal: AbortSignal.timeout(timeoutMs)
     });
   } catch (err) {
     const isTimeout = err?.name === 'AbortError' || err?.name === 'TimeoutError' || /timeout|aborted/i.test(String(err?.message || ''));
@@ -615,6 +621,7 @@ async function searchAddlivetagShopeeMarket(keyword, apiKey, limit = 15) {
     const commPercentage = rawCommRate > 0 && rawCommRate < 1 ? rawCommRate * 100 : rawCommRate;
     const itemId = String(p.itemId || '').trim();
     const shopId = String(p.shopId || '').trim();
+    const rawRating = Number(p.rating || 0);
     return {
       itemId,
       shopId,
@@ -627,6 +634,13 @@ async function searchAddlivetagShopeeMarket(keyword, apiKey, limit = 15) {
       commissionRate: Number.isFinite(commPercentage) && commPercentage > 0 ? Number(commPercentage.toFixed(2)) : 0,
       commission: 0,
       sales: Number(p.sales || 0) || 0,
+      rating: Number.isFinite(rawRating) && rawRating > 0 && rawRating <= 5 ? Number(rawRating.toFixed(1)) : 0,
+      sold7d: Number(p.sold7d || 0) || 0,
+      sold30d: Number(p.sold30d || 0) || 0,
+      growth: Number(p.growth || 0) || 0,
+      revenueAll: Number(p.revenueAll || 0) || 0,
+      revenue30d: Number(p.revenue30d || 0) || 0,
+      catId: Number(p.catId || 0) || 0,
       productLink:
         String(p.productLink || '').trim() ||
         (shopId && itemId ? `https://shopee.vn/product/${shopId}/${itemId}` : '')

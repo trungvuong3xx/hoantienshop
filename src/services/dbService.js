@@ -332,7 +332,82 @@ function sanitizeUser(user) {
     totalApprovedSpend: Math.max(0, Math.round(Number(user.totalApprovedSpend || 0))),
     vipTier: user.vipTier || 'bronze',
     avatarUrl: user.avatarUrl || '',
+    hideFromLeaderboard: Boolean(user.hideFromLeaderboard),
+    leaderboardAnonymous: Boolean(user.leaderboardAnonymous),
+    leaderboardHideAmount: Boolean(user.leaderboardHideAmount),
+    lbNotifyDisabled: Boolean(user.lbNotifyDisabled),
     createdAt: user.createdAt || ''
+  };
+}
+
+const VALID_LEADERBOARD_SEASON_MODES = ['all_time', 'weekly', 'monthly', 'yearly'];
+
+function getNormalizedLeaderboardSeason(settings = {}) {
+  const raw = settings?.leaderboardSeason && typeof settings.leaderboardSeason === 'object'
+    ? settings.leaderboardSeason
+    : {};
+  const rawMode = String(raw.mode || 'all_time').trim().toLowerCase();
+  const mode = VALID_LEADERBOARD_SEASON_MODES.includes(rawMode) ? rawMode : 'all_time';
+  const seasonName = String(raw.seasonName || '').trim().slice(0, 60);
+  const showAllTimeTab = raw.showAllTimeTab !== false;
+  return { mode, seasonName, showAllTimeTab };
+}
+
+const VALID_LB_REWARD_TYPES = ['cashback_boost', 'wallet_bonus', 'badge_only'];
+
+function buildRewardLabel(type, value, boostDays, badge, customLabel) {
+  const cleanCustom = String(customLabel || '').trim().slice(0, 60);
+  if (cleanCustom) return cleanCustom;
+  const val = Math.max(0, Math.round(Number(value || 0)));
+  if (type === 'wallet_bonus' && val > 0) {
+    return `Thưởng ${val.toLocaleString('vi-VN')}đ`;
+  }
+  if (type === 'cashback_boost' && val > 0) {
+    return `+${val}% hoàn tiền (${boostDays} ngày)`;
+  }
+  return badge || 'Huy hiệu Top kỳ';
+}
+
+function getNormalizedLeaderboardRewards(settings = {}) {
+  const raw = settings?.leaderboardRewards && typeof settings.leaderboardRewards === 'object'
+    ? settings.leaderboardRewards
+    : {};
+  const rawType = String(raw.rewardType || 'cashback_boost').trim().toLowerCase();
+  const rewardType = VALID_LB_REWARD_TYPES.includes(rawType) ? rawType : 'cashback_boost';
+  const boostDays = Math.max(1, Math.min(90, Math.round(Number(raw.boostDays ?? 7))));
+  const minSpend = Math.max(0, Math.round(Number(raw.minSpend ?? 500000)));
+  const budgetLimit = Math.max(0, Math.round(Number(raw.budgetLimit ?? 100000)));
+
+  const r1 = raw.ranks?.top1 && typeof raw.ranks.top1 === 'object' ? raw.ranks.top1 : {};
+  const r2 = raw.ranks?.top2 && typeof raw.ranks.top2 === 'object' ? raw.ranks.top2 : {};
+  const r3 = raw.ranks?.top3 && typeof raw.ranks.top3 === 'object' ? raw.ranks.top3 : {};
+
+  const top1Val = Math.max(0, Math.round(Number(r1.value ?? (rewardType === 'wallet_bonus' ? 50000 : 3))));
+  const top2Val = Math.max(0, Math.round(Number(r2.value ?? (rewardType === 'wallet_bonus' ? 30000 : 2))));
+  const top3Val = Math.max(0, Math.round(Number(r3.value ?? (rewardType === 'wallet_bonus' ? 15000 : 1))));
+
+  const top1Badge = String(r1.badge || 'Quán Quân Kỳ').trim().slice(0, 32);
+  const top2Badge = String(r2.badge || 'Á Quân Kỳ').trim().slice(0, 32);
+  const top3Badge = String(r3.badge || 'Top 3 Kỳ').trim().slice(0, 32);
+
+  const top1Label = buildRewardLabel(rewardType, top1Val, boostDays, top1Badge, r1.label ?? raw.top1);
+  const top2Label = buildRewardLabel(rewardType, top2Val, boostDays, top2Badge, r2.label ?? raw.top2);
+  const top3Label = buildRewardLabel(rewardType, top3Val, boostDays, top3Badge, r3.label ?? raw.top3);
+
+  return {
+    enabled: Boolean(raw.enabled),
+    rewardType,
+    minSpend,
+    budgetLimit,
+    boostDays,
+    top1: top1Label,
+    top2: top2Label,
+    top3: top3Label,
+    ranks: {
+      top1: { value: top1Val, badge: top1Badge, label: top1Label },
+      top2: { value: top2Val, badge: top2Badge, label: top2Label },
+      top3: { value: top3Val, badge: top3Badge, label: top3Label }
+    }
   };
 }
 
@@ -1127,6 +1202,10 @@ async function initPostgresIfConfigured() {
         ALTER TABLE users ADD COLUMN IF NOT EXISTS total_approved_spend BIGINT DEFAULT 0;
         ALTER TABLE users ADD COLUMN IF NOT EXISTS vip_tier TEXT DEFAULT 'bronze';
         ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT;
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS hide_from_leaderboard BOOLEAN DEFAULT FALSE;
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS leaderboard_anonymous BOOLEAN DEFAULT FALSE;
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS leaderboard_hide_amount BOOLEAN DEFAULT FALSE;
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS lb_notify_disabled BOOLEAN DEFAULT FALSE;
         CREATE TABLE IF NOT EXISTS user_avatars (
           id TEXT PRIMARY KEY,
           user_id TEXT NOT NULL,
@@ -1163,6 +1242,7 @@ async function initPostgresIfConfigured() {
 
         -- Phase 4 Performance Composite Indexes (Idempotent)
         CREATE INDEX IF NOT EXISTS idx_orders_user_status_created ON orders(user_id, status, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_orders_status_updated_at ON orders(status, updated_at DESC);
         CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at DESC);
         CREATE INDEX IF NOT EXISTS idx_ledger_user_created ON ledger(user_id, created_at DESC);
         CREATE INDEX IF NOT EXISTS idx_withdrawals_user_status ON withdrawals(user_id, status, created_at DESC);
@@ -1457,7 +1537,7 @@ async function batchSyncUsers(client, users) {
     for (const u of chunk) {
       if (!u || !u.id) continue;
       valuePlaceholders.push(
-        `($${pIdx}, $${pIdx + 1}, $${pIdx + 2}, $${pIdx + 3}, $${pIdx + 4}, $${pIdx + 5}, $${pIdx + 6}, $${pIdx + 7}, $${pIdx + 8}, $${pIdx + 9}, $${pIdx + 10}, $${pIdx + 11}, $${pIdx + 12}, $${pIdx + 13}, $${pIdx + 14}, $${pIdx + 15}, $${pIdx + 16}, $${pIdx + 17}, $${pIdx + 18}, $${pIdx + 19}, $${pIdx + 20}, $${pIdx + 21}, $${pIdx + 22}, $${pIdx + 23}, $${pIdx + 24}, $${pIdx + 25})`
+        `($${pIdx}, $${pIdx + 1}, $${pIdx + 2}, $${pIdx + 3}, $${pIdx + 4}, $${pIdx + 5}, $${pIdx + 6}, $${pIdx + 7}, $${pIdx + 8}, $${pIdx + 9}, $${pIdx + 10}, $${pIdx + 11}, $${pIdx + 12}, $${pIdx + 13}, $${pIdx + 14}, $${pIdx + 15}, $${pIdx + 16}, $${pIdx + 17}, $${pIdx + 18}, $${pIdx + 19}, $${pIdx + 20}, $${pIdx + 21}, $${pIdx + 22}, $${pIdx + 23}, $${pIdx + 24}, $${pIdx + 25}, $${pIdx + 26}, $${pIdx + 27}, $${pIdx + 28}, $${pIdx + 29})`
       );
       params.push(
         u.id,
@@ -1487,9 +1567,13 @@ async function batchSyncUsers(client, users) {
         Math.max(0, Math.round(Number(u.totalApprovedSpend || 0))),
         String(u.vipTier || 'bronze'),
         u.avatarUrl || '',
+        Boolean(u.hideFromLeaderboard),
+        Boolean(u.leaderboardAnonymous),
+        Boolean(u.leaderboardHideAmount),
+        Boolean(u.lbNotifyDisabled),
         u.createdAt ? new Date(u.createdAt) : new Date()
       );
-      pIdx += 26;
+      pIdx += 30;
     }
 
     if (valuePlaceholders.length === 0) continue;
@@ -1500,7 +1584,7 @@ async function batchSyncUsers(client, users) {
         referred_by, balance_available, balance_pending, total_earned,
         total_withdrawn, bank_name, bank_account, bank_owner, account_locked,
         is_deleted, deleted_at, deleted_by_admin_id, has_negative_balance, custom_cashback_percent,
-        total_approved_spend, vip_tier, avatar_url, created_at
+        total_approved_spend, vip_tier, avatar_url, hide_from_leaderboard, leaderboard_anonymous, leaderboard_hide_amount, lb_notify_disabled, created_at
       )
       VALUES ${valuePlaceholders.join(', ')}
       ON CONFLICT (id) DO UPDATE SET
@@ -1527,7 +1611,11 @@ async function batchSyncUsers(client, users) {
         custom_cashback_percent = EXCLUDED.custom_cashback_percent,
         total_approved_spend = EXCLUDED.total_approved_spend,
         vip_tier = EXCLUDED.vip_tier,
-        avatar_url = EXCLUDED.avatar_url
+        avatar_url = EXCLUDED.avatar_url,
+        hide_from_leaderboard = EXCLUDED.hide_from_leaderboard,
+        leaderboard_anonymous = EXCLUDED.leaderboard_anonymous,
+        leaderboard_hide_amount = EXCLUDED.leaderboard_hide_amount,
+        lb_notify_disabled = EXCLUDED.lb_notify_disabled
     `;
     await client.query(query, params);
   }
@@ -1983,9 +2071,9 @@ async function persistUserToPostgres(user, customClient = null) {
         referred_by, balance_available, balance_pending, total_earned,
         total_withdrawn, bank_name, bank_account, bank_owner, account_locked,
         is_deleted, deleted_at, deleted_by_admin_id, has_negative_balance, custom_cashback_percent,
-        total_approved_spend, vip_tier, avatar_url, created_at
+        total_approved_spend, vip_tier, avatar_url, hide_from_leaderboard, leaderboard_anonymous, leaderboard_hide_amount, lb_notify_disabled, created_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30)
       ON CONFLICT (id) DO UPDATE SET
         code = EXCLUDED.code,
         name = EXCLUDED.name,
@@ -2010,7 +2098,11 @@ async function persistUserToPostgres(user, customClient = null) {
         custom_cashback_percent = EXCLUDED.custom_cashback_percent,
         total_approved_spend = EXCLUDED.total_approved_spend,
         vip_tier = EXCLUDED.vip_tier,
-        avatar_url = EXCLUDED.avatar_url
+        avatar_url = EXCLUDED.avatar_url,
+        hide_from_leaderboard = EXCLUDED.hide_from_leaderboard,
+        leaderboard_anonymous = EXCLUDED.leaderboard_anonymous,
+        leaderboard_hide_amount = EXCLUDED.leaderboard_hide_amount,
+        lb_notify_disabled = EXCLUDED.lb_notify_disabled
       RETURNING *;
     `;
     const params = [
@@ -2041,6 +2133,10 @@ async function persistUserToPostgres(user, customClient = null) {
       Math.max(0, Math.round(Number(user.totalApprovedSpend || 0))),
       String(user.vipTier || 'bronze'),
       user.avatarUrl || '',
+      Boolean(user.hideFromLeaderboard),
+      Boolean(user.leaderboardAnonymous),
+      Boolean(user.leaderboardHideAmount),
+      Boolean(user.lbNotifyDisabled),
       user.createdAt ? new Date(user.createdAt) : new Date()
     ];
     const res = await client.query(query, params);
@@ -3755,5 +3851,8 @@ module.exports = {
   DEFAULT_VIP_TIERS,
   getNormalizedVipTiers,
   resolveVipTier,
-  setTierUpgradeListener
+  setTierUpgradeListener,
+  VALID_LEADERBOARD_SEASON_MODES,
+  getNormalizedLeaderboardSeason,
+  getNormalizedLeaderboardRewards
 };

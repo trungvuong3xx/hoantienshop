@@ -16,7 +16,8 @@
     "test:browser": "node tests/withdrawal-ui.e2e.js",
     "test:csv:postgres": "node tests/csv-postgres.integration.js",
     "test:csv:browser": "node tests/csv-import.e2e.js",
-    "test:capacity": "node tests/load.capacity.js"
+    "test:capacity": "node tests/load.capacity.js",
+    "test:compare-accuracy": "node tests/compare/benchmark_compare.js --strict"
   },
   "dependencies": {
     "cors": "^2.8.5",

@@ -68,14 +68,27 @@ let publicConfig = {
   zaloWidgetEnabled: true
 };
 
-// Capture ?ref=... referral code from URL if present
+// Capture ?ref=... referral code & ?src=lb_share deep link attribution from URL if present
 try {
   const urlParams = new URLSearchParams(window.location.search);
   const urlRefCode = urlParams.get('ref');
+  const urlRefSrc = String(urlParams.get('src') || '').trim().toLowerCase();
   if (urlRefCode) {
     const cleanRef = urlRefCode.trim().toUpperCase();
     safeStorage.set('hoantienshop_ref', cleanRef, sessionStorage);
     safeStorage.set('saved_ref_code', cleanRef, localStorage);
+    if (urlRefSrc === 'lb_share') {
+      safeStorage.set('lila_ref_source', 'lb_share', localStorage);
+      const hitKey = `lila_lb_share_hit_${cleanRef}`;
+      if (!safeStorage.get(hitKey, sessionStorage)) {
+        safeStorage.set(hitKey, '1', sessionStorage);
+        fetch('/api/referral/track-share-hit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ref: cleanRef })
+        }).catch(() => {});
+      }
+    }
   }
 } catch {}
 
@@ -1103,6 +1116,9 @@ function syncAccountProfileUi({ populateForm = false } = {}) {
     });
     syncAccountBankPasswordRequirement();
   }
+  if (typeof syncLeaderboardPrivacyButton === 'function') {
+    syncLeaderboardPrivacyButton();
+  }
 }
 
 // Sync Auth UI
@@ -1541,7 +1557,9 @@ async function handleDoRegister() {
 
   try {
     const turnstileToken = getTurnstileToken('registerTurnstile');
+    const savedRefSrc = safeStorage.get('lila_ref_source', localStorage) || '';
     const payload = { name, phone, password, refCode };
+    if (savedRefSrc) payload.refSource = savedRefSrc;
     if (email) payload.email = email;
     if (turnstileToken) payload.turnstileToken = turnstileToken;
 
@@ -2294,16 +2312,37 @@ function renderTikTokComparisonResults(data, sourceItem, targetPlatform = 'tikto
   }
 
   const best = data?.bestComparison || null;
-  const bestId = best?.bestTikTokProductId || best?.bestProductId || '';
-  const headlineBadgeHtml =
-    best && best.label
-      ? `<span class="tt-compare-headline-badge ${getCompareBadgeClass(best.status)}">${escapeHtml(best.label.toUpperCase())}</span>`
-      : '';
+  const bestId = best?.bestTikTokProductId || best?.bestProductId || items[0]?.productId || items[0]?.itemId || '';
+
+  const formatCompareTime = (isoStr) => {
+    if (!isoStr) return '';
+    const d = new Date(isoStr);
+    if (Number.isNaN(d.getTime())) return '';
+    return d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+  };
+  const fetchedTimeLabel = formatCompareTime(data?.fetchedAt);
+
+  const formatCompactSales = (count) => {
+    const n = Math.round(Number(count) || 0);
+    if (n <= 0) return '';
+    if (n >= 10000) return `${(n / 1000).toFixed(0)}k+`;
+    if (n >= 1000) return `${(n / 1000).toFixed(1).replace(/\.0$/, '')}k+`;
+    return `${n.toLocaleString('vi-VN')}`;
+  };
+
+  const getMatchTierBadge = (tier) => {
+    if (tier === 'exact') return '<span class="tt-compare-match-pill is-exact">Khớp chính xác</span>';
+    if (tier === 'high') return '<span class="tt-compare-match-pill is-high">Cùng dòng SP</span>';
+    return '<span class="tt-compare-match-pill is-similar">Gợi ý gần giống</span>';
+  };
 
   const cardsHtml = items
     .map((prod) => {
       const pid = String(prod.productId || prod.itemId || '').trim();
       const sid = String(prod.shopId || '').trim();
+      const vToken = String(prod.verifyToken || '').trim();
+      const mScore = Number.isFinite(Number(prod.matchScore)) ? String(prod.matchScore) : '';
+      const mTier = String(prod.matchTier || (prod.matchQuality === 'exact' ? 'high' : 'similar'));
       const safeImg = safeHttpsUrl(prod.imageUrl);
       const thumbHtml = safeImg
         ? `<img src="${safeImg}" alt="${escapeHtml(prod.title)}" class="tt-compare-thumb" referrerpolicy="no-referrer" loading="lazy" />`
@@ -2311,12 +2350,38 @@ function renderTikTokComparisonResults(data, sourceItem, targetPlatform = 'tikto
 
       const isBestDeal =
         best &&
-        (best.status === 'tiktok_cheaper' || best.status === 'target_cheaper') &&
+        (best.status === 'tiktok_cheaper' || best.status === 'shopee_cheaper' || best.status === 'target_cheaper') &&
+        (mTier === 'exact' || mTier === 'high') &&
         bestId === pid;
       const badgeHtml = prod.comparisonLabel
         ? `<span class="tt-compare-card-badge ${getCompareBadgeClass(prod.comparisonStatus)}">${escapeHtml(prod.comparisonLabel)}</span>`
         : '';
 
+      const highlightHtml =
+        prod.highlightBadge && prod.highlightBadge.label
+          ? `<span class="tt-compare-highlight-pill is-${escapeHtml(prod.highlightBadge.type || 'default')}">${escapeHtml(prod.highlightBadge.label)}</span>`
+          : '';
+
+      const trustParts = [];
+      const ratingVal = Number(prod.rating || 0);
+      const salesVal = Number(prod.sales || prod.unitsSold || 0);
+      const sold7dVal = Number(prod.sold7d || 0);
+      if (ratingVal > 0) trustParts.push(`⭐ ${ratingVal.toFixed(1)}`);
+      if (salesVal > 0) trustParts.push(`Đã bán ${formatCompactSales(salesVal)}`);
+      if (sold7dVal >= 20) trustParts.push(`+${formatCompactSales(sold7dVal)} tuần qua`);
+      const trustLineHtml =
+        trustParts.length > 0
+          ? `<div class="tt-compare-trust-line">${escapeHtml(trustParts.join(' • '))}</div>`
+          : '';
+
+      const trustWarningHtml =
+        prod.trustWarning && prod.trustWarning.message
+          ? `<div class="tt-compare-trust-warning">${escapeHtml(prod.trustWarning.message)}</div>`
+          : '';
+
+      const priceDisplay = prod.hasPriceRange
+        ? `Từ ${fmtVnd(prod.price)} <span class="tt-compare-price-range-tag">Nhiều phân loại</span>`
+        : fmtVnd(prod.price);
       const cashbackText = prod.estimatedCashback > 0 ? `+ ${fmtVnd(prod.estimatedCashback)}` : '0đ';
 
       return `
@@ -2326,20 +2391,26 @@ function renderTikTokComparisonResults(data, sourceItem, targetPlatform = 'tikto
             <div class="tt-compare-meta">
               <div class="tt-compare-prod-title" title="${escapeHtml(prod.title)}">${escapeHtml(prod.title)}</div>
               <div class="tt-compare-shop">Shop: ${escapeHtml(prod.shopName || ui.platformName)}</div>
-              ${badgeHtml}
+              ${trustLineHtml}
+              <div class="tt-compare-badges-row">
+                ${getMatchTierBadge(mTier)}
+                ${highlightHtml}
+                ${badgeHtml}
+              </div>
             </div>
           </div>
 
           <div class="tt-compare-pricing">
             <div class="tt-compare-price-row">
               <span>${ui.priceLabel}</span>
-              <strong>${fmtVnd(prod.price)}</strong>
+              <strong>${priceDisplay}</strong>
             </div>
             <div class="tt-compare-price-row is-cashback">
               <span>Hoàn tối đa ~</span>
               <strong>${cashbackText}</strong>
             </div>
           </div>
+          ${trustWarningHtml}
 
           <div class="tt-compare-actions">
             <button
@@ -2348,6 +2419,9 @@ function renderTikTokComparisonResults(data, sourceItem, targetPlatform = 'tikto
               data-tt-buy-id="${escapeHtml(pid)}"
               data-tt-shop-id="${escapeHtml(sid)}"
               data-tt-target="${escapeHtml(targetPlatform)}"
+              data-tt-verify-token="${escapeHtml(vToken)}"
+              data-tt-match-score="${escapeHtml(mScore)}"
+              data-tt-match-tier="${escapeHtml(mTier)}"
             >
               ${UI_ICONS.shoppingCart}
               <span>${ui.ctaText}</span>
@@ -2366,7 +2440,9 @@ function renderTikTokComparisonResults(data, sourceItem, targetPlatform = 'tikto
       </div>
     </div>
     <div class="tt-compare-grid">${cardsHtml}</div>
-    <p class="tt-compare-disclaimer">${escapeHtml(disclaimer)}</p>
+    <p class="tt-compare-disclaimer">
+      ${fetchedTimeLabel ? `<span class="tt-compare-freshness">Đối chiếu lúc ${escapeHtml(fetchedTimeLabel)}</span> • ` : ''}${escapeHtml(disclaimer)}
+    </p>
   `;
 
   sec.querySelectorAll('[data-tt-buy-id]').forEach((btn) => {
@@ -2374,12 +2450,15 @@ function renderTikTokComparisonResults(data, sourceItem, targetPlatform = 'tikto
       const pid = btn.getAttribute('data-tt-buy-id');
       const sid = btn.getAttribute('data-tt-shop-id') || '';
       const target = btn.getAttribute('data-tt-target') || targetPlatform;
-      if (pid) void handleBuyTikTokCompareItem(btn, pid, target, sid);
+      const vToken = btn.getAttribute('data-tt-verify-token') || '';
+      const mScore = btn.getAttribute('data-tt-match-score') || '';
+      const mTier = btn.getAttribute('data-tt-match-tier') || '';
+      if (pid) void handleBuyTikTokCompareItem(btn, pid, target, sid, { verifyToken: vToken, matchScore: mScore, matchTier: mTier });
     });
   });
 }
 
-async function handleBuyTikTokCompareItem(btnEl, productId, targetPlatform = 'tiktok', shopId = '') {
+async function handleBuyTikTokCompareItem(btnEl, productId, targetPlatform = 'tiktok', shopId = '', meta = {}) {
   const cleanId = String(productId || '').trim();
   const ui = getCompareTargetUi(targetPlatform);
   const flightKey = `${targetPlatform}:${cleanId}`;
@@ -2408,8 +2487,19 @@ async function handleBuyTikTokCompareItem(btnEl, productId, targetPlatform = 'ti
 
   try {
     const reqBody = ui.isShopee
-      ? { itemId: cleanId, ...(shopId ? { shopId } : {}) }
-      : { productId: cleanId };
+      ? {
+          itemId: cleanId,
+          ...(shopId ? { shopId } : {}),
+          ...(meta?.verifyToken ? { verifyToken: meta.verifyToken } : {}),
+          ...(meta?.matchScore ? { matchScore: Number(meta.matchScore) } : {}),
+          ...(meta?.matchTier ? { matchTier: meta.matchTier } : {})
+        }
+      : {
+          productId: cleanId,
+          ...(meta?.verifyToken ? { verifyToken: meta.verifyToken } : {}),
+          ...(meta?.matchScore ? { matchScore: Number(meta.matchScore) } : {}),
+          ...(meta?.matchTier ? { matchTier: meta.matchTier } : {})
+        };
     const res = await apiFetch(ui.linkEndpoint, {
       method: 'POST',
       body: JSON.stringify(reqBody)
@@ -2424,20 +2514,27 @@ async function handleBuyTikTokCompareItem(btnEl, productId, targetPlatform = 'ti
     if (capturedSeq !== tiktokCompareRenderSeq) {
       return;
     }
+
+    const opened = window.open(safeAffUrl, '_blank', 'noopener');
+    const guestHintHtml =
+      res.isLoggedIn === false
+        ? '<div class="tt-compare-guest-hint">Đăng nhập tài khoản LiLa trước khi mua để được ghi nhận hoàn tiền.</div>'
+        : '';
+
     if (feedbackEl) {
       feedbackEl.innerHTML = `
-        <div class="tt-compare-ready-links">
+        <div class="tt-compare-ready-links ${!opened ? 'is-highlight' : ''}">
           <a href="${safeAffUrl}" target="_blank" rel="noopener" class="tt-compare-open-now">${ui.openNowText}</a>
           <button type="button" class="tt-compare-copy-btn" data-copy="${safeAffUrl}" data-copy-msg="${ui.copyMsg}">Sao chép</button>
         </div>
+        ${guestHintHtml}
       `;
     }
 
-    const opened = window.open(safeAffUrl, '_blank', 'noopener');
     if (opened) {
       showToast(`Đã tạo link hoàn tiền ${ui.platformName} thành công!`);
     } else {
-      showToast(`Đã tạo link ${ui.platformName}! Bấm "${ui.openNowText}" nếu trình duyệt chặn tự mở.`);
+      showToast(`Đã tạo link ${ui.platformName}! Bấm "${ui.openNowText}" để mở ngay.`);
     }
   } catch (err) {
     if (capturedSeq !== tiktokCompareRenderSeq) {
@@ -2646,6 +2743,9 @@ on('accBankName', 'change', () => {
   } else {
     if (val) accountPayoutState.lastBank = val;
     syncAccountBankPasswordRequirement();
+  }
+  if (typeof syncLeaderboardPrivacyButton === 'function') {
+    syncLeaderboardPrivacyButton();
   }
 });
 on('accBankAccount', 'input', syncAccountBankPasswordRequirement);
@@ -3849,6 +3949,32 @@ function loadAdminSettings(settings) {
     vipEnabledEl.checked = s.vipTiersEnabled !== false;
   }
   renderAdminVipTiersTable(s.vipTiers || []);
+
+  const lbSeason = s.leaderboardSeason || {};
+  const lbModeEl = document.getElementById('admLbSeasonMode');
+  if (lbModeEl) lbModeEl.value = lbSeason.mode || 'all_time';
+  const lbNameEl = document.getElementById('admLbSeasonName');
+  if (lbNameEl) lbNameEl.value = lbSeason.seasonName || '';
+  const lbShowAllEl = document.getElementById('admLbShowAllTimeTab');
+  if (lbShowAllEl) lbShowAllEl.checked = lbSeason.showAllTimeTab !== false;
+
+  const lbRew = s.leaderboardRewards || {};
+  const lbRewEnEl = document.getElementById('admLbRewardsEnabled');
+  if (lbRewEnEl) lbRewEnEl.checked = Boolean(lbRew.enabled);
+  const lbRewTypeEl = document.getElementById('admLbRewardType');
+  if (lbRewTypeEl) lbRewTypeEl.value = lbRew.rewardType || 'cashback_boost';
+  setVal('admLbRewardsMinSpend', lbRew.minSpend ?? 500000);
+  setVal('admLbRewardsBoostDays', lbRew.boostDays ?? 7);
+  setVal('admLbRewardsBudgetLimit', lbRew.budgetLimit ?? 100000);
+  setVal('admLbRewardVal1', lbRew.ranks?.top1?.value ?? 3);
+  setVal('admLbRewardVal2', lbRew.ranks?.top2?.value ?? 2);
+  setVal('admLbRewardVal3', lbRew.ranks?.top3?.value ?? 1);
+  setVal('admLbRewardBadge1', lbRew.ranks?.top1?.badge || 'Quán Quân Kỳ');
+  setVal('admLbRewardBadge2', lbRew.ranks?.top2?.badge || 'Á Quân Kỳ');
+  setVal('admLbRewardBadge3', lbRew.ranks?.top3?.badge || 'Top 3 Kỳ');
+  setVal('admLbRewardTop1', lbRew.top1 || '');
+  setVal('admLbRewardTop2', lbRew.top2 || '');
+  setVal('admLbRewardTop3', lbRew.top3 || '');
 }
 
 const ADMIN_PAGE_LIMIT = 50;
@@ -6179,6 +6305,130 @@ on('toggleShibaCompanionBtn', 'click', () => {
   syncShibaToggleButton();
 });
 
+function syncLeaderboardPrivacyButton() {
+  const btn = document.getElementById('toggleLeaderboardPrivacyBtn');
+  const label = document.getElementById('toggleLeaderboardPrivacyLabel');
+  if (btn && label) {
+    const isHidden = Boolean(currentUser?.hideFromLeaderboard);
+    btn.setAttribute('aria-pressed', isHidden ? 'false' : 'true');
+    label.textContent = isHidden ? 'Đang ẩn để bảo mật' : 'Đang hiển thị công khai';
+  }
+  const anonBtn = document.getElementById('toggleLbAnonymousBtn');
+  const anonLabel = document.getElementById('toggleLbAnonymousLabel');
+  if (anonBtn && anonLabel) {
+    const isAnon = Boolean(currentUser?.leaderboardAnonymous);
+    anonBtn.setAttribute('aria-pressed', isAnon ? 'true' : 'false');
+    anonLabel.textContent = isAnon ? 'Đang ẩn danh ("Người dùng ẩn danh")' : 'Hiện tên đầy đủ của bạn';
+  }
+  const amtBtn = document.getElementById('toggleLbHideAmountBtn');
+  const amtLabel = document.getElementById('toggleLbHideAmountLabel');
+  if (amtBtn && amtLabel) {
+    const hideAmt = Boolean(currentUser?.leaderboardHideAmount);
+    amtBtn.setAttribute('aria-pressed', hideAmt ? 'true' : 'false');
+    amtLabel.textContent = hideAmt ? 'Đang che số tiền với người khác' : 'Đang hiển thị số tiền';
+  }
+  const celBtn = document.getElementById('toggleLbCelebrateBtn');
+  const celLabel = document.getElementById('toggleLbCelebrateLabel');
+  if (celBtn && celLabel) {
+    const disabled = safeStorage.get('lila_lb_celebrate_disabled', localStorage) === '1';
+    celBtn.setAttribute('aria-pressed', disabled ? 'false' : 'true');
+    celLabel.textContent = disabled ? 'Đã tắt hiệu ứng lên hạng' : 'Đang bật pháo giấy & Shiba';
+  }
+  const ntfBtn = document.getElementById('toggleLbNotifyBtn');
+  const ntfLabel = document.getElementById('toggleLbNotifyLabel');
+  if (ntfBtn && ntfLabel) {
+    const disabled = Boolean(currentUser?.lbNotifyDisabled);
+    ntfBtn.setAttribute('aria-pressed', disabled ? 'false' : 'true');
+    ntfLabel.textContent = disabled ? 'Đã tắt thông báo BXH' : 'Nhắc khi bị vượt hoặc sắp lên hạng';
+  }
+}
+
+async function updateLeaderboardPrivacySettings(patch, toastMsg) {
+  if (!authToken || !currentUser) return;
+  const btns = [
+    document.getElementById('toggleLeaderboardPrivacyBtn'),
+    document.getElementById('toggleLbAnonymousBtn'),
+    document.getElementById('toggleLbHideAmountBtn')
+  ].filter(Boolean);
+  btns.forEach((b) => { b.disabled = true; });
+  try {
+    const res = await apiFetch('/api/user/leaderboard-privacy', {
+      method: 'POST',
+      body: JSON.stringify(patch)
+    });
+    if (res?.user) {
+      currentUser = { ...currentUser, ...res.user };
+    } else {
+      currentUser = { ...currentUser, ...patch };
+    }
+    syncLeaderboardPrivacyButton();
+    if (toastMsg) showToast(toastMsg);
+    if (typeof loadPublicLeaderboard === 'function') {
+      loadPublicLeaderboard();
+    }
+  } catch (err) {
+    showToast(err.message || 'Không thể cập nhật quyền riêng tư BXH.');
+  } finally {
+    btns.forEach((b) => { b.disabled = false; });
+  }
+}
+
+async function setLeaderboardPrivacy(hideFromLeaderboard) {
+  const next = Boolean(hideFromLeaderboard);
+  return updateLeaderboardPrivacySettings(
+    { hideFromLeaderboard: next },
+    next
+      ? 'Đã ẩn thông tin của bạn khỏi Bảng xếp hạng công khai.'
+      : 'Đã bật hiển thị tên của bạn trên Bảng xếp hạng!'
+  );
+}
+
+on('toggleLeaderboardPrivacyBtn', 'click', () => {
+  if (!authToken || !currentUser) return;
+  setLeaderboardPrivacy(!Boolean(currentUser.hideFromLeaderboard));
+});
+
+on('toggleLbAnonymousBtn', 'click', () => {
+  if (!authToken || !currentUser) return;
+  const next = !Boolean(currentUser.leaderboardAnonymous);
+  updateLeaderboardPrivacySettings(
+    { leaderboardAnonymous: next },
+    next
+      ? 'Đã bật chế độ ẩn danh — bạn vẫn được tính hạng nhưng tên sẽ được ẩn với người khác.'
+      : 'Đã tắt chế độ ẩn danh — hiển thị tên đầy đủ của bạn.'
+  );
+});
+
+on('toggleLbHideAmountBtn', 'click', () => {
+  if (!authToken || !currentUser) return;
+  const next = !Boolean(currentUser.leaderboardHideAmount);
+  updateLeaderboardPrivacySettings(
+    { leaderboardHideAmount: next },
+    next
+      ? 'Đã ẩn số tiền cụ thể của bạn với người khác trên Bảng xếp hạng.'
+      : 'Đã bật hiển thị số tiền của bạn trên Bảng xếp hạng.'
+  );
+});
+
+on('toggleLbCelebrateBtn', 'click', () => {
+  const wasDisabled = safeStorage.get('lila_lb_celebrate_disabled', localStorage) === '1';
+  const nextDisabled = !wasDisabled;
+  safeStorage.set('lila_lb_celebrate_disabled', nextDisabled ? '1' : '0', localStorage);
+  syncLeaderboardPrivacyButton();
+  showToast(nextDisabled ? 'Đã tắt hiệu ứng chúc mừng lên hạng.' : 'Đã bật hiệu ứng pháo giấy & Shiba khi lên hạng!');
+});
+
+on('toggleLbNotifyBtn', 'click', () => {
+  if (!authToken || !currentUser) return;
+  const nextDisabled = !Boolean(currentUser.lbNotifyDisabled);
+  updateLeaderboardPrivacySettings(
+    { lbNotifyDisabled: nextDisabled },
+    nextDisabled
+      ? 'Đã tắt thông báo biến động Bảng xếp hạng.'
+      : 'Đã bật thông báo khi bị vượt hạng hoặc sắp lên hạng!'
+  );
+});
+
 let shibaAssetsLoaded = false;
 function loadShibaCompanionAssets() {
   if (shibaAssetsLoaded) return;
@@ -6186,10 +6436,10 @@ function loadShibaCompanionAssets() {
     return;
   }
   shibaAssetsLoaded = true;
-  if (!document.querySelector('link[href="/shibaCompanion.css?v=6"]')) {
+  if (!document.querySelector('link[href="/shibaCompanion.css?v=7"]')) {
     const link = document.createElement('link');
     link.rel = 'stylesheet';
-    link.href = '/shibaCompanion.css?v=6';
+    link.href = '/shibaCompanion.css?v=7';
     document.head.appendChild(link);
   }
   if (!document.querySelector('script[src="/shibaCompanion.js?v=6"]')) {
@@ -6347,7 +6597,7 @@ function renderNotificationsList(items = []) {
   listEl.innerHTML = items
     .map(
       (n) => `
-      <div class="notif-item ${n.isRead ? '' : 'is-unread'}" data-notif-id="${escapeHtml(n.id)}">
+      <div class="notif-item ${n.isRead ? '' : 'is-unread'}" data-notif-id="${escapeHtml(n.id)}" data-notif-view="${escapeHtml(n.metadata?.targetView || '')}" data-notif-tab="${escapeHtml(n.metadata?.lbTab || '')}">
         <span class="notif-item-dot" aria-hidden="true"></span>
         <div class="notif-item-body">
           <div class="notif-item-title">${escapeHtml(n.title)}</div>
@@ -6423,15 +6673,25 @@ on('notifList', 'click', async (e) => {
   const item = e.target.closest('[data-notif-id]');
   if (!item) return;
   const id = item.getAttribute('data-notif-id');
-  if (!id || !item.classList.contains('is-unread')) return;
-  item.classList.remove('is-unread');
-  try {
-    const res = await apiFetch('/api/notifications/mark-read', {
-      method: 'POST',
-      body: JSON.stringify({ id })
-    });
-    updateNotificationBadge(res.unreadCount || 0);
-  } catch (_) {}
+  const targetView = item.getAttribute('data-notif-view');
+  const lbTab = item.getAttribute('data-notif-tab');
+  if (id && item.classList.contains('is-unread')) {
+    item.classList.remove('is-unread');
+    try {
+      const res = await apiFetch('/api/notifications/mark-read', {
+        method: 'POST',
+        body: JSON.stringify({ id })
+      });
+      updateNotificationBadge(res.unreadCount || 0);
+    } catch (_) {}
+  }
+  if (targetView === 'leaderboard') {
+    setNotifDrawerOpen(false);
+    if (lbTab === 'cashback' || lbTab === 'spend') {
+      activeLeaderboardTab = lbTab;
+    }
+    if (typeof switchView === 'function') switchView('leaderboard');
+  }
 });
 
 document.addEventListener('click', (e) => {
@@ -6651,37 +6911,347 @@ on('admSaveVipTiersBtn', 'click', async () => {
   }
 });
 
+on('admLbPresetZeroCostBtn', 'click', () => {
+  const typeEl = document.getElementById('admLbRewardType');
+  if (typeEl) typeEl.value = 'cashback_boost';
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+  set('admLbRewardsMinSpend', 500000);
+  set('admLbRewardsBoostDays', 7);
+  set('admLbRewardVal1', 3);
+  set('admLbRewardVal2', 2);
+  set('admLbRewardVal3', 1);
+  set('admLbRewardBadge1', 'Quán Quân Kỳ');
+  set('admLbRewardBadge2', 'Á Quân Kỳ');
+  set('admLbRewardBadge3', 'Top 3 Kỳ');
+  set('admLbRewardTop1', '+3% hoàn tiền (7 ngày)');
+  set('admLbRewardTop2', '+2% hoàn tiền (7 ngày)');
+  set('admLbRewardTop3', '+1% hoàn tiền (7 ngày)');
+  showToast('Đã áp dụng mẫu thưởng 0đ tiền mặt (+3% / +2% / +1%) — nhấn Lưu để cập nhật!');
+});
+
+on('admLbPresetWalletBtn', 'click', () => {
+  const typeEl = document.getElementById('admLbRewardType');
+  if (typeEl) typeEl.value = 'wallet_bonus';
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+  set('admLbRewardsMinSpend', 1000000);
+  set('admLbRewardsBudgetLimit', 100000);
+  set('admLbRewardVal1', 50000);
+  set('admLbRewardVal2', 30000);
+  set('admLbRewardVal3', 15000);
+  set('admLbRewardBadge1', 'Quán Quân Kỳ');
+  set('admLbRewardBadge2', 'Á Quân Kỳ');
+  set('admLbRewardBadge3', 'Top 3 Kỳ');
+  set('admLbRewardTop1', 'Thưởng 50.000đ');
+  set('admLbRewardTop2', 'Thưởng 30.000đ');
+  set('admLbRewardTop3', 'Thưởng 15.000đ');
+  showToast('Đã áp dụng mẫu thưởng Ví (50k / 30k / 15k) — nhấn Lưu để cập nhật!');
+});
+
+on('admSaveLbSeasonBtn', 'click', async () => {
+  const mode = document.getElementById('admLbSeasonMode')?.value || 'all_time';
+  const seasonName = document.getElementById('admLbSeasonName')?.value?.trim() || '';
+  const showAllTimeTab = document.getElementById('admLbShowAllTimeTab')?.checked !== false;
+  const rewardsEnabled = Boolean(document.getElementById('admLbRewardsEnabled')?.checked);
+  const rewardType = document.getElementById('admLbRewardType')?.value || 'cashback_boost';
+  const rewardsMinSpend = Math.max(0, Number(document.getElementById('admLbRewardsMinSpend')?.value || 500000));
+  const boostDays = Math.max(1, Number(document.getElementById('admLbRewardsBoostDays')?.value || 7));
+  const budgetLimit = Math.max(0, Number(document.getElementById('admLbRewardsBudgetLimit')?.value || 100000));
+  const ranks = {
+    top1: {
+      value: Math.max(0, Number(document.getElementById('admLbRewardVal1')?.value || 0)),
+      badge: document.getElementById('admLbRewardBadge1')?.value?.trim() || 'Quán Quân Kỳ',
+      label: document.getElementById('admLbRewardTop1')?.value?.trim() || ''
+    },
+    top2: {
+      value: Math.max(0, Number(document.getElementById('admLbRewardVal2')?.value || 0)),
+      badge: document.getElementById('admLbRewardBadge2')?.value?.trim() || 'Á Quân Kỳ',
+      label: document.getElementById('admLbRewardTop2')?.value?.trim() || ''
+    },
+    top3: {
+      value: Math.max(0, Number(document.getElementById('admLbRewardVal3')?.value || 0)),
+      badge: document.getElementById('admLbRewardBadge3')?.value?.trim() || 'Top 3 Kỳ',
+      label: document.getElementById('admLbRewardTop3')?.value?.trim() || ''
+    }
+  };
+  const btn = document.getElementById('admSaveLbSeasonBtn');
+  if (btn) btn.disabled = true;
+  try {
+    await apiFetch('/api/admin/settings', {
+      method: 'POST',
+      body: JSON.stringify({
+        leaderboardSeason: { mode, seasonName, showAllTimeTab },
+        leaderboardRewards: {
+          enabled: rewardsEnabled,
+          rewardType,
+          minSpend: rewardsMinSpend,
+          boostDays,
+          budgetLimit,
+          ranks
+        }
+      })
+    });
+    showToast('Đã lưu cấu hình Mùa giải & Phần thưởng BXH!');
+    await loadAdminDashboard();
+  } catch (err) {
+    showToast(err.message || 'Không thể lưu cấu hình mùa giải.');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+});
+
+async function handleDistributeLbRewards(tab) {
+  const boardName = tab === 'cashback' ? 'Vua Hoàn Tiền' : 'Đại Gia LiLa';
+  const ok = await askUserConfirm({
+    title: `Chốt thưởng Top 3 ${boardName}?`,
+    message: 'Hệ thống sẽ lọc Top 3 đạt ngưỡng chi tiêu tối thiểu (chỉ tính đơn đã duyệt), gửi thông báo chúc mừng và cộng ví nếu đang chọn loại thưởng Ví.',
+    confirmText: 'Xác nhận trao thưởng'
+  });
+  if (!ok) return;
+  try {
+    const res = await apiFetch('/api/admin/leaderboard/distribute-rewards', {
+      method: 'POST',
+      body: JSON.stringify({ tab })
+    });
+    const count = Array.isArray(res?.winners) ? res.winners.length : 0;
+    showToast(`Đã chốt thưởng thành công cho ${count} thành viên Top ${boardName}!`);
+  } catch (err) {
+    showToast(err.message || 'Không thể chốt thưởng kỳ này.');
+  }
+}
+
+on('admDistributeLbSpendBtn', 'click', () => handleDistributeLbRewards('spend'));
+on('admDistributeLbCashbackBtn', 'click', () => handleDistributeLbRewards('cashback'));
+
+let activeLeaderboardPeriod = '';
+let lbMeObserver = null;
+let lbShareScriptPromise = null;
+let lbCurrentSharePayload = null;
+
+function renderVipProgressBlockHtml(overallSpend, tiers) {
+  if (!Array.isArray(tiers) || tiers.length === 0) return '';
+  const spend = Math.max(0, Math.round(Number(overallSpend || 0)));
+  let currentIdx = 0;
+  for (let i = 0; i < tiers.length; i += 1) {
+    if (spend >= Number(tiers[i].minSpend || 0)) currentIdx = i;
+  }
+  const curr = tiers[currentIdx];
+  const next = tiers[currentIdx + 1] || null;
+  const currShort = String(curr?.name || '').replace(/^Thành viên\s+/i, '');
+
+  if (!next) {
+    return `
+      <div class="lb-vip-progress-box" data-open-vip-sheet="1" role="button" tabindex="0">
+        <div class="lb-vip-progress-top">
+          <span>${renderVipBadgeSvg(curr.code || curr.icon, false)} Hạng tối đa: ${escapeHtml(currShort)} (${curr.cashbackPercent}%)</span>
+          <span class="lb-vip-progress-link">Quyền lợi ›</span>
+        </div>
+        <div class="lb-vip-bar"><div class="lb-vip-bar-fill" style="width:100%"></div></div>
+        <div class="lb-vip-progress-sub"><span>Bạn đang hưởng mức hoàn tiền cao nhất LiLa!</span><span>100%</span></div>
+      </div>
+    `;
+  }
+
+  const nextShort = String(next.name || '').replace(/^Thành viên\s+/i, '');
+  const baseMin = Number(curr?.minSpend || 0);
+  const nextMin = Math.max(baseMin + 1, Number(next.minSpend || 1));
+  const remain = Math.max(0, Math.round(nextMin - spend));
+  const pct = Math.max(4, Math.min(100, Math.round(((spend - baseMin) / (nextMin - baseMin)) * 100)));
+
+  return `
+    <div class="lb-vip-progress-box" data-open-vip-sheet="1" role="button" tabindex="0">
+      <div class="lb-vip-progress-top">
+        <span>Tiến trình lên hạng ${escapeHtml(nextShort)}</span>
+        <span class="lb-vip-progress-link">${renderVipBadgeSvg(next.code || next.icon, false)} ${escapeHtml(nextShort)} (${next.cashbackPercent}%) ›</span>
+      </div>
+      <div class="lb-vip-bar"><div class="lb-vip-bar-fill" style="width:${pct}%"></div></div>
+      <div class="lb-vip-progress-sub">
+        <span>Còn <strong>${fmtVnd(remain)}</strong> nữa để lên hạng ${escapeHtml(nextShort)}</span>
+        <span>${pct}%</span>
+      </div>
+    </div>
+  `;
+}
+
+function openLbVipSheet() {
+  const overlay = document.getElementById('lbVipSheetOverlay');
+  const bodyEl = document.getElementById('lbVipSheetBody');
+  if (!overlay || !bodyEl) return;
+  const tiers = Array.isArray(latestLeaderboardData?.vipTiers) ? latestLeaderboardData.vipTiers : [];
+  const overallSpend = Number(latestLeaderboardData?.myOverallSpend ?? currentUser?.totalApprovedSpend ?? 0);
+  const myTierCode = String(latestLeaderboardData?.myVipTier?.code || currentUser?.vipTier || '').toLowerCase();
+
+  if (tiers.length === 0) {
+    bodyEl.innerHTML = '<p style="font-size:13px;color:var(--text-muted);">Chưa có dữ liệu hạng thành viên.</p>';
+  } else {
+    bodyEl.innerHTML = `
+      <div class="lb-vip-sheet-list">
+        ${tiers
+          .map((t) => {
+            const shortName = String(t.name || t.code || '').replace(/^Thành viên\s+/i, '');
+            const isCurrent = Boolean(authToken && myTierCode && String(t.code || '').toLowerCase() === myTierCode);
+            const minSpend = Number(t.minSpend || 0);
+            const spendLabel = minSpend > 0 ? `Tích lũy từ ${fmtVnd(minSpend)} đơn duyệt` : 'Hạng mặc định khi đăng ký';
+            const remain = minSpend > overallSpend ? ` • Còn thiếu ${fmtVnd(minSpend - overallSpend)}` : '';
+            return `
+              <div class="lb-vip-sheet-row${isCurrent ? ' is-current' : ''}">
+                <div class="lb-vip-sheet-row-left">
+                  <span>${renderVipBadgeSvg(t.code || t.icon, false)}</span>
+                  <div>
+                    <div class="lb-vip-sheet-row-title">
+                      <span>Hạng ${escapeHtml(shortName)}</span>
+                      ${isCurrent ? '<span class="lb-vip-now-tag">Hạng hiện tại</span>' : ''}
+                    </div>
+                    <div class="lb-vip-sheet-row-sub">${spendLabel}${authToken && !isCurrent && remain ? remain : ''}</div>
+                  </div>
+                </div>
+                <div class="lb-vip-sheet-rate">${Number(t.cashbackPercent || 0)}%</div>
+              </div>
+            `;
+          })
+          .join('')}
+      </div>
+      <div class="lb-approved-note" style="margin-top:12px;text-align:center;">Chỉ tính tổng giá trị đơn hàng đã duyệt • Quyền lợi hoàn tiền tự động áp dụng cho đơn mới.</div>
+    `;
+  }
+  overlay.classList.add('is-open');
+  overlay.setAttribute('aria-hidden', 'false');
+}
+
+function closeLbVipSheet() {
+  const overlay = document.getElementById('lbVipSheetOverlay');
+  if (!overlay) return;
+  overlay.classList.remove('is-open');
+  overlay.setAttribute('aria-hidden', 'true');
+}
+
+function renderRankTrendHtml(delta) {
+  if (!Number.isFinite(Number(delta))) return '';
+  const n = Math.round(Number(delta));
+  if (n > 0) return `<span class="lb-trend is-up" title="Tăng ${n} hạng">▲</span>`;
+  if (n < 0) return `<span class="lb-trend is-down" title="Giảm ${Math.abs(n)} hạng">▼</span>`;
+  return '<span class="lb-trend is-flat" title="Giữ nguyên hạng">•</span>';
+}
+
+function renderBadgesHtml(badges) {
+  if (!Array.isArray(badges) || badges.length === 0) return '';
+  return `
+    <div class="lb-badges-block">
+      <div class="lb-badges-title">Huy hiệu đạt được (${badges.length})</div>
+      <div class="lb-badges-grid">
+        ${badges
+          .map((b) => `<span class="lb-badge-chip badge-${escapeHtml(b.code || '')}" title="${escapeHtml(b.desc || '')}">${escapeHtml(b.name || '')}</span>`)
+          .join('')}
+      </div>
+    </div>
+  `;
+}
+
+function observeMyRankVisibility() {
+  if (lbMeObserver) {
+    lbMeObserver.disconnect();
+    lbMeObserver = null;
+  }
+  const stickyBar = document.getElementById('leaderboardMyRank');
+  if (!stickyBar || stickyBar.classList.contains('hidden')) return;
+  const targets = [
+    document.querySelector('#view-leaderboard .lb-stage-shell .is-me'),
+    document.getElementById('leaderboardSideMyCard')
+  ].filter((el) => el && !el.classList.contains('hidden'));
+  if (targets.length === 0 || typeof IntersectionObserver !== 'function') {
+    stickyBar.classList.remove('is-in-view');
+    return;
+  }
+  const visibleMap = new Map();
+  lbMeObserver = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((entry) => visibleMap.set(entry.target, entry.isIntersecting));
+      const anyVisible = Array.from(visibleMap.values()).some(Boolean);
+      stickyBar.classList.toggle('is-in-view', anyVisible);
+    },
+    { threshold: 0.15 }
+  );
+  targets.forEach((el) => lbMeObserver.observe(el));
+}
+
 function renderLeaderboardTable(mode = 'spend', { animate = false } = {}) {
   activeLeaderboardTab = mode === 'cashback' ? 'cashback' : 'spend';
   const viewEl = document.getElementById('view-leaderboard');
   const headerEl = document.getElementById('lbMetricHeader');
+  const heroTitleEl = document.getElementById('lbHeroTitle');
+  const taglineEl = document.getElementById('lbTagline');
+  const seasonBadgeEl = document.getElementById('lbSeasonBadge');
+  const periodTabsEl = document.getElementById('lbPeriodTabs');
+  const periodSeasonBtn = document.getElementById('lbPeriodSeasonBtn');
   const tbody = document.getElementById('leaderboardTableBody');
   const tableWrap = document.getElementById('leaderboardTableWrap');
   const listHeadingEl = document.getElementById('leaderboardListHeading');
+  const sheetNoteEl = document.getElementById('leaderboardSheetNote');
   const myRankEl = document.getElementById('leaderboardMyRank');
+  const sideMyCardEl = document.getElementById('leaderboardSideMyCard');
 
-  viewEl?.classList.toggle('lb-mode-cashback', activeLeaderboardTab === 'cashback');
+  const isCashback = activeLeaderboardTab === 'cashback';
+  viewEl?.classList.toggle('lb-mode-cashback', isCashback);
 
   document.querySelectorAll('[data-lb-tab]').forEach((btn) => {
     const isActive = btn.getAttribute('data-lb-tab') === activeLeaderboardTab;
-    btn.classList.toggle('btn-primary', isActive);
-    btn.classList.toggle('btn-outline', !isActive);
     btn.classList.toggle('active', isActive);
     btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
   });
 
+  if (heroTitleEl) {
+    heroTitleEl.textContent = isCashback ? 'Vua Hoàn Tiền' : 'Đại Gia LiLa';
+  }
+  if (taglineEl) {
+    taglineEl.textContent = isCashback
+      ? 'Ai là người săn Cashback giỏi nhất LiLa?'
+      : 'Ai là đại gia mua sắm của LiLa?';
+  }
   if (headerEl) {
-    headerEl.textContent = activeLeaderboardTab === 'cashback' ? 'Tổng tiền hoàn' : 'Tổng giá trị đơn';
+    headerEl.textContent = isCashback ? 'Tổng tiền hoàn' : 'Tổng mua sắm';
   }
   if (!tbody) return;
 
   const data = latestLeaderboardData || { topBySpend: [], topByCashback: [] };
-  const list = activeLeaderboardTab === 'cashback' ? data.topByCashback : data.topBySpend;
-  const myRank = activeLeaderboardTab === 'cashback' ? data.myRankCashback : data.myRankSpend;
+  const season = data.season || { mode: 'all_time', activePeriod: 'all_time', label: 'Toàn thời gian', showAllTimeTab: true };
+  if (seasonBadgeEl) {
+    const isTimed = season.activePeriod === 'weekly' || season.activePeriod === 'monthly' || season.activePeriod === 'yearly';
+    const countdown = isTimed && Number.isFinite(Number(season.daysRemaining))
+      ? ` • Kết thúc sau ${season.daysRemaining} ngày`
+      : '';
+    seasonBadgeEl.textContent = `${season.label || 'Toàn thời gian'}${countdown}`;
+  }
+  if (periodTabsEl) {
+    periodTabsEl.classList.remove('hidden');
+    const currentPeriodKey = season.activePeriod || activeLeaderboardPeriod || 'all_time';
+    periodTabsEl.querySelectorAll('[data-lb-period]').forEach((b) => {
+      const isAct = b.getAttribute('data-lb-period') === currentPeriodKey;
+      b.classList.toggle('active', isAct);
+      b.setAttribute('aria-selected', isAct ? 'true' : 'false');
+    });
+  }
 
+  const list = isCashback ? data.topByCashback : data.topBySpend;
+  const myRank = isCashback ? data.myRankCashback : data.myRankSpend;
+  const myPrivacyHidden = Boolean(data.myPrivacyHidden || currentUser?.hideFromLeaderboard);
+
+  const shareIconSvg = '<svg class="svg-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>';
+
+  // 1. Mobile Sticky Floating My Rank Bar + Desktop Sidebar Personal Card
   if (myRankEl) {
-    if (myRank) {
-      const val = activeLeaderboardTab === 'cashback' ? myRank.totalCashback : myRank.totalSpend;
+    myRankEl.classList.remove('is-unranked', 'is-privacy-hidden', 'is-in-view', 'hidden');
+    if (myPrivacyHidden && authToken && currentUser && currentUser.role !== 'admin') {
+      myRankEl.classList.add('is-privacy-hidden');
+      myRankEl.innerHTML = `
+        <div class="lb-my-bar-left">
+          <div class="lb-my-bar-meta">
+            <div class="lb-my-bar-title">Bạn đang ẩn khỏi Bảng xếp hạng</div>
+            <div class="lb-my-bar-sub">Hạng VIP &amp; tiền hoàn vẫn được tính bình thường</div>
+          </div>
+        </div>
+        <button type="button" class="btn btn-primary btn-xs" data-lb-enable-public="1">Bật hiển thị</button>
+      `;
+    } else if (myRank) {
+      const val = isCashback ? myRank.totalCashback : myRank.totalSpend;
       const initial = String(myRank.displayName || currentUser?.name || 'U').trim().charAt(0).toUpperCase() || 'U';
       const avatarSrc = isSafeAvatarUrl(myRank.avatarUrl || currentUser?.avatarUrl)
         ? (myRank.avatarUrl || currentUser?.avatarUrl)
@@ -6690,152 +7260,295 @@ function renderLeaderboardTable(mode = 'spend', { animate = false } = {}) {
         ? `<img src="${escapeHtml(avatarSrc)}" alt="${escapeHtml(myRank.displayName)}" loading="lazy" />`
         : escapeHtml(initial);
       const hasGap = Number.isFinite(Number(myRank.gapToNextRank)) && Number(myRank.gapToNextRank) > 0 && myRank.nextRank;
-      const gapHtml = hasGap
-        ? `<div class="lb-my-rank-gap">Còn thiếu ${fmtVnd(myRank.gapToNextRank)} để vượt hạng #${myRank.nextRank}</div>`
-        : (myRank.rank === 1 ? '<div class="lb-my-rank-gap">Bạn đang dẫn đầu bảng xếp hạng</div>' : '');
-      const isInTop20 = myRank.rank <= 20;
-      const showJumpBtn = myRank.rank > 3 && isInTop20;
-      const jumpBtnHtml = showJumpBtn
-        ? '<button type="button" class="lb-my-rank-jump" id="lbJumpToMyRankBtn">Xem vị trí</button>'
-        : '';
-
-      const shortMyTier = String(myRank.vipTierName || '').replace(/^Thành viên\s+/i, '');
-      const myTierPillHtml = shortMyTier
-        ? `<span class="lb-my-tier-pill">${renderVipBadgeSvg(myRank.vipTier || myRank.vipTierIcon, false)}<span>${escapeHtml(shortMyTier)}</span></span>`
-        : '';
-
-      myRankEl.classList.remove('is-unranked', 'hidden');
-      myRankEl.classList.toggle('is-sticky-bottom', !isInTop20);
+      const hasLead = myRank.rank === 1 && Number.isFinite(Number(myRank.leadOverSecond));
+      const estOrdersText = myRank.estimatedOrdersNeeded ? ` — chỉ cần ~${myRank.estimatedOrdersNeeded} đơn nữa!` : '';
+      const subLine = hasGap
+        ? `Cách #${myRank.nextRank} còn ${fmtVnd(myRank.gapToNextRank)}${estOrdersText}`
+        : hasLead
+          ? `Dẫn trước #2 là ${fmtVnd(myRank.leadOverSecond)}`
+          : (myRank.rank === 1 ? 'Đang dẫn đầu bảng xếp hạng!' : `${myRank.approvedOrderCount || 0} đơn đã duyệt`);
+      const rankDisp = myRank.rank > 99 ? '99+' : `#${myRank.rank}`;
       myRankEl.innerHTML = `
-        <div class="lb-my-rank-main">
+        <div class="lb-my-bar-left">
+          <div class="lb-my-bar-rank"><span>${rankDisp}</span>${renderRankTrendHtml(myRank.rankDelta)}</div>
           <span class="lb-user-avatar">${avatarInner}</span>
-          <div class="lb-my-rank-info">
-            <div class="lb-my-rank-line"><span>Hạng #${myRank.rank} • ${fmtVnd(val)}</span>${myTierPillHtml}</div>
-            ${gapHtml}
+          <div class="lb-my-bar-meta">
+            <div class="lb-my-bar-title">Bạn • ${fmtVnd(val)}</div>
+            <div class="lb-my-bar-sub">${subLine}</div>
           </div>
         </div>
-        ${jumpBtnHtml}
+        <button type="button" class="lb-my-bar-share-btn" data-lb-share="1" title="Chia sẻ thành tích" aria-label="Chia sẻ thành tích">${shareIconSvg}</button>
       `;
     } else if (authToken && currentUser && currentUser.role !== 'admin') {
-      myRankEl.classList.remove('hidden', 'is-sticky-bottom');
       myRankEl.classList.add('is-unranked');
       myRankEl.innerHTML = `
-        <div class="lb-my-rank-info">
-          <div class="lb-my-rank-line" style="font-weight:600;color:var(--text-sub);">Bạn chưa có đơn đã duyệt trong bảng xếp hạng</div>
-          <div class="lb-my-rank-gap">Lên đơn qua LiLa để xuất hiện trên bảng xếp hạng nhé!</div>
+        <div class="lb-my-bar-left">
+          <div class="lb-my-bar-meta">
+            <div class="lb-my-bar-title">Chưa có đơn duyệt trong kỳ này</div>
+            <div class="lb-my-bar-sub">Mua sắm qua LiLa để lên bảng xếp hạng nhé!</div>
+          </div>
         </div>
+        <button type="button" class="btn btn-primary btn-xs" data-nav="home">Mua ngay</button>
       `;
     } else {
       myRankEl.classList.add('hidden');
-      myRankEl.classList.remove('is-sticky-bottom', 'is-unranked');
     }
   }
 
+  if (sideMyCardEl) {
+    if (myPrivacyHidden && authToken && currentUser && currentUser.role !== 'admin') {
+      sideMyCardEl.classList.remove('hidden');
+      sideMyCardEl.innerHTML = `
+        <div class="lb-side-my-head">
+          <div>
+            <strong>Chế độ riêng tư đang bật</strong>
+            <div class="lb-user-orders-sub">Bạn đang ẩn tên khỏi BXH công khai. Hạng VIP &amp; hoàn tiền vẫn giữ nguyên.</div>
+          </div>
+        </div>
+        <div class="lb-side-my-actions">
+          <button type="button" class="btn btn-primary btn-sm" data-lb-enable-public="1">Hiển thị lại trên BXH</button>
+        </div>
+      `;
+    } else if (myRank) {
+      const val = isCashback ? myRank.totalCashback : myRank.totalSpend;
+      const initial = String(myRank.displayName || currentUser?.name || 'U').trim().charAt(0).toUpperCase() || 'U';
+      const avatarSrc = isSafeAvatarUrl(myRank.avatarUrl || currentUser?.avatarUrl)
+        ? (myRank.avatarUrl || currentUser?.avatarUrl)
+        : '';
+      const avatarInner = avatarSrc
+        ? `<img src="${escapeHtml(avatarSrc)}" alt="${escapeHtml(myRank.displayName)}" loading="lazy" />`
+        : escapeHtml(initial);
+      const hasGap = Number.isFinite(Number(myRank.gapToNextRank)) && Number(myRank.gapToNextRank) > 0 && myRank.nextRank;
+      const hasLead = myRank.rank === 1 && Number.isFinite(Number(myRank.leadOverSecond));
+      const estOrdersHtml = myRank.estimatedOrdersNeeded
+        ? ` — chỉ cần khoảng <strong>${myRank.estimatedOrdersNeeded} đơn</strong> nữa!`
+        : '';
+      const gapText = hasGap
+        ? `<div>Cách hạng <strong>#${myRank.nextRank}</strong> còn <strong>${fmtVnd(myRank.gapToNextRank)}</strong>${estOrdersHtml}</div>`
+        : hasLead
+          ? `<div>Bạn đang dẫn trước hạng <strong>#2</strong> là <strong>${fmtVnd(myRank.leadOverSecond)}</strong></div>
+             <div class="lb-lead-bar-wrap"><div class="lb-lead-bar"><div class="lb-lead-fill" style="width:${Number(myRank.leadPercent || 65)}%"></div></div></div>`
+          : (myRank.rank === 1 ? '<div>Bạn đang giữ ngôi vị <strong>Top #1</strong>!</div>' : `<div>Đã hoàn thành <strong>${myRank.approvedOrderCount || 0} đơn</strong> duyệt</div>`);
+      const vipProgressHtml = renderVipProgressBlockHtml(
+        data.myOverallSpend ?? currentUser?.totalApprovedSpend ?? 0,
+        data.vipTiers || []
+      );
+      sideMyCardEl.classList.remove('hidden');
+      sideMyCardEl.innerHTML = `
+        <div class="lb-side-my-head">
+          <span class="lb-user-avatar" style="width:46px;height:46px;font-size:16px;">${avatarInner}</span>
+          <div style="min-width:0;flex:1;">
+            <span class="lb-side-my-rank-pill">Hạng #${myRank.rank} ${renderRankTrendHtml(myRank.rankDelta)}</span>
+            <div class="lb-side-my-val">${fmtVnd(val)}</div>
+            <div class="lb-user-orders-sub">${myRank.approvedOrderCount || 0} đơn đã duyệt</div>
+          </div>
+        </div>
+        <div class="lb-side-my-gap">${gapText}<span class="lb-approved-note">Chỉ tính đơn đã duyệt</span></div>
+        <div class="lb-side-my-actions">
+          <button type="button" class="btn btn-primary btn-sm btn-icon-svg lb-accent-btn" data-lb-share="1">${shareIconSvg}<span>Chia sẻ ảnh</span></button>
+        </div>
+        ${vipProgressHtml}
+        ${renderBadgesHtml(myRank.badges)}
+      `;
+    } else if (authToken && currentUser && currentUser.role !== 'admin') {
+      sideMyCardEl.classList.remove('hidden');
+      sideMyCardEl.innerHTML = `
+        <div>
+          <strong>Vị trí của bạn</strong>
+          <div class="lb-user-orders-sub" style="margin-top:4px;">Bạn chưa có đơn đã duyệt trong kỳ xếp hạng này. Lên đơn qua LiLa để ghi tên lên bảng vinh danh nhé!</div>
+        </div>
+        <div class="lb-side-my-actions">
+          <button type="button" class="btn btn-primary btn-sm" data-nav="home">Tạo link hoàn tiền</button>
+        </div>
+      `;
+    } else {
+      sideMyCardEl.classList.remove('hidden');
+      sideMyCardEl.innerHTML = `
+        <div>
+          <strong>Xem thứ hạng của bạn</strong>
+          <div class="lb-user-orders-sub" style="margin-top:4px;">Đăng nhập để theo dõi vị trí, huy hiệu và chia sẻ thành tích hoàn tiền cùng LiLa.</div>
+        </div>
+        <div class="lb-side-my-actions">
+          <button type="button" class="btn btn-primary btn-sm" data-open-auth="login">Đăng nhập ngay</button>
+        </div>
+      `;
+    }
+  }
+
+  // 2. Top 3 Pedestal Podium (Always displays 3 pedestals 2-1-3 with inviting empty slots if < 3 users)
   const podiumEl = document.getElementById('leaderboardPodium');
   if (!Array.isArray(list) || list.length === 0) {
     if (podiumEl) {
       podiumEl.innerHTML = '';
       podiumEl.classList.add('hidden');
-      podiumEl.classList.remove('is-two');
     }
     listHeadingEl?.classList.add('hidden');
-    tableWrap?.classList.remove('hidden');
-    tbody.innerHTML = '<tr><td colspan="4" class="text-center">Chưa có dữ liệu đơn đã duyệt để xếp hạng.</td></tr>';
+    tableWrap?.classList.add('hidden');
+    tbody.innerHTML = '';
+    if (sheetNoteEl) {
+      sheetNoteEl.innerHTML = `
+        <div class="lb-empty-cta">
+          <h4>Chưa có ai trong kỳ này, bạn có thể là người đầu tiên!</h4>
+          <p>Chỉ cần 1 đơn mua sắm qua LiLa được duyệt để chiếm ngay ngôi đầu bảng.</p>
+          <button type="button" class="btn btn-primary btn-sm lb-accent-btn" data-nav="home">Mua sắm ngay</button>
+        </div>
+      `;
+      sheetNoteEl.classList.remove('hidden');
+    }
+    observeMyRankVisibility();
     return;
   }
 
-  let hasPodium = false;
-  let podiumCount = 0;
+  const top3 = list.slice(0, 3);
+  const slotOrder = [
+    { rank: 2, item: top3[1] || null },
+    { rank: 1, item: top3[0] || null },
+    { rank: 3, item: top3[2] || null }
+  ];
+
+  const crownSvg = '<svg class="lb-podium-crown" viewBox="0 0 36 26" width="32" height="23" fill="none" aria-hidden="true"><path d="M3 22 6 7l7 6 5-10 5 10 7-6 3 15a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" fill="#fde047" stroke="#ca8a04" stroke-width="1.8" stroke-linejoin="round"/></svg>';
+
   if (podiumEl) {
-    const top3 = list.slice(0, 3);
-    if (top3.length >= 2) {
-      hasPodium = true;
-      podiumCount = top3.length;
-      const ordered = top3.length === 3 ? [top3[1], top3[0], top3[2]] : [top3[1], top3[0]];
-      podiumEl.classList.toggle('is-two', top3.length === 2);
-      podiumEl.innerHTML = ordered
-        .map((item) => {
-          const val = activeLeaderboardTab === 'cashback' ? item.totalCashback : item.totalSpend;
-          const medalIcon = item.rank === 1
-            ? '<svg class="lb-medal-svg" viewBox="0 0 24 24" width="12" height="12" fill="none" aria-hidden="true"><path d="M3.5 17.5 5 8l4.5 3.5L12 6l2.5 5.5L19 8l1.5 9.5a1.5 1.5 0 0 1-1.5 1.5H5a1.5 1.5 0 0 1-1.5-1.5Z" fill="#f59e0b" stroke="#b45309" stroke-width="1.6" stroke-linejoin="round"/></svg>'
-            : `<svg class="lb-medal-svg" viewBox="0 0 24 24" width="11" height="11" fill="none" aria-hidden="true"><path d="m12 3.5 2.6 5.3 5.9.85-4.25 4.14 1 5.86L12 16.9l-5.25 2.75 1-5.86L3.5 9.65l5.9-.85L12 3.5Z" fill="${item.rank === 2 ? '#94a3b8' : '#fb923c'}" stroke="${item.rank === 2 ? '#475569' : '#c2410c'}" stroke-width="1.6" stroke-linejoin="round"/></svg>`;
-          const medalLabel = `${medalIcon}<span>TOP ${item.rank}</span>`;
-          const isMe = currentUser && item.code && currentUser.code === item.code;
-          const initial = String(item.displayName || 'U').trim().charAt(0).toUpperCase() || 'U';
-          const avatarInner = isSafeAvatarUrl(item.avatarUrl)
-            ? `<img src="${escapeHtml(item.avatarUrl)}" alt="${escapeHtml(item.displayName)}" loading="lazy" />`
-            : escapeHtml(initial);
-          const shortTier = String(item.vipTierName || '').replace(/^Thành viên\s+/i, '');
-          const tierPillHtml = shortTier
-            ? `<span class="lb-podium-tier">${renderVipBadgeSvg(item.vipTier || item.vipTierIcon, false)}<span>${escapeHtml(shortTier)}</span></span>`
-            : '';
+    podiumEl.innerHTML = slotOrder
+      .map(({ rank, item }) => {
+        if (!item) {
           return `
-            <div class="lb-podium-card rank-${item.rank}${isMe ? ' is-me' : ''}" data-lb-rank="${item.rank}">
-              <span class="lb-podium-medal">${medalLabel}</span>
-              <div class="lb-podium-avatar">${avatarInner}</div>
-              <div class="lb-podium-name" title="${escapeHtml(item.displayName)}">${escapeHtml(item.displayName)}${isMe ? ' (Bạn)' : ''}</div>
-              ${tierPillHtml}
-              <div class="lb-podium-val">${fmtVnd(val)}</div>
+            <div class="lb-podium-card rank-${rank} is-empty" data-lb-rank="${rank}">
+              <div class="lb-podium-avatar-wrap">
+                ${rank === 1 ? crownSvg : ''}
+                <div class="lb-podium-avatar">?</div>
+                <span class="lb-podium-rank-dot">${rank}</span>
+              </div>
+              <div class="lb-podium-name">Chờ chủ nhân</div>
+              <div class="lb-podium-val" style="opacity:0.7;">—</div>
             </div>
           `;
-        })
-        .join('');
-      podiumEl.classList.remove('hidden');
-    } else {
-      podiumEl.innerHTML = '';
-      podiumEl.classList.add('hidden');
-      podiumEl.classList.remove('is-two');
-    }
+        }
+        const val = isCashback ? item.totalCashback : item.totalSpend;
+        const isMe = Boolean(item.isSelf || (currentUser && item.code && currentUser.code === item.code));
+        const valDisplay = item.amountHidden && !isMe ? '•••.•••đ' : fmtVnd(val);
+        const initial = item.isAnonymous && !isMe
+          ? '?'
+          : (String(item.displayName || 'U').trim().charAt(0).toUpperCase() || 'U');
+        const avatarInner = (!item.isAnonymous || isMe) && isSafeAvatarUrl(item.avatarUrl)
+          ? `<img src="${escapeHtml(item.avatarUrl)}" alt="${escapeHtml(item.displayName)}" loading="lazy" />`
+          : escapeHtml(initial);
+        const shortTier = String(item.vipTierName || '').replace(/^Thành viên\s+/i, '');
+        const tierPillHtml = shortTier
+          ? `<span class="lb-podium-tier" data-open-vip-sheet="1" role="button" tabindex="0" title="Xem quyền lợi cấp bậc">${renderVipBadgeSvg(item.vipTier || item.vipTierIcon, false)}<span>${escapeHtml(shortTier)}</span></span>`
+          : '';
+        const rew = data.rewards;
+        const rewardText = rew?.enabled ? (rank === 1 ? rew.top1 : rank === 2 ? rew.top2 : rew.top3) : '';
+        const rewardPillHtml = rewardText
+          ? `<span class="lb-podium-reward" title="Phần thưởng Top ${rank}">🎁 ${escapeHtml(rewardText)}</span>`
+          : '';
+        return `
+          <div class="lb-podium-card rank-${rank}${isMe ? ' is-me' : ''}" data-lb-rank="${rank}">
+            <div class="lb-podium-avatar-wrap">
+              ${rank === 1 ? crownSvg : ''}
+              <div class="lb-podium-avatar">${avatarInner}</div>
+              <span class="lb-podium-rank-dot">${rank}</span>
+            </div>
+            <div class="lb-podium-name" title="${escapeHtml(item.displayName)}">${escapeHtml(item.displayName)}${isMe ? ' (Bạn)' : ''}</div>
+            ${tierPillHtml}
+            <div class="lb-podium-val">${valDisplay}</div>
+            ${rewardPillHtml}
+          </div>
+        `;
+      })
+      .join('');
+    podiumEl.classList.remove('hidden');
   }
 
-  // Do not duplicate Top 1-3 rows below Podium
-  const tableRows = hasPodium ? list.slice(podiumCount) : list;
+  // 3. Ranks #4+ inside the Rising White Sheet (or compact #4 CTA with ghost slots #4, #5, #6)
+  const tableRows = list.slice(3);
   if (tableRows.length === 0) {
     listHeadingEl?.classList.add('hidden');
     tableWrap?.classList.add('hidden');
     tbody.innerHTML = '';
+    if (sheetNoteEl) {
+      const amInTop3 = Boolean(myRank && myRank.rank <= 3);
+      const nextOpenRank = Math.min(4, list.length + 1);
+      const ghostNums = [nextOpenRank, nextOpenRank + 1, nextOpenRank + 2];
+      const ghostSlotsHtml = ghostNums
+        .map(
+          (n) => `
+            <div class="lb-ghost-row" aria-hidden="true">
+              <div class="lb-ghost-left">
+                <span class="lb-ghost-rank">#${n}</span>
+                <span class="lb-ghost-avt">?</span>
+                <span class="lb-ghost-label">Vị trí đang trống</span>
+              </div>
+              <span class="lb-ghost-val">—</span>
+            </div>
+          `
+        )
+        .join('');
+      const rewardHintHtml = data.rewards?.enabled
+        ? `<p style="color:var(--lb-accent);font-weight:700;">🎁 Top 3 kỳ này nhận ngay: ${escapeHtml(data.rewards.top1)} • ${escapeHtml(data.rewards.top2)} • ${escapeHtml(data.rewards.top3)}</p>`
+        : '';
+      const ctaHtml = amInTop3
+        ? `
+          <div class="lb-empty-cta">
+            <h4>Giữ vững ngôi vị, mời bạn bè cùng đua</h4>
+            ${rewardHintHtml || '<p>Mời bạn bè mua sắm qua LiLa — nhận thêm thưởng giới thiệu hấp dẫn.</p>'}
+            <button type="button" class="btn btn-primary btn-sm lb-accent-btn" data-open-referral="1">Mời bạn bè ngay</button>
+          </div>
+        `
+        : `
+          <div class="lb-empty-cta">
+            <h4>Hạng #${nextOpenRank} đang chờ bạn</h4>
+            ${rewardHintHtml || '<p>Chỉ cần 1 đơn mua sắm qua LiLa là có tên trên bảng vinh danh</p>'}
+            <button type="button" class="btn btn-primary btn-sm lb-accent-btn" data-nav="home">Mua sắm ngay</button>
+          </div>
+        `;
+      sheetNoteEl.innerHTML = `<div class="lb-ghost-slots">${ghostSlotsHtml}</div>${ctaHtml}`;
+      sheetNoteEl.classList.remove('hidden');
+    }
   } else {
+    sheetNoteEl?.classList.add('hidden');
     if (listHeadingEl) {
-      if (hasPodium) {
-        const firstRank = tableRows[0].rank;
-        const lastRank = tableRows[tableRows.length - 1].rank;
-        listHeadingEl.textContent = firstRank === lastRank ? `Hạng ${firstRank}` : `Hạng ${firstRank} – ${lastRank}`;
-        listHeadingEl.classList.remove('hidden');
-      } else {
-        listHeadingEl.classList.add('hidden');
-      }
+      const firstRank = tableRows[0].rank;
+      const lastRank = tableRows[tableRows.length - 1].rank;
+      listHeadingEl.textContent = firstRank === lastRank ? `Hạng ${firstRank}` : `Hạng ${firstRank} – ${lastRank}`;
+      listHeadingEl.classList.remove('hidden');
     }
     tableWrap?.classList.remove('hidden');
     tbody.innerHTML = tableRows
       .map((item) => {
-        const medalCls = item.rank <= 3 ? `lb-rank-medal lb-rank-${item.rank}` : 'lb-rank-medal';
-        const metricVal = activeLeaderboardTab === 'cashback' ? item.totalCashback : item.totalSpend;
-        const isMe = currentUser && item.code && currentUser.code === item.code;
+        const metricVal = isCashback ? item.totalCashback : item.totalSpend;
+        const isMe = Boolean(item.isSelf || (currentUser && item.code && currentUser.code === item.code));
+        const metricDisplay = item.amountHidden && !isMe ? '•••.•••đ' : fmtVnd(metricVal);
         const shortTier = String(item.vipTierName || '').replace(/^Thành viên\s+/i, '');
-        const initial = String(item.displayName || 'U').trim().charAt(0).toUpperCase() || 'U';
-        const avatarInner = isSafeAvatarUrl(item.avatarUrl)
+        const initial = item.isAnonymous && !isMe
+          ? '?'
+          : (String(item.displayName || 'U').trim().charAt(0).toUpperCase() || 'U');
+        const avatarInner = (!item.isAnonymous || isMe) && isSafeAvatarUrl(item.avatarUrl)
           ? `<img src="${escapeHtml(item.avatarUrl)}" alt="${escapeHtml(item.displayName)}" loading="lazy" />`
           : escapeHtml(initial);
+        const orderSub = item.approvedOrderCount > 0
+          ? `${item.approvedOrderCount} đơn duyệt${shortTier ? ` • ${shortTier}` : ''}`
+          : (shortTier || '');
         return `
           <tr class="${isMe ? 'is-me' : ''}" data-lb-rank="${item.rank}">
-            <td class="lb-col-rank"><span class="${medalCls}">#${item.rank}</span></td>
+            <td class="lb-col-rank"><span class="lb-rank-cell">${item.rank}${renderRankTrendHtml(item.rankDelta)}</span></td>
             <td class="lb-col-user">
               <div class="lb-user-row">
                 <span class="lb-user-avatar">${avatarInner}</span>
                 <div class="lb-user-meta">
                   <strong>${escapeHtml(item.displayName)}${isMe ? ' (Bạn)' : ''}</strong>
-                  <div class="lb-user-code" style="font-size:12px;color:#64748b;">${escapeHtml(item.code)}</div>
+                  ${orderSub ? `<div class="lb-user-orders-sub">${escapeHtml(orderSub)}</div>` : ''}
                 </div>
               </div>
             </td>
-            <td class="lb-col-tier"><span class="lb-tier-pill">${renderVipBadgeSvg(item.vipTier || item.vipTierIcon, false)}<span>${escapeHtml(shortTier || item.vipTierName || '')}</span></span></td>
-            <td class="lb-col-metric"><strong class="lb-metric-val">${fmtVnd(metricVal)}</strong></td>
+            <td class="lb-col-tier"><span class="lb-tier-pill" data-open-vip-sheet="1" role="button" tabindex="0">${renderVipBadgeSvg(item.vipTier || item.vipTierIcon, false)}<span>${escapeHtml(shortTier || item.vipTierName || '')}</span></span></td>
+            <td class="lb-col-metric"><strong class="lb-metric-val">${metricDisplay}</strong></td>
           </tr>`;
       })
       .join('');
   }
 
-  // Render real VIP tiers benefits card below leaderboard
+  // 4. Real VIP Tiers Benefits Card
   const vipCardEl = document.getElementById('leaderboardVipCard');
   if (vipCardEl) {
     const tiers = Array.isArray(data.vipTiers) ? data.vipTiers : [];
@@ -6879,14 +7592,120 @@ function renderLeaderboardTable(mode = 'spend', { animate = false } = {}) {
       el.classList.add('lb-tab-animate');
     });
   }
+
+  observeMyRankVisibility();
+  checkLeaderboardRankUpCelebration(data, activeLeaderboardTab);
 }
 
-async function loadPublicLeaderboard() {
+// Item 8: Lightweight GPU Confetti (1.5s) + Haptic + Shiba Rank-Up Celebration
+function triggerLeaderboardCelebration({ title, sub }) {
+  const disabled = safeStorage.get('lila_lb_celebrate_disabled', localStorage) === '1';
+  const reducedMotion = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (disabled) return;
+
+  if (!reducedMotion && navigator.vibrate) {
+    try { navigator.vibrate([25, 40, 25]); } catch {}
+  }
+
+  if (!reducedMotion) {
+    const layer = document.getElementById('lbConfettiLayer');
+    if (layer) {
+      const colors = ['#ee4d2d', '#f59e0b', '#10b981', '#3b82f6', '#fde047'];
+      layer.innerHTML = '';
+      for (let i = 0; i < 30; i += 1) {
+        const piece = document.createElement('span');
+        piece.className = 'lb-confetti-piece';
+        piece.style.left = `${Math.round(Math.random() * 96 + 2)}%`;
+        piece.style.background = colors[i % colors.length];
+        piece.style.animationDelay = `${(Math.random() * 0.35).toFixed(2)}s`;
+        piece.style.setProperty('--cx', `${Math.round((Math.random() - 0.5) * 140)}px`);
+        piece.style.setProperty('--cr', `${Math.round((Math.random() > 0.5 ? 1 : -1) * (360 + Math.random() * 360))}deg`);
+        layer.appendChild(piece);
+      }
+      layer.classList.remove('hidden');
+      setTimeout(() => {
+        layer.classList.add('hidden');
+        layer.innerHTML = '';
+      }, 1750);
+    }
+  }
+
+  const modal = document.getElementById('lbCelebrateModal');
+  const titleEl = document.getElementById('lbCelebrateTitle');
+  const subEl = document.getElementById('lbCelebrateSub');
+  if (titleEl) titleEl.textContent = title || 'Chúc mừng bạn vừa lên hạng!';
+  if (subEl) subEl.textContent = sub || 'Chia sẻ ngay thành tích của bạn với bạn bè nhé!';
+  if (modal) modal.classList.remove('hidden');
+}
+
+function checkLeaderboardRankUpCelebration(data, mode) {
+  if (!authToken || !currentUser || !currentUser.code || !data) return;
+  const viewEl = document.getElementById('view-leaderboard');
+  if (!viewEl || !viewEl.classList.contains('active')) return;
+
+  const isCashback = mode === 'cashback';
+  const myRank = isCashback ? data.myRankCashback : data.myRankSpend;
+  const rankKey = `lila_last_seen_rank_${currentUser.code}_${mode}`;
+  const tierKey = `lila_last_seen_tier_${currentUser.code}`;
+
+  if (myRank && Number.isFinite(Number(myRank.rank))) {
+    const currRank = Number(myRank.rank);
+    const prevRaw = safeStorage.get(rankKey, localStorage);
+    safeStorage.set(rankKey, String(currRank), localStorage);
+    if (prevRaw) {
+      const prevRank = Number(prevRaw);
+      if (Number.isFinite(prevRank) && currRank < prevRank) {
+        const boardName = isCashback ? 'Vua Hoàn Tiền' : 'Đại Gia LiLa';
+        triggerLeaderboardCelebration({
+          title: `Bạn vừa lên hạng #${currRank}!`,
+          sub: `Tuyệt vời! Bạn đã thăng hạng từ #${prevRank} lên #${currRank} bảng ${boardName}.`
+        });
+        return;
+      }
+    }
+  }
+
+  const tierOrder = ['bronze', 'silver', 'gold', 'diamond'];
+  const currTierCode = String(data.myVipTier?.code || currentUser.vipTier || '').toLowerCase();
+  const currTierIdx = tierOrder.indexOf(currTierCode);
+  if (currTierIdx >= 0) {
+    const prevTierCode = safeStorage.get(tierKey, localStorage);
+    safeStorage.set(tierKey, currTierCode, localStorage);
+    if (prevTierCode) {
+      const prevTierIdx = tierOrder.indexOf(prevTierCode);
+      if (prevTierIdx >= 0 && currTierIdx > prevTierIdx) {
+        const shortName = String(data.myVipTier?.name || currTierCode).replace(/^Thành viên\s+/i, '');
+        triggerLeaderboardCelebration({
+          title: `Chúc mừng lên hạng ${shortName}!`,
+          sub: `Bạn đã mở khóa mức hoàn tiền ${data.myVipTier?.cashbackPercent || ''}% cho đơn hàng mới.`
+        });
+      }
+    }
+  }
+}
+
+on('closeLbCelebrateBtn', 'click', () => {
+  document.getElementById('lbCelebrateModal')?.classList.add('hidden');
+});
+
+on('lbCelebrateShareBtn', 'click', () => {
+  document.getElementById('lbCelebrateModal')?.classList.add('hidden');
+  openLeaderboardShareModal();
+});
+
+async function loadPublicLeaderboard(periodOverride) {
+  if (periodOverride === 'weekly' || periodOverride === 'monthly' || periodOverride === 'yearly' || periodOverride === 'all_time' || periodOverride === 'season') {
+    activeLeaderboardPeriod = periodOverride;
+  }
   const tbody = document.getElementById('leaderboardTableBody');
   const tableWrap = document.getElementById('leaderboardTableWrap');
   try {
-    const data = await apiFetch('/api/leaderboard');
+    const q = activeLeaderboardPeriod ? `?period=${encodeURIComponent(activeLeaderboardPeriod)}` : '';
+    const data = await apiFetch(`/api/leaderboard${q}`);
     latestLeaderboardData = data;
+    if (data?.season?.activePeriod) {
+      activeLeaderboardPeriod = data.season.activePeriod;
+    }
     renderLeaderboardTable(activeLeaderboardTab);
   } catch (err) {
     tableWrap?.classList.remove('hidden');
@@ -6896,10 +7715,204 @@ async function loadPublicLeaderboard() {
   }
 }
 
+let lbShareActiveRatio = 'story';
+
+function buildLeaderboardShareDeepLink() {
+  const refCode = currentUser?.code || '';
+  const tab = activeLeaderboardTab === 'cashback' ? 'cashback' : 'spend';
+  if (!refCode) return `${window.location.origin}/?src=lb_share&tab=${tab}`;
+  return `${window.location.origin}/?ref=${encodeURIComponent(refCode)}&src=lb_share&tab=${tab}`;
+}
+
+function ensureLeaderboardShareModule() {
+  if (window.LiLaLeaderboardShare && typeof window.LiLaLeaderboardShare.encodeQrMatrix === 'function') {
+    return Promise.resolve(window.LiLaLeaderboardShare);
+  }
+  if (lbShareScriptPromise) return lbShareScriptPromise;
+  lbShareScriptPromise = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = '/leaderboardShare.js?v=2';
+    s.onload = () => resolve(window.LiLaLeaderboardShare);
+    s.onerror = () => {
+      lbShareScriptPromise = null;
+      reject(new Error('Không thể tải mô-đun tạo ảnh chia sẻ.'));
+    };
+    document.head.appendChild(s);
+  });
+  return lbShareScriptPromise;
+}
+
+async function renderCurrentShareCanvas() {
+  const canvas = document.getElementById('lbShareCanvas');
+  const hideCheck = document.getElementById('lbShareHideAmountCheck');
+  if (!canvas || !lbCurrentSharePayload) return;
+  const mod = await ensureLeaderboardShareModule();
+  await mod.renderAchievementCard(canvas, {
+    ...lbCurrentSharePayload,
+    ratio: lbShareActiveRatio,
+    hideAmount: Boolean(hideCheck?.checked),
+    shareUrl: buildLeaderboardShareDeepLink()
+  });
+}
+
+async function openLeaderboardShareModal() {
+  const data = latestLeaderboardData;
+  const isCashback = activeLeaderboardTab === 'cashback';
+  const myRank = isCashback ? data?.myRankCashback : data?.myRankSpend;
+  if (!myRank) {
+    showToast('Bạn cần có ít nhất 1 đơn duyệt để tạo ảnh chia sẻ thành tích.');
+    return;
+  }
+  lbCurrentSharePayload = {
+    mode: activeLeaderboardTab,
+    rank: myRank.rank,
+    displayName: myRank.displayName || currentUser?.name || 'Thành viên LiLa',
+    avatarUrl: myRank.avatarUrl || currentUser?.avatarUrl || '',
+    isAnonymous: Boolean(currentUser?.leaderboardAnonymous || myRank.isAnonymous),
+    vipTierName: myRank.vipTierName || '',
+    totalSpend: myRank.totalSpend,
+    totalCashback: myRank.totalCashback,
+    seasonLabel: data?.season?.label || 'Toàn thời gian',
+    refCode: currentUser?.code || ''
+  };
+  const hideCheck = document.getElementById('lbShareHideAmountCheck');
+  if (hideCheck) {
+    hideCheck.checked = Boolean(currentUser?.leaderboardHideAmount);
+  }
+  const statsEl = document.getElementById('lbShareStatsHint');
+  if (statsEl) {
+    const st = data?.myShareStats || { clicks: 0, registrations: 0 };
+    if (st.clicks > 0 || st.registrations > 0) {
+      statsEl.textContent = `Ảnh chia sẻ của bạn đã thu hút ${st.clicks} lượt quét & ${st.registrations} bạn đăng ký!`;
+      statsEl.classList.remove('hidden');
+    } else {
+      statsEl.classList.add('hidden');
+    }
+  }
+  const modal = document.getElementById('lbShareModal');
+  if (modal) modal.classList.remove('hidden');
+  try {
+    await renderCurrentShareCanvas();
+  } catch (err) {
+    showToast(err.message || 'Không thể tạo ảnh chia sẻ.');
+  }
+}
+
+on('lbShareHideAmountCheck', 'change', () => {
+  renderCurrentShareCanvas().catch(() => {});
+});
+
+on('closeLbShareModalBtn', 'click', () => {
+  document.getElementById('lbShareModal')?.classList.add('hidden');
+});
+
+on('lbShareDownloadBtn', 'click', () => {
+  const canvas = document.getElementById('lbShareCanvas');
+  if (!canvas) return;
+  const link = document.createElement('a');
+  link.download = `lila-top-${lbCurrentSharePayload?.rank || 1}-${lbShareActiveRatio}.png`;
+  link.href = canvas.toDataURL('image/png');
+  link.click();
+  showToast('Đã tải ảnh thành tích PNG!');
+});
+
+on('lbShareCopyLinkBtn', 'click', async () => {
+  const shareUrl = buildLeaderboardShareDeepLink();
+  const refCode = currentUser?.code || '';
+  const titleText = activeLeaderboardTab === 'cashback' ? 'Vua Hoàn Tiền' : 'Đại Gia LiLa';
+  const text = refCode
+    ? `Tôi đang đứng Top #${lbCurrentSharePayload?.rank || 1} ${titleText} tại LiLa Cashback! Mua sắm hoàn tiền cùng mình trên LiLa, nhập mã ${refCode} để nhận ưu đãi: ${shareUrl}`
+    : `Tôi đang đứng Top #${lbCurrentSharePayload?.rank || 1} ${titleText} tại LiLa Cashback! ${shareUrl}`;
+  try {
+    await navigator.clipboard.writeText(text);
+    showToast('Đã sao chép lời mời kèm link giới thiệu!');
+  } catch {
+    showToast(shareUrl);
+  }
+});
+
+on('lbShareNativeBtn', 'click', async () => {
+  const canvas = document.getElementById('lbShareCanvas');
+  const shareUrl = buildLeaderboardShareDeepLink();
+  const titleText = activeLeaderboardTab === 'cashback' ? 'Vua Hoàn Tiền' : 'Đại Gia LiLa';
+  const shareText = `Tôi đang đứng Top #${lbCurrentSharePayload?.rank || 1} ${titleText} tại LiLa Cashback!`;
+
+  if (canvas && navigator.share) {
+    try {
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+      const file = blob ? new File([blob], `lila-top-${lbCurrentSharePayload?.rank || 1}-${lbShareActiveRatio}.png`, { type: 'image/png' }) : null;
+      if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ title: 'Thành tích LiLa Cashback', text: shareText, url: shareUrl, files: [file] });
+        return;
+      }
+      await navigator.share({ title: 'Thành tích LiLa Cashback', text: shareText, url: shareUrl });
+      return;
+    } catch (err) {
+      if (err && err.name === 'AbortError') return;
+    }
+  }
+  // Fallback on Desktop browsers without Web Share API: download PNG
+  document.getElementById('lbShareDownloadBtn')?.click();
+});
+
 document.addEventListener('click', (e) => {
   const lbBtn = e.target.closest('[data-lb-tab]');
   if (lbBtn) {
     renderLeaderboardTable(lbBtn.getAttribute('data-lb-tab'), { animate: true });
+    return;
+  }
+  const periodBtn = e.target.closest('[data-lb-period]');
+  if (periodBtn) {
+    const nextPeriod = periodBtn.getAttribute('data-lb-period');
+    if (nextPeriod && nextPeriod !== activeLeaderboardPeriod) {
+      loadPublicLeaderboard(nextPeriod);
+    }
+    return;
+  }
+  if (e.target.closest('[data-lb-share]')) {
+    openLeaderboardShareModal();
+    return;
+  }
+  const ratioBtn = e.target.closest('[data-lb-share-ratio]');
+  if (ratioBtn) {
+    const nextRatio = ratioBtn.getAttribute('data-lb-share-ratio') === 'square' ? 'square' : 'story';
+    if (nextRatio !== lbShareActiveRatio) {
+      lbShareActiveRatio = nextRatio;
+      document.querySelectorAll('[data-lb-share-ratio]').forEach((b) => {
+        const isAct = b.getAttribute('data-lb-share-ratio') === lbShareActiveRatio;
+        b.classList.toggle('active', isAct);
+        b.setAttribute('aria-selected', isAct ? 'true' : 'false');
+      });
+      renderCurrentShareCanvas().catch(() => {});
+    }
+    return;
+  }
+  if (e.target.closest('[data-open-vip-sheet]')) {
+    openLbVipSheet();
+    return;
+  }
+  if (e.target.closest('#closeLbVipSheetBtn') || e.target.id === 'lbVipSheetOverlay') {
+    closeLbVipSheet();
+    return;
+  }
+  if (e.target.closest('[data-open-referral]')) {
+    if (typeof switchView === 'function') switchView('account');
+    setTimeout(() => {
+      const refBtn = document.getElementById('openReferralSheetBtn');
+      if (refBtn && getComputedStyle(refBtn).display !== 'none') {
+        refBtn.click();
+      } else {
+        document.getElementById('referralPanel')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }, 120);
+    return;
+  }
+  if (e.target.closest('[data-lb-enable-public]')) {
+    setLeaderboardPrivacy(false);
+    return;
+  }
+  if (e.target.id === 'lbShareModal') {
+    e.target.classList.add('hidden');
     return;
   }
   if (e.target.closest('#lbRetryBtn')) {
@@ -7485,3 +8498,320 @@ on('walletQuickHistoryBtn', 'click', () => {
 })();
 
 renderRecentConvertedLinks();
+
+// ================= HOMEPAGE DEAL DISCOVERY SHELF ("SĂN DEAL HOÀN TIỀN CAO") =================
+(() => {
+  const sectionEl = document.getElementById('homeDealsSection');
+  const gridEl = document.getElementById('homeDealsGrid');
+  const subEl = document.getElementById('homeDealsSub');
+  const groupTabsEl = document.getElementById('homeDealsGroupTabs');
+  const catStripEl = document.getElementById('homeDealsCatStrip');
+  const moreWrapEl = document.getElementById('homeDealsMoreWrap');
+  const moreBtnEl = document.getElementById('homeDealsMoreBtn');
+  const disclaimerEl = document.getElementById('homeDealsDisclaimer');
+  if (!sectionEl || !gridEl) return;
+
+  let activeGroup = 'worth_buying';
+  let activeCategory = 'all';
+  let dealAbortController = null;
+  let dealRenderSeq = 0;
+  let currentItems = [];
+  let visibleCount = 6;
+  const clientDealCache = new Map();
+  const inFlightDealBuy = new Set();
+  const createdDealLinks = new Map();
+  const CLIENT_CACHE_TTL_MS = 5 * 60 * 1000;
+
+  function getInitialVisibleCount() {
+    return window.innerWidth >= 900 ? 8 : 6;
+  }
+
+  function formatCompactCount(count) {
+    const n = Math.round(Number(count) || 0);
+    if (n <= 0) return '';
+    if (n >= 10000) return `${(n / 1000).toFixed(0)}k+`;
+    if (n >= 1000) return `${(n / 1000).toFixed(1).replace(/\.0$/, '')}k+`;
+    return `${n.toLocaleString('vi-VN')}`;
+  }
+
+  function renderDealSkeletons() {
+    const count = getInitialVisibleCount();
+    gridEl.innerHTML = Array.from({ length: count })
+      .map(() => '<div class="hd-skeleton-card" aria-hidden="true"></div>')
+      .join('');
+    if (moreWrapEl) moreWrapEl.classList.add('hidden');
+  }
+
+  function renderDealsGrid() {
+    if (!currentItems.length) {
+      gridEl.innerHTML =
+        '<div class="hd-empty-state">Chưa có sản phẩm phù hợp trong mục này. Hãy thử chọn ngành hàng hoặc nhóm khác nhé!</div>';
+      if (moreWrapEl) moreWrapEl.classList.add('hidden');
+      return;
+    }
+
+    const slice = currentItems.slice(0, visibleCount);
+    gridEl.innerHTML = slice
+      .map((item) => {
+        const isShopee = item.platform === 'shopee';
+        const platLabel = isShopee ? 'Shopee' : 'TikTok';
+        const safeImg = safeHttpsUrl(item.imageUrl);
+        const imgHtml = safeImg
+          ? `<img src="${safeImg}" alt="${escapeHtml(item.title)}" class="hd-card-img" referrerpolicy="no-referrer" loading="lazy" />`
+          : `<div class="hd-card-img hd-card-img-fallback">${UI_ICONS.shoppingBagLg}</div>`;
+
+        const highlightHtml =
+          item.highlightBadge && item.highlightBadge.label
+            ? `<span class="hd-highlight-badge is-${escapeHtml(item.highlightBadge.type || 'default')}">${escapeHtml(item.highlightBadge.label)}</span>`
+            : '';
+
+        const trustParts = [];
+        if (Number(item.rating) > 0) trustParts.push(`⭐ ${Number(item.rating).toFixed(1)}`);
+        if (Number(item.sales) > 0) trustParts.push(`Đã bán ${formatCompactCount(item.sales)}`);
+        if (Number(item.sold7d) >= 20) trustParts.push(`+${formatCompactCount(item.sold7d)} tuần`);
+        const trustHtml = trustParts.length
+          ? `<div class="hd-trust-line">${escapeHtml(trustParts.join(' • '))}</div>`
+          : '';
+
+        const priceText = item.hasPriceRange ? `Từ ${fmtVnd(item.price)}` : fmtVnd(item.price);
+        const cbText = item.estimatedCashback > 0 ? `+ ${fmtVnd(item.estimatedCashback)}` : '0đ';
+        const uid = `${item.platform}:${item.productId}`;
+
+        return `
+          <article class="hd-card" data-hd-uid="${escapeHtml(uid)}">
+            <div class="hd-media">
+              ${imgHtml}
+              <span class="hd-plat-tag is-${isShopee ? 'shopee' : 'tiktok'}">${platLabel}</span>
+              ${highlightHtml}
+            </div>
+            <div class="hd-body">
+              <div class="hd-title" title="${escapeHtml(item.title)}">${escapeHtml(item.title)}</div>
+              ${trustHtml}
+              <div class="hd-pricing">
+                <div class="hd-price-val">${priceText}</div>
+                <div class="hd-cashback-pill">Hoàn ~ <strong>${cbText}</strong></div>
+              </div>
+              <button
+                type="button"
+                class="hd-buy-btn ${isShopee ? 'is-shopee' : 'is-tiktok'}"
+                data-hd-buy-platform="${escapeHtml(item.platform)}"
+                data-hd-buy-id="${escapeHtml(item.productId)}"
+                data-hd-shop-id="${escapeHtml(item.shopId || '')}"
+                data-hd-verify-token="${escapeHtml(item.verifyToken || '')}"
+              >
+                Mua nhận hoàn tiền
+              </button>
+              <div class="hd-card-feedback" data-hd-feedback="${escapeHtml(uid)}"></div>
+            </div>
+          </article>
+        `;
+      })
+      .join('');
+
+    if (moreWrapEl) {
+      if (visibleCount < currentItems.length) {
+        moreWrapEl.classList.remove('hidden');
+      } else {
+        moreWrapEl.classList.add('hidden');
+      }
+    }
+
+    gridEl.querySelectorAll('[data-hd-buy-id]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const platform = btn.getAttribute('data-hd-buy-platform') || 'shopee';
+        const pid = btn.getAttribute('data-hd-buy-id') || '';
+        const sid = btn.getAttribute('data-hd-shop-id') || '';
+        const vToken = btn.getAttribute('data-hd-verify-token') || '';
+        if (pid) void handleHomeDealBuy(btn, platform, pid, sid, vToken);
+      });
+    });
+  }
+
+  async function handleHomeDealBuy(btnEl, platform, productId, shopId, verifyToken) {
+    const uid = `${platform}:${productId}`;
+    if (inFlightDealBuy.has(uid)) return;
+
+    const isShopee = platform === 'shopee';
+    const platName = isShopee ? 'Shopee' : 'TikTok Shop';
+    const endpoint = isShopee ? '/api/compare/shopee/link' : '/api/compare/tiktok/link';
+    const feedbackEl = gridEl.querySelector(`[data-hd-feedback="${uid}"]`);
+    const sessionKey = `${uid}:${authToken ? currentUser?.id || 'auth' : 'guest'}`;
+
+    const cachedUrl = createdDealLinks.get(sessionKey);
+    if (cachedUrl) {
+      const safeCached = safeAppOrWebUrl(cachedUrl);
+      if (safeCached) {
+        window.open(safeCached, '_blank', 'noopener');
+        showToast(`Đang mở sản phẩm ${platName} qua link hoàn tiền!`);
+        return;
+      }
+    }
+
+    inFlightDealBuy.add(uid);
+    const origText = btnEl.textContent;
+    btnEl.disabled = true;
+    btnEl.textContent = 'Đang tạo link...';
+    if (feedbackEl) feedbackEl.innerHTML = '';
+
+    try {
+      const body = isShopee
+        ? {
+            itemId: productId,
+            ...(shopId ? { shopId } : {}),
+            ...(verifyToken ? { verifyToken } : {}),
+            source: 'home_deal_shelf',
+            dealGroup: activeGroup
+          }
+        : {
+            productId,
+            ...(verifyToken ? { verifyToken } : {}),
+            source: 'home_deal_shelf',
+            dealGroup: activeGroup
+          };
+
+      const res = await apiFetch(endpoint, {
+        method: 'POST',
+        body: JSON.stringify(body)
+      });
+
+      const safeUrl = safeAppOrWebUrl(res?.affiliateUrl);
+      if (!res?.ok || !safeUrl) {
+        throw new Error(res?.error || `Không thể tạo link hoàn tiền ${platName}.`);
+      }
+
+      createdDealLinks.set(sessionKey, safeUrl);
+      const opened = window.open(safeUrl, '_blank', 'noopener');
+      const guestNote =
+        res.isLoggedIn === false
+          ? '<div class="hd-guest-note">Đăng nhập để được ghi nhận hoàn tiền.</div>'
+          : '';
+
+      if (feedbackEl) {
+        feedbackEl.innerHTML = `
+          <a href="${safeUrl}" target="_blank" rel="noopener" class="hd-open-now ${!opened ? 'is-highlight' : ''}">Mở ${platName} ngay</a>
+          ${guestNote}
+        `;
+      }
+      showToast(
+        opened
+          ? `Đã tạo link hoàn tiền ${platName}!`
+          : `Đã tạo link! Bấm "Mở ${platName} ngay" bên dưới.`
+      );
+    } catch (err) {
+      const msg = err?.message || `Không thể tạo link ${platName} lúc này.`;
+      if (feedbackEl) feedbackEl.innerHTML = `<div class="hd-err-note">${escapeHtml(msg)}</div>`;
+      showToast(msg);
+    } finally {
+      inFlightDealBuy.delete(uid);
+      btnEl.disabled = false;
+      btnEl.textContent = origText;
+    }
+  }
+
+  async function loadHomeDeals(group, category, isInitial = false) {
+    activeGroup = group;
+    activeCategory = category;
+    visibleCount = getInitialVisibleCount();
+
+    const cacheKey = `${group}:${category}:${authToken ? currentUser?.id || 'auth' : 'guest'}`;
+    const hit = clientDealCache.get(cacheKey);
+    if (hit && hit.expiresAt > Date.now()) {
+      currentItems = hit.data.items || [];
+      if (subEl && hit.data.fetchedAt) {
+        const t = new Date(hit.data.fetchedAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+        subEl.textContent = `Cập nhật lúc ${t} • Shopee & TikTok Shop`;
+      }
+      renderDealsGrid();
+      return;
+    }
+
+    if (dealAbortController) dealAbortController.abort();
+    const controller = new AbortController();
+    dealAbortController = controller;
+    const seq = ++dealRenderSeq;
+
+    renderDealSkeletons();
+
+    try {
+      const qs = new URLSearchParams({ group, category, limit: '16' });
+      const data = await apiFetch(`/api/deals/home?${qs.toString()}`, {
+        method: 'GET',
+        signal: controller.signal,
+        silentConnectionNotice: true
+      });
+      if (controller.signal.aborted || seq !== dealRenderSeq) return;
+
+      if (!data?.ok || !Array.isArray(data.items)) {
+        if (isInitial) sectionEl.classList.add('hidden');
+        return;
+      }
+
+      clientDealCache.set(cacheKey, { data, expiresAt: Date.now() + CLIENT_CACHE_TTL_MS });
+      currentItems = data.items;
+      if (isInitial && currentItems.length === 0) {
+        sectionEl.classList.add('hidden');
+        return;
+      }
+      sectionEl.classList.remove('hidden');
+
+      if (subEl && data.fetchedAt) {
+        const t = new Date(data.fetchedAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+        subEl.textContent = `Cập nhật lúc ${t} • Shopee & TikTok Shop`;
+      }
+      if (disclaimerEl && data.disclaimer) {
+        disclaimerEl.textContent = data.disclaimer;
+      }
+      renderDealsGrid();
+    } catch (err) {
+      if (controller.signal.aborted || err?.name === 'AbortError' || seq !== dealRenderSeq) return;
+      if (isInitial) {
+        sectionEl.classList.add('hidden');
+      } else {
+        gridEl.innerHTML =
+          '<div class="hd-empty-state">Tạm thời chưa tải được dữ liệu mục này. Vui lòng thử lại sau ít giây.</div>';
+      }
+    }
+  }
+
+  if (groupTabsEl) {
+    groupTabsEl.querySelectorAll('[data-deal-group]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const g = btn.getAttribute('data-deal-group');
+        if (!g || g === activeGroup) return;
+        groupTabsEl.querySelectorAll('[data-deal-group]').forEach((b) => {
+          const isAct = b === btn;
+          b.classList.toggle('active', isAct);
+          b.setAttribute('aria-selected', String(isAct));
+        });
+        void loadHomeDeals(g, activeCategory, false);
+      });
+    });
+  }
+
+  if (catStripEl) {
+    catStripEl.querySelectorAll('[data-deal-cat]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const c = btn.getAttribute('data-deal-cat');
+        if (!c || c === activeCategory) return;
+        catStripEl.querySelectorAll('[data-deal-cat]').forEach((b) => {
+          const isAct = b === btn;
+          b.classList.toggle('active', isAct);
+          b.setAttribute('aria-selected', String(isAct));
+        });
+        void loadHomeDeals(activeGroup, c, false);
+      });
+    });
+  }
+
+  if (moreBtnEl) {
+    moreBtnEl.addEventListener('click', () => {
+      visibleCount += getInitialVisibleCount();
+      renderDealsGrid();
+    });
+  }
+
+  // Non-blocking lazy load after initial homepage paint
+  setTimeout(() => {
+    void loadHomeDeals(activeGroup, activeCategory, true);
+  }, 200);
+})();

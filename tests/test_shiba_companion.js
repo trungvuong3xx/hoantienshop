@@ -21,7 +21,7 @@ async function run() {
   assert.ok(css.includes('html.kb-open .shiba-companion-layer'), 'Must auto-hide when mobile keyboard is open');
   assert.ok(css.includes('body:has(#view-admin.active) .shiba-companion-layer'), 'Must auto-hide in Admin area');
   assert.ok(css.includes('body:has(.modal-backdrop:not(.hidden)) .shiba-companion-layer'), 'Must auto-hide when modals open');
-  assert.ok(appJs.includes('/shibaCompanion.css?v=6'), 'app.js must lazy-load shibaCompanion.css after first paint');
+  assert.ok(appJs.includes('/shibaCompanion.css?v=7'), 'app.js must lazy-load shibaCompanion.css after first paint');
   assert.ok(appJs.includes('/shibaCompanion.js?v=6'), 'app.js must lazy-load shibaCompanion.js after first paint');
   assert.ok(indexHtml.includes('id="toggleShibaCompanionBtn"'), 'index.html must include Account Shiba toggle');
 
