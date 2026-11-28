@@ -113,7 +113,22 @@
     }, delay);
   }
 
+  function isCurrentBrowserAdmin() {
+    try {
+      const raw = safeStorageGet(localStorage, 'hoantienshop_user_v1');
+      if (!raw) return false;
+      const parsed = JSON.parse(raw);
+      return parsed?.role === 'admin';
+    } catch {
+      return false;
+    }
+  }
+
   function flush(useKeepalive = false) {
+    if (isCurrentBrowserAdmin()) {
+      queue.length = 0;
+      return;
+    }
     if (!queue.length) return;
     hasFlushedOnce = true;
     const batch = queue.splice(0, 20);
@@ -134,7 +149,7 @@
   }
 
   function trackEvent(eventType, payload = {}) {
-    if (!eventType) return;
+    if (!eventType || isCurrentBrowserAdmin()) return;
     getOrCreateSession();
     queue.push({
       eventId: genId('e'),

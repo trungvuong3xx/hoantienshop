@@ -124,6 +124,17 @@ async function ensureAnalyticsSchema(pool) {
         PRIMARY KEY (day_vn, dimension_type, dimension_key)
       );
       CREATE INDEX IF NOT EXISTS idx_adr_day_type ON analytics_daily_rollups (day_vn DESC, dimension_type);
+
+      -- Purge any historical Admin traffic/clicks recorded before AN-02 admin exclusion
+      DELETE FROM analytics_events
+      WHERE view_name = 'admin'
+         OR user_id IN (SELECT id FROM users WHERE role = 'admin')
+         OR session_id IN (
+           SELECT session_id FROM analytics_sessions
+           WHERE user_id IN (SELECT id FROM users WHERE role = 'admin')
+         );
+      DELETE FROM analytics_sessions
+      WHERE user_id IN (SELECT id FROM users WHERE role = 'admin');
     `);
     pgAnalyticsSchemaReady = true;
   } catch (err) {
@@ -413,17 +424,47 @@ const ALLOWED_EVENT_TYPES = new Set([
   'cta_click'
 ]);
 
+async function purgeAdminSession(sessionId, visitorId) {
+  if (!sessionId && !visitorId) return;
+  const pool = getPgPool();
+  if (pool) {
+    try {
+      if (sessionId) {
+        await pool.query('DELETE FROM analytics_events WHERE session_id = $1', [sessionId]);
+        await pool.query('DELETE FROM analytics_sessions WHERE session_id = $1', [sessionId]);
+      }
+      if (visitorId) {
+        await pool.query('DELETE FROM analytics_events WHERE visitor_id = $1', [visitorId]);
+        await pool.query('DELETE FROM analytics_sessions WHERE visitor_id = $1', [visitorId]);
+      }
+      clearAnalyticsCache();
+    } catch { /* non-fatal */ }
+    return;
+  }
+  for (const [k, v] of memEvents.entries()) {
+    if ((sessionId && v.sessionId === sessionId) || (visitorId && v.visitorId === visitorId)) {
+      memEvents.delete(k);
+    }
+  }
+  for (const [k, v] of memSessions.entries()) {
+    if ((sessionId && k === sessionId) || (visitorId && v.visitorId === visitorId)) {
+      memSessions.delete(k);
+    }
+  }
+}
+
 /**
  * Ingest a client-batched analytics payload (max 25 events per request).
  */
 async function ingestAnalyticsBatch({ session = {}, events = [], authUser = null, ip = '', userAgent = '' }) {
-  // AN-02: Never pollute customer analytics with Admin account activity
+  const sessionId = cleanStr(session.sessionId, 64);
+  const visitorId = cleanStr(session.visitorId, 64);
+  // AN-02: Never pollute customer analytics with Admin account activity (and purge any pre-login events of this Admin browser)
   if (authUser?.role === 'admin') {
+    await purgeAdminSession(sessionId, visitorId);
     return { accepted: 0, skippedAdmin: true };
   }
 
-  const sessionId = cleanStr(session.sessionId, 64);
-  const visitorId = cleanStr(session.visitorId, 64);
   if (!sessionId || !visitorId) {
     return { accepted: 0 };
   }
@@ -528,8 +569,13 @@ async function recordServerAffiliateClick({
   clickId
 }) {
   if (!clickId || !platform) return;
-  // AN-02: Do not record Admin testing clicks into customer analytics
-  if (authUser?.role === 'admin') return;
+  // AN-02: Do not record Admin testing clicks into customer analytics (and purge any pre-login events of this Admin browser)
+  if (authUser?.role === 'admin') {
+    const sid = cleanStr(req?.headers?.['x-analytics-session'], 64);
+    const vid = cleanStr(req?.headers?.['x-analytics-visitor'], 64);
+    await purgeAdminSession(sid, vid);
+    return;
+  }
 
   const sessionId = cleanStr(req?.headers?.['x-analytics-session'], 64) || `srv_${clickId}`;
   const visitorId = cleanStr(req?.headers?.['x-analytics-visitor'], 64) || (authUser?.id ? `usr_${authUser.id}` : sessionId);
@@ -905,7 +951,7 @@ async function getAnalyticsMembers({ rangeDays = 30, range = null, source = '', 
       FROM member_sessions ms
       JOIN users u ON u.id = ms.user_id
       LEFT JOIN member_clicks mc ON mc.user_id = ms.user_id
-      WHERE 1=1 ${searchSql}
+      WHERE COALESCE(u.role, 'user') <> 'admin' ${searchSql}
       ORDER BY ${orderClause}
       LIMIT ${safeLimit} OFFSET ${offset}
     `;
@@ -983,17 +1029,19 @@ async function getAnalyticsMembers({ rangeDays = 30, range = null, source = '', 
     if (e.platform === 'tiktok') cur.tiktokClicks++;
   }
 
-  let list = [...agg.values()].map((r) => {
-    const u = userMap.get(r.userId) || {};
-    return {
-      ...r,
-      userCode: u.code || '',
-      name: u.name || 'Thành viên',
-      phone: u.phone || '',
-      favoritePlatform:
-        r.shopeeClicks > r.tiktokClicks ? 'shopee' : r.tiktokClicks > r.shopeeClicks ? 'tiktok' : r.totalClicks > 0 ? 'both' : 'none'
-    };
-  });
+  let list = [...agg.values()]
+    .filter((r) => userMap.get(r.userId)?.role !== 'admin')
+    .map((r) => {
+      const u = userMap.get(r.userId) || {};
+      return {
+        ...r,
+        userCode: u.code || '',
+        name: u.name || 'Thành viên',
+        phone: u.phone || '',
+        favoritePlatform:
+          r.shopeeClicks > r.tiktokClicks ? 'shopee' : r.tiktokClicks > r.shopeeClicks ? 'tiktok' : r.totalClicks > 0 ? 'both' : 'none'
+      };
+    });
 
   if (searchTrim) {
     list = list.filter((x) => `${x.name} ${x.userCode} ${x.phone}`.toLowerCase().includes(searchTrim));
