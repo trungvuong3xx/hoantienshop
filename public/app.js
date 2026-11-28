@@ -32,6 +32,19 @@ const USER_KEY = 'hoantienshop_user_v1';
 safeStorage.remove(TOKEN_KEY);
 
 let currentUser = null;
+// Leaderboard state initialized at top to prevent TDZ ReferenceError on direct /#leaderboard reload
+let latestLeaderboardData = null;
+let activeLeaderboardTab = 'spend';
+let activeLeaderboardPeriod = '';
+let lbMeObserver = null;
+let lbShareScriptPromise = null;
+let lbCurrentSharePayload = null;
+let lbShareActiveRatio = 'story';
+let lbShareState = 'idle'; // idle | generating | ready | error | sharing
+let lbShareObjectUrl = '';
+let lbShareBlob = null;
+let lbShareRenderSeq = 0;
+let lbSharePushedHistory = false;
 const savedUser = safeStorage.get(USER_KEY);
 if (savedUser) {
   try {
@@ -6807,8 +6820,6 @@ on('admBroadcastSendBtn', 'click', async () => {
 
 // ================= VIP TIERING PROGRESS, ADMIN TABLE & PUBLIC LEADERBOARD =================
 let latestVipTiersAdmin = [];
-let latestLeaderboardData = null;
-let activeLeaderboardTab = 'spend';
 
 function renderUserVipProgress(vipInfo, effectiveRate) {
   const card = document.getElementById('userVipCard');
@@ -7021,11 +7032,6 @@ async function handleDistributeLbRewards(tab) {
 
 on('admDistributeLbSpendBtn', 'click', () => handleDistributeLbRewards('spend'));
 on('admDistributeLbCashbackBtn', 'click', () => handleDistributeLbRewards('cashback'));
-
-let activeLeaderboardPeriod = '';
-let lbMeObserver = null;
-let lbShareScriptPromise = null;
-let lbCurrentSharePayload = null;
 
 function renderVipProgressBlockHtml(overallSpend, tiers) {
   if (!Array.isArray(tiers) || tiers.length === 0) return '';
@@ -7714,13 +7720,6 @@ async function loadPublicLeaderboard(periodOverride) {
     }
   }
 }
-
-let lbShareActiveRatio = 'story';
-let lbShareState = 'idle'; // idle | generating | ready | error | sharing
-let lbShareObjectUrl = '';
-let lbShareBlob = null;
-let lbShareRenderSeq = 0;
-let lbSharePushedHistory = false;
 
 function buildLeaderboardShareDeepLink() {
   const refCode = currentUser?.code || '';
