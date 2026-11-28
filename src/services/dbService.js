@@ -1036,12 +1036,16 @@ async function initPostgresIfConfigured() {
           user_id TEXT,
           user_code TEXT,
           platform TEXT,
+          source TEXT,
+          deal_group TEXT,
           original_url TEXT,
           clean_url TEXT,
           product_id TEXT,
           affiliate_url TEXT,
           created_at TIMESTAMPTZ DEFAULT NOW()
         );
+        ALTER TABLE clicks ADD COLUMN IF NOT EXISTS source TEXT;
+        ALTER TABLE clicks ADD COLUMN IF NOT EXISTS deal_group TEXT;
         CREATE TABLE IF NOT EXISTS orders (
           order_sn TEXT PRIMARY KEY,
           platform TEXT,
@@ -1418,6 +1422,8 @@ async function loadAuthoritativeStateFromPostgres(client) {
       userId: row.user_id || null,
       userCode: row.user_code || 'GUEST',
       platform: row.platform || 'shopee',
+      source: row.source || null,
+      dealGroup: row.deal_group || null,
       originalUrl: row.original_url || '',
       cleanUrl: row.clean_url || '',
       productId: row.product_id || '',
@@ -1814,12 +1820,14 @@ async function appendClickRecords(records) {
     if (!pgSchemaReady) throw new Error('Postgres schema is not ready');
     const rows = valid.map(c => ({ click_id: c.clickId, user_id: c.userId || null,
       user_code: c.userCode || 'GUEST', platform: c.platform || 'shopee',
+      source: c.source || null, deal_group: c.dealGroup || null,
       original_url: c.originalUrl || '', clean_url: c.cleanUrl || '',
       product_id: c.productId || '', affiliate_url: c.affiliateUrl, created_at: c.createdAt }));
     const result = await pgPool.query(`
-      INSERT INTO clicks (click_id, user_id, user_code, platform, original_url, clean_url, product_id, affiliate_url, created_at)
-      SELECT click_id, user_id, user_code, platform, original_url, clean_url, product_id, affiliate_url, created_at
+      INSERT INTO clicks (click_id, user_id, user_code, platform, source, deal_group, original_url, clean_url, product_id, affiliate_url, created_at)
+      SELECT click_id, user_id, user_code, platform, source, deal_group, original_url, clean_url, product_id, affiliate_url, created_at
       FROM jsonb_to_recordset($1::jsonb) AS c(click_id text, user_id text, user_code text, platform text,
+        source text, deal_group text,
         original_url text, clean_url text, product_id text, affiliate_url text, created_at timestamptz)
       ON CONFLICT (click_id) DO NOTHING RETURNING click_id
     `, [JSON.stringify(rows)]);
@@ -1863,7 +1871,8 @@ async function findClickById(clickId, { forAttribution = false } = {}) {
   const row = result.rows[0];
   if (!row) return null;
   const click = { clickId: row.click_id, userId: row.user_id, userCode: row.user_code,
-    platform: row.platform, originalUrl: row.original_url, cleanUrl: row.clean_url,
+    platform: row.platform, source: row.source || null, dealGroup: row.deal_group || null,
+    originalUrl: row.original_url, cleanUrl: row.clean_url,
     productId: row.product_id, affiliateUrl: row.affiliate_url, createdAt: row.created_at };
   const db = ensureDbLoaded();
   if (!db.clicks.some(c => c.clickId === clickId)) db.clicks.unshift(click);

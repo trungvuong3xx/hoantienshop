@@ -26,6 +26,7 @@
 | `BUG-013` | 2026-11-27 | `tiktokCompareService` / `compare/*` | So sánh giá ra sản phẩm rác không liên quan (VD: `N. ú.m Greenfinger Bebegrow` ra vải ủi/ván trượt) | `[6-Đã thay thế]` *(nâng cấp lên engine `src/services/compare/*`)* |
 | `BUG-014` | 2026-11-27 | `public/app.js` (`#userManageModal`) | Toast in lộ mật khẩu ngẫu nhiên; cộng/trừ tiền & khóa tài khoản thiếu xác nhận | `[4-Đã sửa & Test PASS]` |
 | `BUG-015` | 2026-11-28 | `cashbackController` / `dbService` / `app.js` | Audit BXH V5: lỗi scope `no-undef` trigger thông báo, báo vượt hạng giả, thiếu cột PG `lb_notify_disabled`, lệch nhãn `#4` khi < 3 user, sticky bar trùng thẻ cá nhân | `[4-Đã sửa & Test PASS]` |
+| `BUG-016` | 2026-11-28 | `dbService` (Postgres `clicks`) | Bảng `clicks` trên PostgreSQL thiếu cột `source` & `deal_group`, khiến `appendClickRecords` làm rơi thông tin attribution (`compare_sp_to_tt`, `compare_tt_to_sp`, `home_deal_shelf`) khi persist lên PG | `[4-Đã sửa & Test PASS]` |
 | `BUG-016` | 2026-11-28 | `index.html` / `styles.css` / `app.js` | Popup Chia sẻ ảnh BXH (`#lbShareModal`) & `#lbCelebrateModal` bị render xuống cuối trang thay vì nổi overlay | `[4-Đã sửa & Test PASS]` |
 
 ---
@@ -80,3 +81,9 @@
 * **Nguyên nhân:** (1) `notifyOrderEvent()` ở top-level gọi `triggerLeaderboardRankNotifications` khai báo trong closure `registerCashbackRoutes` gây lỗi ESLint `no-undef` và không kích hoạt thông báo; (2) báo vượt hạng giả khi người dẫn đầu mua thêm đơn; (3) thiếu cột `lb_notify_disabled` trong PostgreSQL `users`; (4) khối CTA hardcode `#4` kể cả khi chỉ có 1–2 user; (5) Sticky My Rank Bar chưa theo dõi `#leaderboardSideMyCard` trên Mobile.
 * **Giải pháp:** Thêm module-level hook `leaderboardRankNotifyHook`; chỉ báo `lb_overtaken` khi `rankDelta` thực sự thay đổi; bổ sung cột PG `lb_notify_disabled`; tính động `nextOpenRank = Math.min(4, list.length + 1)`; mở rộng `IntersectionObserver` theo dõi cả `#leaderboardSideMyCard`.
 * **Kiểm thử:** `npm run lint` (0 lỗi), 4 bộ test hồi quy PASS 100%, Playwright 8 viewport (`320`–`1920px`) × 2 tab PASS 16/16 (`0px` overflow, `0` lỗi JS).
+
+### `BUG-016` — Rơi trường attribution `source` & `deal_group` của `clicks` trên PostgreSQL (2026-11-28)
+* **Module:** `src/services/dbService.js` (`clicks` DDL, `appendClickRecords`, `findClickById`, PG state hydrate)
+* **Nguyên nhân:** Các endpoint `/api/compare/*/link` gắn `source` (`compare_sp_to_tt`, `compare_tt_to_sp`, `home_deal_shelf`) và `dealGroup` vào `clickRecord`, nhưng bảng `clicks` trên PostgreSQL chỉ có 9 cột cũ nên dữ liệu attribution bị bỏ qua khi lưu vào DB.
+* **Giải pháp:** Thêm idempotent `ALTER TABLE clicks ADD COLUMN IF NOT EXISTS source TEXT; ALTER TABLE clicks ADD COLUMN IF NOT EXISTS deal_group TEXT;`, cập nhật `INSERT` trong `appendClickRecords` và map lại trong `finalClicks` & `findClickById`.
+* **Kiểm thử:** Thêm `tests/compare/test_affiliate_attribution.js` PASS, chạy lại 5 bộ test compare/deals + `npm run lint` (0 lỗi).

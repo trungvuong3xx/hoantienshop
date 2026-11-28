@@ -6,6 +6,10 @@
 ---
 
 ## 2026-11-27 — 2026-11-28
+* **Kiểm toán toàn diện P0 + P1 + P2 & Xác minh Affiliate Attribution (2026-11-28):**
+  * Kiểm chứng trực tiếp live redirect HTTP 301/302 và Publisher ID cho cả **Shopee** (`s.shopee.vn/an_redir` $\rightarrow$ `mmp_pid=an_17346310715`) và **TikTok Shop** (AccessTrade v2 `shorten.asia` $\rightarrow$ `go.isclix.com/deep_link/7110811489339796158/6648523843406889655` giữ nguyên `sub1` & `utm_source`).
+  * Sửa `BUG-016`: Bổ sung cột `source` và `deal_group` cho bảng `clicks` trên PostgreSQL để giữ trọn attribution cho `compare_sp_to_tt`, `compare_tt_to_sp` và `home_deal_shelf`.
+  * Bổ sung `tests/compare/test_affiliate_attribution.js`; xác minh 5 bộ test + `npm run lint` 0 lỗi.
 * **Nâng cấp toàn diện Bảng Xếp Hạng V5 & Kiểm toán QA (`lila-pwa-v49`):**
   * Thiết kế lại sân khấu Podium Vàng/Bạc/Đồng cho 2 danh hiệu **Đại Gia LiLa** (Cam-Vàng) & **Vua Hoàn Tiền** (Xanh Ngọc), gộp 1 nút Chia sẻ duy nhất, tránh mascot Shiba đè nút trên Mobile.
   * Thêm bộ lọc trực tiếp **Tuần này / Tháng này / Toàn thời gian** (UTC+7 + đếm ngược + index PG `idx_orders_status_updated_at`), khối CTA động `#4` với 3 slot mờ, khoảng cách tới hạng kế / dẫn trước Top #2, thanh tiến trình VIP + Bottom Sheet quyền lợi.
