@@ -26,6 +26,7 @@
 | `BUG-013` | 2026-11-27 | `tiktokCompareService` / `compare/*` | So sánh giá ra sản phẩm rác không liên quan (VD: `N. ú.m Greenfinger Bebegrow` ra vải ủi/ván trượt) | `[6-Đã thay thế]` *(nâng cấp lên engine `src/services/compare/*`)* |
 | `BUG-014` | 2026-11-27 | `public/app.js` (`#userManageModal`) | Toast in lộ mật khẩu ngẫu nhiên; cộng/trừ tiền & khóa tài khoản thiếu xác nhận | `[4-Đã sửa & Test PASS]` |
 | `BUG-015` | 2026-11-28 | `cashbackController` / `dbService` / `app.js` | Audit BXH V5: lỗi scope `no-undef` trigger thông báo, báo vượt hạng giả, thiếu cột PG `lb_notify_disabled`, lệch nhãn `#4` khi < 3 user, sticky bar trùng thẻ cá nhân | `[4-Đã sửa & Test PASS]` |
+| `BUG-016` | 2026-11-28 | `index.html` / `styles.css` / `app.js` | Popup Chia sẻ ảnh BXH (`#lbShareModal`) & `#lbCelebrateModal` bị render xuống cuối trang thay vì nổi overlay | `[4-Đã sửa & Test PASS]` |
 
 ---
 

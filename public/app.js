@@ -7716,12 +7716,71 @@ async function loadPublicLeaderboard(periodOverride) {
 }
 
 let lbShareActiveRatio = 'story';
+let lbShareState = 'idle'; // idle | generating | ready | error | sharing
+let lbShareObjectUrl = '';
+let lbShareBlob = null;
+let lbShareRenderSeq = 0;
+let lbSharePushedHistory = false;
 
 function buildLeaderboardShareDeepLink() {
   const refCode = currentUser?.code || '';
   const tab = activeLeaderboardTab === 'cashback' ? 'cashback' : 'spend';
   if (!refCode) return `${window.location.origin}/?src=lb_share&tab=${tab}`;
   return `${window.location.origin}/?ref=${encodeURIComponent(refCode)}&src=lb_share&tab=${tab}`;
+}
+
+function revokeLbShareObjectUrl() {
+  if (lbShareObjectUrl) {
+    try { URL.revokeObjectURL(lbShareObjectUrl); } catch {}
+    lbShareObjectUrl = '';
+  }
+  lbShareBlob = null;
+  const img = document.getElementById('lbSharePreviewImg');
+  if (img) {
+    img.removeAttribute('src');
+    img.classList.add('hidden');
+  }
+}
+
+function setLbShareUiState(nextState, errMsg = '') {
+  lbShareState = nextState;
+  const loadingEl = document.getElementById('lbShareLoading');
+  const errorEl = document.getElementById('lbShareError');
+  const errorTextEl = document.getElementById('lbShareErrorText');
+  const imgEl = document.getElementById('lbSharePreviewImg');
+  const nativeBtn = document.getElementById('lbShareNativeBtn');
+  const dlBtn = document.getElementById('lbShareDownloadBtn');
+
+  loadingEl?.classList.toggle('hidden', nextState !== 'generating');
+  errorEl?.classList.toggle('hidden', nextState !== 'error');
+  if (nextState === 'error' && errorTextEl && errMsg) {
+    errorTextEl.textContent = errMsg;
+  }
+  imgEl?.classList.toggle('hidden', nextState !== 'ready' && nextState !== 'sharing');
+
+  const actionsDisabled = nextState === 'generating' || nextState === 'error' || nextState === 'sharing';
+  if (nativeBtn) {
+    nativeBtn.disabled = actionsDisabled;
+    nativeBtn.textContent = nextState === 'sharing' ? 'Đang chia sẻ...' : 'Chia sẻ ngay';
+  }
+  if (dlBtn) {
+    dlBtn.disabled = nextState === 'generating' || nextState === 'error';
+  }
+}
+
+function closeLeaderboardShareModal({ fromPopState = false } = {}) {
+  const modal = document.getElementById('lbShareModal');
+  const wasOpen = modal && !modal.classList.contains('hidden');
+  if (modal) modal.classList.add('hidden');
+  lbShareRenderSeq += 1;
+  revokeLbShareObjectUrl();
+  lbShareState = 'idle';
+  if (wasOpen && lbSharePushedHistory && !fromPopState) {
+    lbSharePushedHistory = false;
+    try { window.history.back(); } catch {}
+  } else if (fromPopState) {
+    lbSharePushedHistory = false;
+  }
 }
 
 function ensureLeaderboardShareModule() {
@@ -7744,18 +7803,47 @@ function ensureLeaderboardShareModule() {
 
 async function renderCurrentShareCanvas() {
   const canvas = document.getElementById('lbShareCanvas');
+  const imgEl = document.getElementById('lbSharePreviewImg');
   const hideCheck = document.getElementById('lbShareHideAmountCheck');
   if (!canvas || !lbCurrentSharePayload) return;
-  const mod = await ensureLeaderboardShareModule();
-  await mod.renderAchievementCard(canvas, {
-    ...lbCurrentSharePayload,
-    ratio: lbShareActiveRatio,
-    hideAmount: Boolean(hideCheck?.checked),
-    shareUrl: buildLeaderboardShareDeepLink()
-  });
+
+  const seq = ++lbShareRenderSeq;
+  revokeLbShareObjectUrl();
+  setLbShareUiState('generating');
+
+  try {
+    const mod = await ensureLeaderboardShareModule();
+    if (seq !== lbShareRenderSeq) return;
+    await mod.renderAchievementCard(canvas, {
+      ...lbCurrentSharePayload,
+      ratio: lbShareActiveRatio,
+      hideAmount: Boolean(hideCheck?.checked),
+      shareUrl: buildLeaderboardShareDeepLink()
+    });
+    if (seq !== lbShareRenderSeq) return;
+
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+    if (seq !== lbShareRenderSeq) return;
+    if (!blob) throw new Error('Không thể xuất ảnh PNG từ bộ nhớ trình duyệt.');
+
+    lbShareBlob = blob;
+    lbShareObjectUrl = URL.createObjectURL(blob);
+    if (imgEl) {
+      imgEl.src = lbShareObjectUrl;
+    }
+    setLbShareUiState('ready');
+  } catch (err) {
+    if (seq !== lbShareRenderSeq) return;
+    setLbShareUiState('error', err?.message || 'Không thể tạo ảnh chia sẻ. Vui lòng thử lại.');
+  }
 }
 
 async function openLeaderboardShareModal() {
+  const modal = document.getElementById('lbShareModal');
+  // Prevent opening multiple popups or spamming while generating
+  if (lbShareState === 'generating' && modal && !modal.classList.contains('hidden')) {
+    return;
+  }
   const data = latestLeaderboardData;
   const isCashback = activeLeaderboardTab === 'cashback';
   const myRank = isCashback ? data?.myRankCashback : data?.myRankSpend;
@@ -7789,30 +7877,38 @@ async function openLeaderboardShareModal() {
       statsEl.classList.add('hidden');
     }
   }
-  const modal = document.getElementById('lbShareModal');
-  if (modal) modal.classList.remove('hidden');
-  try {
-    await renderCurrentShareCanvas();
-  } catch (err) {
-    showToast(err.message || 'Không thể tạo ảnh chia sẻ.');
+  if (modal && modal.classList.contains('hidden')) {
+    modal.classList.remove('hidden');
+    try {
+      window.history.pushState({ lbShareOpen: true }, '');
+      lbSharePushedHistory = true;
+    } catch {}
   }
+  await renderCurrentShareCanvas();
 }
 
 on('lbShareHideAmountCheck', 'change', () => {
-  renderCurrentShareCanvas().catch(() => {});
+  if (lbShareState === 'idle') return;
+  renderCurrentShareCanvas();
+});
+
+on('lbShareRetryBtn', 'click', () => {
+  renderCurrentShareCanvas();
 });
 
 on('closeLbShareModalBtn', 'click', () => {
-  document.getElementById('lbShareModal')?.classList.add('hidden');
+  closeLeaderboardShareModal();
 });
 
 on('lbShareDownloadBtn', 'click', () => {
   const canvas = document.getElementById('lbShareCanvas');
-  if (!canvas) return;
+  if (!lbShareObjectUrl && !canvas) return;
   const link = document.createElement('a');
   link.download = `lila-top-${lbCurrentSharePayload?.rank || 1}-${lbShareActiveRatio}.png`;
-  link.href = canvas.toDataURL('image/png');
+  link.href = lbShareObjectUrl || canvas.toDataURL('image/png');
+  document.body.appendChild(link);
   link.click();
+  link.remove();
   showToast('Đã tải ảnh thành tích PNG!');
 });
 
@@ -7832,28 +7928,60 @@ on('lbShareCopyLinkBtn', 'click', async () => {
 });
 
 on('lbShareNativeBtn', 'click', async () => {
-  const canvas = document.getElementById('lbShareCanvas');
+  if (lbShareState !== 'ready') return;
   const shareUrl = buildLeaderboardShareDeepLink();
   const titleText = activeLeaderboardTab === 'cashback' ? 'Vua Hoàn Tiền' : 'Đại Gia LiLa';
   const shareText = `Tôi đang đứng Top #${lbCurrentSharePayload?.rank || 1} ${titleText} tại LiLa Cashback!`;
 
-  if (canvas && navigator.share) {
+  if (navigator.share) {
+    setLbShareUiState('sharing');
     try {
-      const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
-      const file = blob ? new File([blob], `lila-top-${lbCurrentSharePayload?.rank || 1}-${lbShareActiveRatio}.png`, { type: 'image/png' }) : null;
+      const file = lbShareBlob
+        ? new File([lbShareBlob], `lila-top-${lbCurrentSharePayload?.rank || 1}-${lbShareActiveRatio}.png`, { type: 'image/png' })
+        : null;
       if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
         await navigator.share({ title: 'Thành tích LiLa Cashback', text: shareText, url: shareUrl, files: [file] });
+        setLbShareUiState('ready');
         return;
       }
       await navigator.share({ title: 'Thành tích LiLa Cashback', text: shareText, url: shareUrl });
+      setLbShareUiState('ready');
       return;
     } catch (err) {
+      setLbShareUiState('ready');
       if (err && err.name === 'AbortError') return;
     }
   }
-  // Fallback on Desktop browsers without Web Share API: download PNG
+  // Fallback when browser does not support Web Share API: download PNG with clear feedback
   document.getElementById('lbShareDownloadBtn')?.click();
+  showToast('Trình duyệt không hỗ trợ chia sẻ trực tiếp — đã tải ảnh PNG để bạn chia sẻ!');
 });
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('popstate', () => {
+    const modal = document.getElementById('lbShareModal');
+    if (modal && !modal.classList.contains('hidden')) {
+      closeLeaderboardShareModal({ fromPopState: true });
+    }
+  });
+  window.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    const shareModal = document.getElementById('lbShareModal');
+    if (shareModal && (!shareModal.classList.contains('hidden') || lbShareObjectUrl)) {
+      closeLeaderboardShareModal();
+      return;
+    }
+    const celModal = document.getElementById('lbCelebrateModal');
+    if (celModal && !celModal.classList.contains('hidden')) {
+      celModal.classList.add('hidden');
+      return;
+    }
+    const vipSheet = document.getElementById('lbVipSheetOverlay');
+    if (vipSheet && vipSheet.classList.contains('is-open')) {
+      closeLbVipSheet();
+    }
+  });
+}
 
 document.addEventListener('click', (e) => {
   const lbBtn = e.target.closest('[data-lb-tab]');
@@ -7912,7 +8040,7 @@ document.addEventListener('click', (e) => {
     return;
   }
   if (e.target.id === 'lbShareModal') {
-    e.target.classList.add('hidden');
+    closeLeaderboardShareModal();
     return;
   }
   if (e.target.closest('#lbRetryBtn')) {
