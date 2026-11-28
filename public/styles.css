@@ -10490,6 +10490,530 @@ details.faq-accordion[open] p {
   }
 }
 
+/* ==========================================================================
+   ADMIN LILA ANALYTICS TAB & MEMBER TIMELINE MODAL (P0)
+   ========================================================================== */
+.adm-an-panel {
+  margin-bottom: 16px;
+}
+
+.adm-an-toolbar,
+.adm-an-sec-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.adm-an-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.adm-an-sub {
+  margin: 2px 0 0;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.adm-an-controls,
+.adm-an-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.adm-an-range-group {
+  display: inline-flex;
+  padding: 3px;
+  border-radius: 9px;
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  gap: 3px;
+}
+
+.adm-an-range-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-sub);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 5px 10px;
+  border-radius: 7px;
+  cursor: pointer;
+}
+
+.adm-an-range-btn.active {
+  background: var(--bg-card);
+  color: var(--shopee-dark);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+}
+
+.adm-an-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.adm-an-kpi {
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.adm-an-kpi span {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.adm-an-kpi strong {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--text-main);
+}
+
+.adm-an-kpi.is-shopee strong { color: #ee4d2d; }
+.adm-an-kpi.is-emerald strong { color: var(--emerald-dark); }
+.adm-an-kpi.is-accent strong { color: #1d4ed8; }
+
+.adm-an-sec-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-sub);
+  margin-bottom: 6px;
+}
+
+.adm-an-sources-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.adm-an-source-chip {
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--text-sub);
+}
+
+.adm-an-input,
+.adm-an-select {
+  padding: 7px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-main);
+  font-size: 12.5px;
+}
+
+.adm-an-cell-sub {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.adm-an-prod-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.adm-an-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.adm-an-plat {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.adm-an-plat.is-shopee { background: #ee4d2d; }
+.adm-an-plat.is-tiktok { background: #111827; }
+.adm-an-sp { color: #ee4d2d; font-weight: 700; }
+.adm-an-tt { color: #111827; font-weight: 700; }
+.adm-an-muted { color: var(--text-muted); font-size: 12px; }
+
+.adm-an-modal-card {
+  width: min(880px, 95vw);
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-card);
+  color: var(--text-main);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.24);
+  overflow: hidden;
+}
+
+.adm-an-modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 20px;
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border);
+}
+
+.adm-an-modal-head-info {
+  min-width: 0;
+}
+
+.adm-an-modal-head h3 {
+  margin: 0;
+  font-size: 16.5px;
+  font-weight: 800;
+  color: var(--text-main);
+}
+
+.adm-an-modal-close {
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-soft);
+  color: var(--text-sub);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.adm-an-modal-close:hover {
+  background: #fee2e2;
+  border-color: #fecaca;
+  color: #dc2626;
+}
+
+.adm-an-modal-body {
+  padding: 14px 20px 18px;
+  background: var(--bg-card);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+
+.adm-an-modal-filters {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.adm-an-modal-filters .adm-an-select {
+  width: auto;
+  min-width: 170px;
+}
+
+.adm-an-timeline-wrap {
+  overflow-y: auto;
+  max-height: 56vh;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.adm-an-timeline-wrap .adm-an-table {
+  width: 100%;
+  background: var(--bg-card);
+}
+
+.adm-an-timeline-wrap .adm-an-table tbody tr {
+  background: var(--bg-card);
+}
+
+.adm-an-timeline-wrap .adm-an-table tbody tr:hover {
+  background: var(--bg-soft);
+}
+
+.adm-an-order-badge {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--bg-soft);
+}
+
+.adm-an-order-badge.is-approved {
+  background: var(--emerald-light);
+  color: var(--emerald-dark);
+}
+
+@media (max-width: 768px) {
+  .adm-an-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .adm-an-prod-name {
+    max-width: 180px;
+  }
+  .adm-an-two-col {
+    grid-template-columns: 1fr;
+  }
+}
+
+.adm-an-chart-wrap {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.adm-an-legend {
+  display: flex;
+  gap: 14px;
+  font-size: 11.5px;
+  color: var(--text-sub);
+  margin-bottom: 6px;
+}
+
+.adm-an-legend i {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+
+.adm-an-svg {
+  width: 100%;
+  height: auto;
+  max-height: 170px;
+  display: block;
+}
+
+.adm-an-two-col {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.adm-an-live-dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #10b981;
+  margin-right: 5px;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.25);
+}
+
+.adm-an-rt-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.adm-an-rt-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  font-size: 12px;
+}
+
+.adm-an-funnel-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.adm-an-funnel-head {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12.5px;
+  margin-bottom: 4px;
+}
+
+.adm-an-funnel-track {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--bg-soft);
+  overflow: hidden;
+}
+
+.adm-an-funnel-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #ee4d2d, #f97316);
+}
+
+.adm-an-funnel-cashback {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--emerald-light);
+  color: var(--emerald-dark);
+  font-size: 13px;
+  font-weight: 700;
+  margin-top: 4px;
+}
+
+.adm-an-funnel-note {
+  margin: 10px 0 0;
+  font-size: 11.5px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.adm-an-error-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  border-radius: 10px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.adm-an-pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+@media (max-width: 768px) {
+  .adm-an-two-col {
+    grid-template-columns: 1fr;
+  }
+  .adm-an-range-group {
+    max-width: 100%;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+  }
+  .adm-an-range-btn {
+    white-space: nowrap;
+  }
+  .adm-an-controls .adm-an-select {
+    flex: 1 1 130px;
+  }
+  .adm-an-modal-card {
+    width: 96vw;
+    max-height: 90dvh;
+    border-radius: 14px;
+  }
+  .adm-an-modal-head {
+    padding: 14px 16px;
+  }
+  .adm-an-modal-body {
+    padding: 12px 16px 16px;
+  }
+  .adm-an-timeline-wrap {
+    border: none;
+    background: transparent;
+  }
+  /* AN-09: Mobile Card List for Analytics tables (zero horizontal scroll on 320-430px) */
+  .adm-an-table {
+    display: block;
+    width: 100%;
+  }
+  .adm-an-table thead {
+    display: none;
+  }
+  .adm-an-table tbody {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .adm-an-table tbody tr {
+    display: block;
+    background: var(--bg-soft);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 12px;
+  }
+  .adm-an-table tbody td {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 4px 0;
+    border: none;
+    text-align: right;
+    font-size: 12.5px;
+    white-space: normal;
+  }
+  .adm-an-table tbody td[colspan] {
+    display: block;
+    text-align: center;
+    padding: 12px 4px;
+  }
+  .adm-an-table tbody td[colspan]::before {
+    display: none;
+  }
+  .adm-an-table tbody td::before {
+    content: attr(data-label);
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-align: left;
+    flex-shrink: 0;
+  }
+  .adm-an-table tbody td.adm-an-card-action {
+    justify-content: stretch;
+    padding-top: 8px;
+    margin-top: 4px;
+    border-top: 1px dashed var(--border);
+  }
+  .adm-an-table tbody td.adm-an-card-action::before {
+    display: none;
+  }
+  .adm-an-table tbody td.adm-an-card-action .btn {
+    width: 100%;
+  }
+  .adm-an-prod-name {
+    max-width: 100%;
+    white-space: normal;
+    word-break: break-word;
+  }
+}
+
 
 /* ==========================================================================
    LEADERBOARD V4 — STAGE PODIUM, RISING SHEET, STICKY MY RANK & SHARE CARD

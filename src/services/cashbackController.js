@@ -1,5 +1,19 @@
 const { acceptWebhookReceipt } = require('./webhookReceiptService');
 const { getHomeDeals } = require('./deals/dealDiscoveryService');
+const {
+  ingestAnalyticsBatch,
+  recordServerAffiliateClick,
+  getAnalyticsOverview,
+  getAnalyticsMembers,
+  getMemberActivityTimeline,
+  getAnalyticsTopProducts,
+  getAnalyticsRealtime,
+  getAnalyticsFunnel,
+  getAnalyticsDailyTrend,
+  rollupDailyAnalytics,
+  buildAnalyticsCsv,
+  pruneOldAnalyticsRecords
+} = require('./analytics/analyticsService');
 const { mapUserRow } = require('./userMapper');
 const { sameOrder, orderId, migrateLegacyOrderIdentity } = require('./orderIdentity');
 const crypto = require('crypto');
@@ -2923,6 +2937,7 @@ function registerCashbackRoutes(app) {
             userId: authUser ? authUser.id : null,
             userCode: authUser ? authUser.code : 'GUEST',
             platform: item.platform,
+            source: 'direct_convert',
             originalUrl: item.originalUrl,
             cleanUrl: item.cleanUrl,
             productId: item.productId || null,
@@ -2930,6 +2945,15 @@ function registerCashbackRoutes(app) {
             createdAt: new Date().toISOString()
           };
           newClicks.push(clickRecord);
+          void recordServerAffiliateClick({
+            req,
+            authUser,
+            platform: item.platform,
+            productId: item.productId || null,
+            productName: item.productName || '',
+            sourceSurface: 'direct_convert',
+            clickId: item.clickId
+          }).catch(() => {});
           logger.log('POST /api/convert', 'Click recorded', {
             clickId: item.clickId,
             userCode: clickRecord.userCode,
@@ -3037,7 +3061,7 @@ function registerCashbackRoutes(app) {
   app.post('/api/compare/tiktok/link', compareTikTokLinkLimiter, asyncHandler(async (req, res) => {
     logger.logEnter('POST /api/compare/tiktok/link');
     try {
-      const { productId, verifyToken, matchScore, matchTier, source, dealGroup } = req.body || {};
+      const { productId, productName, verifyToken, matchScore, matchTier, source, dealGroup } = req.body || {};
       const cleanProductId = String(productId || '').trim();
       if (!/^\d{6,30}$/.test(cleanProductId)) {
         return res.status(400).json({
@@ -3092,6 +3116,16 @@ function registerCashbackRoutes(app) {
         createdAt: new Date().toISOString()
       };
       await appendClickRecords([clickRecord]);
+      void recordServerAffiliateClick({
+        req,
+        authUser,
+        platform: 'tiktok',
+        productId: clickRecord.productId,
+        productName: typeof productName === 'string' ? productName : verified?.title || '',
+        sourceSurface: clickRecord.source,
+        dealGroup: clickRecord.dealGroup,
+        clickId
+      }).catch(() => {});
 
       logger.logLeave('POST /api/compare/tiktok/link', {
         productId: cleanProductId,
@@ -3209,7 +3243,7 @@ function registerCashbackRoutes(app) {
   app.post('/api/compare/shopee/link', compareShopeeLinkLimiter, asyncHandler(async (req, res) => {
     logger.logEnter('POST /api/compare/shopee/link');
     try {
-      const { itemId, shopId, verifyToken, matchScore, matchTier, source, dealGroup } = req.body || {};
+      const { itemId, shopId, productName, verifyToken, matchScore, matchTier, source, dealGroup } = req.body || {};
       const cleanItemId = String(itemId || '').trim();
       const cleanShopId = String(shopId || '').trim();
 
@@ -3277,6 +3311,16 @@ function registerCashbackRoutes(app) {
         createdAt: new Date().toISOString()
       };
       await appendClickRecords([clickRecord]);
+      void recordServerAffiliateClick({
+        req,
+        authUser,
+        platform: 'shopee',
+        productId: cleanItemId,
+        productName: typeof productName === 'string' ? productName : verified?.title || '',
+        sourceSurface: clickRecord.source,
+        dealGroup: clickRecord.dealGroup,
+        clickId
+      }).catch(() => {});
 
       logger.logLeave('POST /api/compare/shopee/link', {
         itemId: cleanItemId,
@@ -3356,6 +3400,106 @@ function registerCashbackRoutes(app) {
     }
   }));
 
+  // 8.8. First-Party Traffic & User Analytics (P0 — 90-day retention, Admin-only reporting)
+  const analyticsCollectLimiter = createRateLimiter({
+    windowMs: 60000,
+    max: 60,
+    keyPrefix: 'analytics_collect',
+    failClosed: false
+  });
+
+  app.post('/api/analytics/collect', analyticsCollectLimiter, asyncHandler(async (req, res) => {
+    try {
+      const { session, events } = req.body || {};
+      const authUser = getAuthUser(req);
+      const out = await ingestAnalyticsBatch({
+        session: session && typeof session === 'object' ? session : {},
+        events: Array.isArray(events) ? events : [],
+        authUser,
+        ip: req.ip || '',
+        userAgent: req.headers['user-agent'] || ''
+      });
+      return res.json({ ok: true, accepted: out.accepted });
+    } catch (err) {
+      logger.warning('POST /api/analytics/collect', 'Analytics collect failed (non-fatal)', { error: err?.message });
+      return res.status(200).json({ ok: false, accepted: 0 });
+    }
+  }));
+
+  app.get('/api/admin/analytics/overview', requireAdmin, asyncHandler(async (req, res) => {
+    const range = typeof req.query.range === 'string' ? req.query.range.trim() : '7';
+    const source = typeof req.query.source === 'string' ? req.query.source.trim() : '';
+    const device = typeof req.query.device === 'string' ? req.query.device.trim() : '';
+    const data = await getAnalyticsOverview({ range, source, device });
+    return res.json({ ok: true, ...data });
+  }));
+
+  app.get('/api/admin/analytics/members', requireAdmin, asyncHandler(async (req, res) => {
+    const range = typeof req.query.range === 'string' ? req.query.range.trim() : '30';
+    const source = typeof req.query.source === 'string' ? req.query.source.trim() : '';
+    const device = typeof req.query.device === 'string' ? req.query.device.trim() : '';
+    const sortBy = typeof req.query.sort === 'string' ? req.query.sort.trim() : 'clicks';
+    const search = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+    const page = Number(req.query.page || 1);
+    const limit = Number(req.query.limit || 20);
+    const data = await getAnalyticsMembers({ range, source, device, sortBy, search, page, limit });
+    return res.json({ ok: true, ...data });
+  }));
+
+  app.get('/api/admin/analytics/members/:userId/timeline', requireAdmin, asyncHandler(async (req, res) => {
+    const userId = String(req.params.userId || '').trim();
+    if (!userId) return res.status(400).json({ ok: false, error: 'Thiếu userId.' });
+    const range = typeof req.query.range === 'string' ? req.query.range.trim() : '30';
+    const platform = typeof req.query.platform === 'string' ? req.query.platform.trim() : '';
+    const page = Number(req.query.page || 1);
+    const limit = Number(req.query.limit || 25);
+    const data = await getMemberActivityTimeline({ userId, range, platform, page, limit });
+    return res.json({ ok: true, ...data });
+  }));
+
+  app.get('/api/admin/analytics/products', requireAdmin, asyncHandler(async (req, res) => {
+    const range = typeof req.query.range === 'string' ? req.query.range.trim() : '30';
+    const source = typeof req.query.source === 'string' ? req.query.source.trim() : '';
+    const device = typeof req.query.device === 'string' ? req.query.device.trim() : '';
+    const platform = typeof req.query.platform === 'string' ? req.query.platform.trim() : '';
+    const limit = Number(req.query.limit || 20);
+    const data = await getAnalyticsTopProducts({ range, source, device, platform, limit });
+    return res.json({ ok: true, ...data });
+  }));
+
+  app.get('/api/admin/analytics/realtime', requireAdmin, asyncHandler(async (req, res) => {
+    const filter = typeof req.query.filter === 'string' ? req.query.filter.trim() : 'all';
+    const data = await getAnalyticsRealtime({ filter });
+    return res.json({ ok: true, ...data });
+  }));
+
+  app.get('/api/admin/analytics/funnel', requireAdmin, asyncHandler(async (req, res) => {
+    const range = typeof req.query.range === 'string' ? req.query.range.trim() : '30';
+    const source = typeof req.query.source === 'string' ? req.query.source.trim() : '';
+    const device = typeof req.query.device === 'string' ? req.query.device.trim() : '';
+    const data = await getAnalyticsFunnel({ range, source, device });
+    return res.json({ ok: true, ...data });
+  }));
+
+  app.get('/api/admin/analytics/trend', requireAdmin, asyncHandler(async (req, res) => {
+    const rawRange = typeof req.query.range === 'string' ? req.query.range.trim() : '7';
+    const rangeDays = rawRange === 'yesterday' ? 7 : Number(rawRange || 7);
+    const data = await getAnalyticsDailyTrend(rangeDays);
+    return res.json({ ok: true, ...data });
+  }));
+
+  app.get('/api/admin/analytics/export.csv', requireAdmin, asyncHandler(async (req, res) => {
+    const type = req.query.type === 'products' ? 'products' : 'members';
+    const range = typeof req.query.range === 'string' ? req.query.range.trim() : '30';
+    const source = typeof req.query.source === 'string' ? req.query.source.trim() : '';
+    const device = typeof req.query.device === 'string' ? req.query.device.trim() : '';
+    const csv = await buildAnalyticsCsv({ type, range, source, device });
+    const dayTag = new Date().toISOString().slice(0, 10);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="lila-analytics-${type}-${dayTag}.csv"`);
+    return res.send(csv);
+  }));
+
   // 9. Vercel Cron & Webhook Postback Endpoints
   app.get('/api/cron/sync-shopee', asyncHandler(async (req, res) => {
     logger.logEnter('GET /api/cron/sync-shopee');
@@ -3373,6 +3517,12 @@ function registerCashbackRoutes(app) {
       const pruned = await pruneExpiredAuthRecords().catch((pruneErr) => {
         logger.warning('GET /api/cron/sync-shopee', 'Auth record TTL prune failed', { error: pruneErr.message });
         return null;
+      });
+      await rollupDailyAnalytics().catch((rErr) => {
+        logger.warning('GET /api/cron/sync-shopee', 'Analytics daily rollup failed', { error: rErr.message });
+      });
+      await pruneOldAnalyticsRecords(90).catch((anErr) => {
+        logger.warning('GET /api/cron/sync-shopee', 'Analytics 90-day prune failed', { error: anErr.message });
       });
       return res.json({ status: 'ok', ...out, ...(pruned ? { pruned } : {}) });
     } catch (err) {

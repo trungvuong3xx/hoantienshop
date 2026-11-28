@@ -28,6 +28,7 @@
 | `BUG-015` | 2026-11-28 | `cashbackController` / `dbService` / `app.js` | Audit BXH V5: lỗi scope `no-undef` trigger thông báo, báo vượt hạng giả, thiếu cột PG `lb_notify_disabled`, lệch nhãn `#4` khi < 3 user, sticky bar trùng thẻ cá nhân | `[4-Đã sửa & Test PASS]` |
 | `BUG-016` | 2026-11-28 | `dbService` (Postgres `clicks`) | Bảng `clicks` trên PostgreSQL thiếu cột `source` & `deal_group`, khiến `appendClickRecords` làm rơi thông tin attribution (`compare_sp_to_tt`, `compare_tt_to_sp`, `home_deal_shelf`) khi persist lên PG | `[4-Đã sửa & Test PASS]` |
 | `BUG-016` | 2026-11-28 | `index.html` / `styles.css` / `app.js` | Popup Chia sẻ ảnh BXH (`#lbShareModal`) & `#lbCelebrateModal` bị render xuống cuối trang thay vì nổi overlay | `[4-Đã sửa & Test PASS]` |
+| `BUG-017` | 2026-11-28 | `analyticsService.js` / `public/analytics.js` / `public/app.js` | Audit LiLa Analytics GĐ 1 (`AN-01`..`AN-04`): race condition mất nguồn truy cập khi click < 5s, đếm trùng `page_view`/retry, lẫn traffic của Admin, lệch `page_views` qua nửa đêm, `activeMembers + anonymousVisitors > uniqueVisitors`, mở nhiều tab tạo nhiều session | `[4-Đã sửa & Test PASS]` |
 
 ---
 

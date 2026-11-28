@@ -350,9 +350,19 @@ async function refreshAuthSession() {
 }
 
 async function apiFetch(url, options = {}) {
+  const anSessionId =
+    typeof window !== 'undefined' && window.lilaAnalytics && typeof window.lilaAnalytics.getSessionId === 'function'
+      ? window.lilaAnalytics.getSessionId()
+      : '';
+  const anVisitorId =
+    typeof window !== 'undefined' && window.lilaAnalytics && typeof window.lilaAnalytics.getVisitorId === 'function'
+      ? window.lilaAnalytics.getVisitorId()
+      : '';
   const headers = {
     'Content-Type': 'application/json',
     'X-Requested-With': 'XMLHttpRequest',
+    ...(anSessionId ? { 'X-Analytics-Session': anSessionId } : {}),
+    ...(anVisitorId ? { 'X-Analytics-Visitor': anVisitorId } : {}),
     ...(options.headers || {})
   };
 
@@ -595,6 +605,16 @@ function switchView(viewName, updateHistory = true, options = {}) {
     const navVal = btn.getAttribute('data-nav');
     btn.classList.toggle('active', navVal === targetView || (targetView === 'guide' && navVal === 'faq'));
   });
+
+  if (
+    targetView !== 'admin' &&
+    currentUser?.role !== 'admin' &&
+    typeof window !== 'undefined' &&
+    window.lilaAnalytics &&
+    typeof window.lilaAnalytics.trackPageView === 'function'
+  ) {
+    window.lilaAnalytics.trackPageView(targetView);
+  }
 
   if (updateHistory) {
     try {
@@ -2503,6 +2523,7 @@ async function handleBuyTikTokCompareItem(btnEl, productId, targetPlatform = 'ti
     const reqBody = ui.isShopee
       ? {
           itemId: cleanId,
+          productName: btnEl.closest('.tt-compare-card')?.querySelector('.tt-compare-prod-title')?.textContent?.trim() || '',
           ...(shopId ? { shopId } : {}),
           ...(meta?.verifyToken ? { verifyToken: meta.verifyToken } : {}),
           ...(meta?.matchScore ? { matchScore: Number(meta.matchScore) } : {}),
@@ -2510,6 +2531,7 @@ async function handleBuyTikTokCompareItem(btnEl, productId, targetPlatform = 'ti
         }
       : {
           productId: cleanId,
+          productName: btnEl.closest('.tt-compare-card')?.querySelector('.tt-compare-prod-title')?.textContent?.trim() || '',
           ...(meta?.verifyToken ? { verifyToken: meta.verifyToken } : {}),
           ...(meta?.matchScore ? { matchScore: Number(meta.matchScore) } : {}),
           ...(meta?.matchTier ? { matchTier: meta.matchTier } : {})
@@ -4030,6 +4052,7 @@ const ADMIN_TAB_PANES = {
   orders: 'admTabOrders',
   withdrawals: 'admTabWithdrawals',
   users: 'admTabUsers',
+  analytics: 'admTabAnalytics',
   settings: 'admTabSettings'
 };
 
@@ -4047,6 +4070,9 @@ function switchAdminTab(tabKey) {
     const pane = document.getElementById(paneId);
     if (pane) pane.classList.toggle('active', key === tabKey);
   });
+  if (tabKey === 'analytics' && typeof window.loadAdminAnalyticsDashboard === 'function') {
+    void window.loadAdminAnalyticsDashboard();
+  }
 }
 
 (function bindAdminTabs() {
@@ -8880,6 +8906,7 @@ renderRecentConvertedLinks();
       const body = isShopee
         ? {
             itemId: productId,
+            productName: btnEl.closest('.hd-card')?.querySelector('.hd-title')?.textContent?.trim() || '',
             ...(shopId ? { shopId } : {}),
             ...(verifyToken ? { verifyToken } : {}),
             source: 'home_deal_shelf',
@@ -8887,6 +8914,7 @@ renderRecentConvertedLinks();
           }
         : {
             productId,
+            productName: btnEl.closest('.hd-card')?.querySelector('.hd-title')?.textContent?.trim() || '',
             ...(verifyToken ? { verifyToken } : {}),
             source: 'home_deal_shelf',
             dealGroup: activeGroup
@@ -9037,4 +9065,631 @@ renderRecentConvertedLinks();
   setTimeout(() => {
     void loadHomeDeals(activeGroup, activeCategory, true);
   }, 200);
+})();
+
+// ================= ADMIN LILA ANALYTICS DASHBOARD (P0 + P1 + Stage 3) =================
+(() => {
+  const rangeGroup = document.getElementById('admAnRangeGroup');
+  const sourceFilterEl = document.getElementById('admAnSourceFilter');
+  const deviceFilterEl = document.getElementById('admAnDeviceFilter');
+  const refreshBtn = document.getElementById('admAnRefreshBtn');
+  const errorBarEl = document.getElementById('admAnErrorBar');
+  const errorTextEl = document.getElementById('admAnErrorText');
+  const retryBtn = document.getElementById('admAnRetryBtn');
+  const memberSearchEl = document.getElementById('admAnMemberSearch');
+  const memberSortEl = document.getElementById('admAnMemberSort');
+  const prodPlatEl = document.getElementById('admAnProdPlatform');
+  const membersBody = document.getElementById('admAnMembersBody');
+  const membersPrevBtn = document.getElementById('admAnMembersPrev');
+  const membersNextBtn = document.getElementById('admAnMembersNext');
+  const membersPageInfoEl = document.getElementById('admAnMembersPageInfo');
+  const productsBody = document.getElementById('admAnProductsBody');
+  const sourcesStrip = document.getElementById('admAnSourcesStrip');
+  const modalEl = document.getElementById('admAnMemberModal');
+  const modalCloseBtn = document.getElementById('admAnModalCloseBtn');
+  const modalTitleEl = document.getElementById('admAnModalTitle');
+  const modalSubEl = document.getElementById('admAnModalSub');
+  const timelinePlatEl = document.getElementById('admAnTimelinePlat');
+  const timelineBody = document.getElementById('admAnTimelineBody');
+  const timelinePrevBtn = document.getElementById('admAnTimelinePrev');
+  const timelineNextBtn = document.getElementById('admAnTimelineNext');
+  const timelinePageInfoEl = document.getElementById('admAnTimelinePageInfo');
+  const trendChartEl = document.getElementById('admAnTrendChart');
+  const rtSummaryEl = document.getElementById('admAnRealtimeSummary');
+  const rtFilterEl = document.getElementById('admAnRealtimeFilter');
+  const rtSessionsEl = document.getElementById('admAnRealtimeSessions');
+  const rtClicksEl = document.getElementById('admAnRealtimeClicks');
+  const funnelBodyEl = document.getElementById('admAnFunnelBody');
+  const exportMembersBtn = document.getElementById('admAnExportMembersBtn');
+  const exportProductsBtn = document.getElementById('admAnExportProductsBtn');
+  if (!membersBody || !productsBody) return;
+
+  let activeRange = '7';
+  let activeSource = '';
+  let activeDevice = '';
+  let activeMemberId = null;
+  let membersPage = 1;
+  let timelinePage = 1;
+  let searchDebounce = null;
+  let realtimeTimer = null;
+  let activeAbort = null;
+  let dashboardSeq = 0;
+  let membersSeq = 0;
+  let timelineSeq = 0;
+
+  const MEMBERS_PAGE_SIZE = 20;
+  const TIMELINE_PAGE_SIZE = 25;
+
+  const SOURCE_LABELS = {
+    zalo: 'Zalo',
+    facebook: 'Facebook',
+    tiktok: 'TikTok',
+    google: 'Google',
+    share_link: 'Link chia sẻ',
+    utm: 'Chiến dịch UTM',
+    referral: 'Website khác',
+    direct: 'Trực tiếp'
+  };
+
+  const SURFACE_LABELS = {
+    direct_convert: 'Dán link chính',
+    compare_sp_to_tt: 'So sánh SP → TT',
+    compare_tt_to_sp: 'So sánh TT → SP',
+    home_deal_shelf: 'Kệ Săn Deal',
+    leaderboard: 'Bảng xếp hạng'
+  };
+
+  function fmtAnTime(iso) {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '—';
+    return d.toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' });
+  }
+
+  function setText(id, val) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = Number(val || 0).toLocaleString('vi-VN');
+  }
+
+  function showAnalyticsError(msg) {
+    if (errorTextEl) errorTextEl.textContent = msg || 'Không thể tải dữ liệu Analytics. Vui lòng thử lại.';
+    errorBarEl?.classList.remove('hidden');
+  }
+
+  function hideAnalyticsError() {
+    errorBarEl?.classList.add('hidden');
+  }
+
+  function isAbortErr(err) {
+    return err?.name === 'AbortError' || /abort/i.test(String(err?.message || ''));
+  }
+
+  function buildFilterQuery(extra = {}) {
+    const p = new URLSearchParams();
+    p.set('range', String(activeRange));
+    if (activeSource) p.set('source', activeSource);
+    if (activeDevice) p.set('device', activeDevice);
+    Object.entries(extra).forEach(([k, v]) => {
+      if (v !== undefined && v !== null && v !== '') p.set(k, String(v));
+    });
+    return p.toString();
+  }
+
+  function updatePager(prevBtn, nextBtn, infoEl, page, total, limit, hasMore, unitLabel) {
+    const totalPages = Math.max(1, Math.ceil((total || 0) / limit));
+    if (prevBtn) prevBtn.disabled = page <= 1;
+    if (nextBtn) nextBtn.disabled = !hasMore;
+    if (infoEl) {
+      infoEl.textContent = total > 0 ? `Trang ${page} / ${totalPages} • ${total.toLocaleString('vi-VN')} ${unitLabel}` : `Trang ${page}`;
+    }
+  }
+
+  async function loadOverview(signal, seq) {
+    const data = await apiFetch(`/api/admin/analytics/overview?${buildFilterQuery()}`, {
+      silentConnectionNotice: true,
+      signal
+    });
+    if (seq !== dashboardSeq || !data?.ok) return;
+    const k = data.kpis || {};
+    setText('anKpiVisitors', k.uniqueVisitors);
+    setText('anKpiPageViews', k.pageViews);
+    setText('anKpiSessions', k.sessions);
+    setText('anKpiValidClicks', k.validClicks);
+    setText('anKpiShopeeClicks', k.shopeeClicks);
+    setText('anKpiTiktokClicks', k.tiktokClicks);
+    setText('anKpiActiveMembers', k.activeMembers);
+    setText('anKpiAnonVisitors', k.anonymousVisitors);
+
+    if (sourcesStrip) {
+      const list = data.sources || [];
+      sourcesStrip.innerHTML = list.length
+        ? list
+            .map(
+              (s) =>
+                `<span class="adm-an-source-chip"><strong>${escapeHtml(SOURCE_LABELS[s.source] || s.source)}</strong>: ${Number(s.visitors || 0)} khách • ${Number(s.clicks || 0)} click</span>`
+            )
+            .join('')
+        : '<span class="adm-an-muted">Chưa có dữ liệu nguồn truy cập trong kỳ này.</span>';
+    }
+  }
+
+  async function loadMembers(signal) {
+    const mySeq = ++membersSeq;
+    const q = (memberSearchEl?.value || '').trim();
+    const sort = memberSortEl?.value || 'clicks';
+    membersBody.innerHTML = '<tr><td colspan="7" class="text-center">Đang tải danh sách thành viên...</td></tr>';
+    try {
+      const qs = buildFilterQuery({ sort, q, page: membersPage, limit: MEMBERS_PAGE_SIZE });
+      const data = await apiFetch(`/api/admin/analytics/members?${qs}`, {
+        silentConnectionNotice: true,
+        signal
+      });
+      if (mySeq !== membersSeq) return;
+      const items = data?.items || [];
+      updatePager(
+        membersPrevBtn,
+        membersNextBtn,
+        membersPageInfoEl,
+        data?.page || membersPage,
+        data?.total || items.length,
+        MEMBERS_PAGE_SIZE,
+        Boolean(data?.hasMore),
+        'thành viên'
+      );
+      if (!items.length) {
+        membersBody.innerHTML = '<tr><td colspan="7" class="text-center">Chưa có thành viên nào hoạt động trong kỳ này.</td></tr>';
+        return;
+      }
+      membersBody.innerHTML = items
+        .map((m) => {
+          const srcLabel = SOURCE_LABELS[m.lastSource] || m.lastSource || 'Trực tiếp';
+          return `
+            <tr>
+              <td data-label="Thành viên">
+                <div>
+                  <strong>${escapeHtml(m.name)}</strong>
+                  <div class="adm-an-cell-sub">${escapeHtml(m.userCode || '')}${m.phone ? ` • ${escapeHtml(m.phone)}` : ''}</div>
+                </div>
+              </td>
+              <td data-label="Nguồn gần nhất"><span class="adm-an-badge">${escapeHtml(srcLabel)}</span></td>
+              <td data-label="Phiên">${Number(m.sessionsCount || 0)}</td>
+              <td data-label="Tổng Click"><strong>${Number(m.totalClicks || 0)}</strong></td>
+              <td data-label="Shopee / TikTok"><span class="adm-an-sp">${Number(m.shopeeClicks || 0)}</span> / <span class="adm-an-tt">${Number(m.tiktokClicks || 0)}</span></td>
+              <td data-label="Hoạt động cuối">${escapeHtml(fmtAnTime(m.lastSeenAt))}</td>
+              <td class="adm-an-card-action">
+                <button type="button" class="btn btn-sm btn-secondary adm-an-view-member" data-an-uid="${escapeHtml(m.userId)}">
+                  Xem timeline
+                </button>
+              </td>
+            </tr>
+          `;
+        })
+        .join('');
+
+      membersBody.querySelectorAll('.adm-an-view-member').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const uid = btn.getAttribute('data-an-uid');
+          if (uid) {
+            timelinePage = 1;
+            void openMemberTimeline(uid);
+          }
+        });
+      });
+    } catch (err) {
+      if (isAbortErr(err) || mySeq !== membersSeq) return;
+      membersBody.innerHTML = '<tr><td colspan="7" class="text-center">Lỗi tải danh sách thành viên. Bấm "Thử lại" ở trên.</td></tr>';
+      showAnalyticsError('Không thể tải bảng thành viên. Vui lòng thử lại.');
+    }
+  }
+
+  async function loadProducts(signal, seq) {
+    const plat = prodPlatEl?.value || '';
+    productsBody.innerHTML = '<tr><td colspan="6" class="text-center">Đang tải sản phẩm...</td></tr>';
+    try {
+      const qs = buildFilterQuery({ platform: plat, limit: 20 });
+      const data = await apiFetch(`/api/admin/analytics/products?${qs}`, {
+        silentConnectionNotice: true,
+        signal
+      });
+      if (seq != null && seq !== dashboardSeq) return;
+      const items = data?.items || [];
+      if (!items.length) {
+        productsBody.innerHTML = '<tr><td colspan="6" class="text-center">Chưa có lượt click sản phẩm nào trong kỳ này.</td></tr>';
+        return;
+      }
+      productsBody.innerHTML = items
+        .map(
+          (p) => `
+          <tr>
+            <td data-label="Sản phẩm">
+              <div>
+                <div class="adm-an-prod-name" title="${escapeHtml(p.productName)}">${escapeHtml(p.productName)}</div>
+                <div class="adm-an-cell-sub">ID: ${escapeHtml(p.productId)}</div>
+              </div>
+            </td>
+            <td data-label="Sàn"><span class="adm-an-plat is-${escapeHtml(p.platform)}">${p.platform === 'tiktok' ? 'TikTok' : 'Shopee'}</span></td>
+            <td data-label="Valid / Raw"><strong>${Number(p.validClicks || 0)}</strong> <span class="adm-an-muted">/ ${Number(p.rawClicks || 0)}</span></td>
+            <td data-label="Người click">${Number(p.uniqueClickers || 0)}</td>
+            <td data-label="Deal / So sánh">${Number(p.dealClicks || 0)} / ${Number(p.compareClicks || 0)}</td>
+            <td data-label="Đơn khớp">${Number(p.ordersCount || 0) > 0 ? `<strong>${p.ordersCount} đơn</strong>` : '—'}</td>
+          </tr>
+        `
+        )
+        .join('');
+    } catch (err) {
+      if (isAbortErr(err)) return;
+      productsBody.innerHTML = '<tr><td colspan="6" class="text-center">Lỗi tải danh sách sản phẩm.</td></tr>';
+      showAnalyticsError('Không thể tải Top sản phẩm. Vui lòng thử lại.');
+    }
+  }
+
+  async function openMemberTimeline(userId) {
+    const mySeq = ++timelineSeq;
+    activeMemberId = userId;
+    if (modalEl) modalEl.classList.remove('hidden');
+    if (timelineBody) timelineBody.innerHTML = '<tr><td colspan="5" class="text-center">Đang tải lịch sử...</td></tr>';
+    try {
+      const plat = timelinePlatEl?.value || '';
+      const qs = new URLSearchParams({
+        range: String(activeRange),
+        page: String(timelinePage),
+        limit: String(TIMELINE_PAGE_SIZE)
+      });
+      if (plat) qs.set('platform', plat);
+      const data = await apiFetch(
+        `/api/admin/analytics/members/${encodeURIComponent(userId)}/timeline?${qs.toString()}`,
+        { silentConnectionNotice: true }
+      );
+      if (mySeq !== timelineSeq) return;
+      if (!data?.ok) {
+        if (timelineBody) timelineBody.innerHTML = '<tr><td colspan="5" class="text-center">Không thể tải lịch sử thành viên.</td></tr>';
+        return;
+      }
+      const m = data.member || {};
+      if (modalTitleEl) modalTitleEl.textContent = `${m.name || 'Thành viên'} (${m.userCode || ''})`;
+      if (modalSubEl) {
+        modalSubEl.textContent = `${m.sessionsCount || 0} phiên • ${m.pageViews || 0} lượt xem • Nguồn: ${SOURCE_LABELS[m.lastSource] || m.lastSource || 'Trực tiếp'} • ${m.lastDevice || 'mobile'}${m.lastBrowser ? ` (${m.lastBrowser})` : ''}`;
+      }
+
+      const rows = data.timeline || [];
+      updatePager(
+        timelinePrevBtn,
+        timelineNextBtn,
+        timelinePageInfoEl,
+        data.page || timelinePage,
+        data.total || rows.length,
+        TIMELINE_PAGE_SIZE,
+        Boolean(data.hasMore),
+        'sự kiện'
+      );
+      if (!rows.length) {
+        timelineBody.innerHTML = '<tr><td colspan="5" class="text-center">Chưa có hành động nào trong khoảng thời gian này.</td></tr>';
+        return;
+      }
+      timelineBody.innerHTML = rows
+        .map((ev) => {
+          const isClick = ev.eventType === 'affiliate_click' || ev.eventType === 'product_click';
+          const actionLabel =
+            ev.eventType === 'affiliate_click'
+              ? `Click mua ${ev.platform === 'tiktok' ? 'TikTok' : 'Shopee'}`
+              : ev.eventType === 'page_view'
+                ? `Xem trang: ${ev.viewName || 'home'}`
+                : ev.eventType;
+          const prodLine = isClick && ev.productName ? `<div class="adm-an-prod-name">${escapeHtml(ev.productName)}</div>` : '';
+          const surfLabel = SURFACE_LABELS[ev.sourceSurface] || ev.sourceSurface || '—';
+          const srcLabel = SOURCE_LABELS[ev.trafficSource] || ev.trafficSource || 'Trực tiếp';
+          const ordHtml = ev.orderSn
+            ? `<span class="adm-an-order-badge is-${escapeHtml(ev.orderStatus || 'pending')}">#${escapeHtml(ev.orderSn)} (${escapeHtml(ev.orderStatus || 'pending')})</span>`
+            : isClick
+              ? '<span class="adm-an-muted">Chưa có đơn</span>'
+              : '—';
+
+          return `
+            <tr>
+              <td data-label="Thời gian" style="white-space:nowrap">${escapeHtml(fmtAnTime(ev.createdAt))}</td>
+              <td data-label="Hành động">
+                <div>
+                  <strong>${escapeHtml(actionLabel)}</strong>
+                  ${prodLine}
+                </div>
+              </td>
+              <td data-label="Vị trí">${escapeHtml(surfLabel)}${ev.dealGroup ? `<div class="adm-an-cell-sub">${escapeHtml(ev.dealGroup)}</div>` : ''}</td>
+              <td data-label="Nguồn đến"><span class="adm-an-badge">${escapeHtml(srcLabel)}</span></td>
+              <td data-label="Đối chiếu đơn">${ordHtml}</td>
+            </tr>
+          `;
+        })
+        .join('');
+    } catch (err) {
+      if (isAbortErr(err) || mySeq !== timelineSeq) return;
+      if (timelineBody) timelineBody.innerHTML = '<tr><td colspan="5" class="text-center">Lỗi kết nối khi tải lịch sử thành viên.</td></tr>';
+    }
+  }
+
+  async function loadTrendChart(signal, seq) {
+    if (!trendChartEl) return;
+    const trendRange = activeRange === 'yesterday' ? '7' : String(Math.max(7, Number(activeRange) || 7));
+    const data = await apiFetch(`/api/admin/analytics/trend?range=${trendRange}`, {
+      silentConnectionNotice: true,
+      signal
+    });
+    if (seq !== dashboardSeq) return;
+    const series = data?.series || [];
+    if (!series.length) {
+      trendChartEl.innerHTML = '<span class="adm-an-muted">Chưa có dữ liệu xu hướng.</span>';
+      return;
+    }
+    const maxVal = Math.max(1, ...series.map((d) => Math.max(d.visitors || 0, d.clicks || 0)));
+    const w = 640;
+    const h = 150;
+    const padX = 24;
+    const padY = 18;
+    const usableW = w - padX * 2;
+    const usableH = h - padY * 2;
+    const stepX = usableW / Math.max(1, series.length);
+    const barW = Math.max(2, Math.min(18, stepX * 0.34));
+
+    const bars = series
+      .map((d, idx) => {
+        const x = padX + idx * stepX + stepX * 0.14;
+        const vH = Math.round(((d.visitors || 0) / maxVal) * usableH);
+        const cH = Math.round(((d.clicks || 0) / maxVal) * usableH);
+        const label = d.day.slice(5);
+        const showLabel = series.length <= 10 || idx % Math.ceil(series.length / 7) === 0 || idx === series.length - 1;
+        return `
+          <g>
+            <rect x="${x.toFixed(1)}" y="${(h - padY - vH).toFixed(1)}" width="${barW.toFixed(1)}" height="${vH}" rx="2" fill="#3b82f6" opacity="0.85">
+              <title>${d.day}: ${d.visitors} visitors</title>
+            </rect>
+            <rect x="${(x + barW + 1.5).toFixed(1)}" y="${(h - padY - cH).toFixed(1)}" width="${barW.toFixed(1)}" height="${cH}" rx="2" fill="#ee4d2d" opacity="0.9">
+              <title>${d.day}: ${d.clicks} valid clicks</title>
+            </rect>
+            ${showLabel ? `<text x="${(x + barW).toFixed(1)}" y="${h - 4}" text-anchor="middle" font-size="9" fill="#64748b">${label}</text>` : ''}
+          </g>
+        `;
+      })
+      .join('');
+
+    trendChartEl.innerHTML = `
+      <div class="adm-an-legend">
+        <span><i style="background:#3b82f6"></i> Visitors</span>
+        <span><i style="background:#ee4d2d"></i> Valid Clicks</span>
+      </div>
+      <svg viewBox="0 0 ${w} ${h}" class="adm-an-svg" role="img" aria-label="Biểu đồ Visitors và Valid Clicks theo ngày">
+        <line x1="${padX}" y1="${h - padY}" x2="${w - padX}" y2="${h - padY}" stroke="#e2e8f0" stroke-width="1" />
+        ${bars}
+      </svg>
+    `;
+  }
+
+  async function loadRealtime(signal) {
+    if (!rtSessionsEl || !rtClicksEl) return;
+    const filter = encodeURIComponent(rtFilterEl?.value || 'all');
+    const data = await apiFetch(`/api/admin/analytics/realtime?filter=${filter}`, {
+      silentConnectionNotice: true,
+      signal
+    });
+    if (!data?.ok) return;
+    const o = data.online || { total: 0, members: 0, anonymous: 0 };
+    if (rtSummaryEl) {
+      rtSummaryEl.textContent = `Đang online: ${o.total} người (${o.members} thành viên • ${o.anonymous} khách ẩn danh)`;
+    }
+
+    const sessions = data.activeSessions || [];
+    rtSessionsEl.innerHTML = sessions.length
+      ? sessions
+          .slice(0, 8)
+          .map(
+            (s) => `
+          <div class="adm-an-rt-item">
+            <div>
+              <strong>${escapeHtml(s.name)}</strong> ${s.userCode ? `<span class="adm-an-cell-sub">(${escapeHtml(s.userCode)})</span>` : ''}
+              <div class="adm-an-cell-sub">Đang xem: <strong>${escapeHtml(s.currentView)}</strong> • ${escapeHtml(SOURCE_LABELS[s.trafficSource] || s.trafficSource)} • ${escapeHtml(s.deviceType)}</div>
+            </div>
+            <span class="adm-an-cell-sub">${escapeHtml(fmtAnTime(s.lastSeenAt))}</span>
+          </div>
+        `
+          )
+          .join('')
+      : '<div class="adm-an-muted">Chưa có phiên hoạt động trong 5 phút qua.</div>';
+
+    const clicks = data.recentClicks || [];
+    rtClicksEl.innerHTML = clicks.length
+      ? clicks
+          .slice(0, 8)
+          .map(
+            (c) => `
+          <div class="adm-an-rt-item">
+            <div>
+              <span class="adm-an-plat is-${escapeHtml(c.platform)}">${c.platform === 'tiktok' ? 'TT' : 'SP'}</span>
+              <strong>${escapeHtml(c.actorName)}</strong>
+              <div class="adm-an-prod-name" title="${escapeHtml(c.productName)}">${escapeHtml(c.productName)}</div>
+            </div>
+            <span class="adm-an-cell-sub">${escapeHtml(fmtAnTime(c.createdAt))}</span>
+          </div>
+        `
+          )
+          .join('')
+      : '<div class="adm-an-muted">Chưa có lượt click sản phẩm nào gần đây.</div>';
+  }
+
+  async function loadFunnel(signal, seq) {
+    if (!funnelBodyEl) return;
+    const data = await apiFetch(`/api/admin/analytics/funnel?${buildFilterQuery()}`, {
+      silentConnectionNotice: true,
+      signal
+    });
+    if (seq !== dashboardSeq || !data?.ok) return;
+    const steps = data.steps || [];
+    const maxVal = Math.max(1, ...steps.map((s) => Number(s.value || 0)));
+    funnelBodyEl.innerHTML = `
+      ${steps
+        .map((s) => {
+          const pct = Math.max(4, Math.round((Number(s.value || 0) / maxVal) * 100));
+          return `
+            <div class="adm-an-funnel-row">
+              <div class="adm-an-funnel-head">
+                <span>${escapeHtml(s.label)}</span>
+                <strong>${Number(s.value || 0).toLocaleString('vi-VN')}</strong>
+              </div>
+              <div class="adm-an-funnel-track">
+                <div class="adm-an-funnel-fill" style="width:${pct}%"></div>
+              </div>
+            </div>
+          `;
+        })
+        .join('')}
+      <div class="adm-an-funnel-cashback">
+        <span>7. Tổng Cashback đã duyệt (thực tế)</span>
+        <strong>${fmtVnd(data.approvedCashback || 0)}</strong>
+      </div>
+    `;
+  }
+
+  // AN-08: Reliable CSV download via fetch + Blob (never blocked by popup blockers, works with Bearer/cookie)
+  async function downloadAnalyticsCsv(type) {
+    try {
+      const qs = buildFilterQuery({ type });
+      const headers = { 'X-Requested-With': 'XMLHttpRequest' };
+      if (authToken) headers.Authorization = `Bearer ${authToken}`;
+      const res = await fetch(`/api/admin/analytics/export.csv?${qs}`, {
+        method: 'GET',
+        credentials: 'same-origin',
+        headers
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `lila-analytics-${type}-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      showToast('Đã tải xuống file CSV thành công.');
+    } catch {
+      showToast('Không thể xuất file CSV lúc này. Vui lòng thử lại.');
+    }
+  }
+
+  function ensureRealtimePolling() {
+    if (realtimeTimer) clearInterval(realtimeTimer);
+    realtimeTimer = setInterval(() => {
+      const pane = document.getElementById('admTabAnalytics');
+      const adminView = document.getElementById('view-admin');
+      if (
+        document.visibilityState === 'visible' &&
+        pane?.classList.contains('active') &&
+        adminView?.classList.contains('active') &&
+        currentUser?.role === 'admin'
+      ) {
+        void loadRealtime().catch(() => {});
+      }
+    }, 15000);
+  }
+
+  async function loadAllAnalytics() {
+    if (!currentUser || currentUser.role !== 'admin') return;
+    // AN-06: Cancel stale requests when filters switch rapidly
+    if (activeAbort) {
+      try { activeAbort.abort(); } catch {}
+    }
+    activeAbort = new AbortController();
+    const signal = activeAbort.signal;
+    const seq = ++dashboardSeq;
+    hideAnalyticsError();
+    ensureRealtimePolling();
+
+    const results = await Promise.allSettled([
+      loadOverview(signal, seq),
+      loadTrendChart(signal, seq),
+      loadRealtime(signal),
+      loadFunnel(signal, seq),
+      loadMembers(signal),
+      loadProducts(signal, seq)
+    ]);
+
+    if (seq !== dashboardSeq) return;
+    const failed = results.filter((r) => r.status === 'rejected' && !isAbortErr(r.reason));
+    if (failed.length > 0) {
+      showAnalyticsError('Một số khối dữ liệu Analytics gặp lỗi kết nối. Bấm "Thử lại" để tải lại.');
+    }
+  }
+
+  window.loadAdminAnalyticsDashboard = loadAllAnalytics;
+
+  rtFilterEl?.addEventListener('change', () => void loadRealtime().catch(() => {}));
+  exportMembersBtn?.addEventListener('click', () => void downloadAnalyticsCsv('members'));
+  exportProductsBtn?.addEventListener('click', () => void downloadAnalyticsCsv('products'));
+  retryBtn?.addEventListener('click', () => void loadAllAnalytics());
+
+  rangeGroup?.querySelectorAll('[data-an-range]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const r = String(btn.getAttribute('data-an-range') || '7');
+      if (r === activeRange) return;
+      activeRange = r;
+      membersPage = 1;
+      rangeGroup.querySelectorAll('[data-an-range]').forEach((b) => b.classList.toggle('active', b === btn));
+      void loadAllAnalytics();
+    });
+  });
+
+  sourceFilterEl?.addEventListener('change', () => {
+    activeSource = sourceFilterEl.value || '';
+    membersPage = 1;
+    void loadAllAnalytics();
+  });
+
+  deviceFilterEl?.addEventListener('change', () => {
+    activeDevice = deviceFilterEl.value || '';
+    membersPage = 1;
+    void loadAllAnalytics();
+  });
+
+  refreshBtn?.addEventListener('click', () => void loadAllAnalytics());
+  memberSortEl?.addEventListener('change', () => {
+    membersPage = 1;
+    void loadMembers();
+  });
+  memberSearchEl?.addEventListener('input', () => {
+    clearTimeout(searchDebounce);
+    searchDebounce = setTimeout(() => {
+      membersPage = 1;
+      void loadMembers();
+    }, 280);
+  });
+  membersPrevBtn?.addEventListener('click', () => {
+    if (membersPage > 1) {
+      membersPage--;
+      void loadMembers();
+    }
+  });
+  membersNextBtn?.addEventListener('click', () => {
+    membersPage++;
+    void loadMembers();
+  });
+  prodPlatEl?.addEventListener('change', () => void loadProducts(undefined, dashboardSeq));
+  timelinePlatEl?.addEventListener('change', () => {
+    if (activeMemberId) {
+      timelinePage = 1;
+      void openMemberTimeline(activeMemberId);
+    }
+  });
+  timelinePrevBtn?.addEventListener('click', () => {
+    if (activeMemberId && timelinePage > 1) {
+      timelinePage--;
+      void openMemberTimeline(activeMemberId);
+    }
+  });
+  timelineNextBtn?.addEventListener('click', () => {
+    if (activeMemberId) {
+      timelinePage++;
+      void openMemberTimeline(activeMemberId);
+    }
+  });
+  modalCloseBtn?.addEventListener('click', () => modalEl?.classList.add('hidden'));
+  modalEl?.addEventListener('click', (e) => {
+    if (e.target === modalEl) modalEl.classList.add('hidden');
+  });
 })();

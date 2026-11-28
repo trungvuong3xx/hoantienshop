@@ -6,6 +6,19 @@
 ---
 
 ## 2026-11-27 — 2026-11-28
+* **LiLa Analytics — Giai đoạn 3 Cải thiện Frontend & Trải nghiệm Mobile/Desktop (`AN-06`, `AN-08`, `AN-09`, `lila-pwa-v57`):**
+  * **`AN-06`:** Thêm `AbortController` + sequence guard chống ghi đè kết quả khi đổi bộ lọc nhanh; bổ sung thanh báo lỗi `#admAnErrorBar` kèm nút **Thử lại** thay vì nuốt lỗi im lặng.
+  * **`AN-08`:** Bổ sung phân trang `Trang trước / Trang sau` (kèm `total` & `hasMore` từ server) cho bảng **Thành viên** và **Timeline Modal**; đổi xuất CSV sang `fetch` + `Blob` + `<a download>` (không bị chặn popup).
+  * **`AN-09`:** Bổ sung bộ lọc **Hôm qua**, **90 ngày**, **Nguồn truy cập** và **Thiết bị** xuyên suốt Backend/Frontend; chuyển 3 bảng Analytics trên Mobile (`<= 768px`, 320–430px) sang dạng **Card List xếp dọc** không cần cuộn ngang.
+* **LiLa Analytics — Giai đoạn 2 Tối ưu Backend, Database & Hiệu suất (`AN-05`, `AN-07`):**
+  * **`AN-05`:** Hoàn thiện `rollupDailyAnalytics()` tổng hợp đầy đủ 7 chỉ số (`visitors`, `unique_users`, `sessions`, `page_views`, `raw_clicks`, `valid_clicks`, `affiliate_clicks`) theo ngày giờ VN; nâng cấp `getAnalyticsDailyTrend()` hỗ trợ tới 90 ngày với cơ chế đọc lai (đọc ngày đã chốt từ `analytics_daily_rollups`, đọc ngày hiện tại/chưa chốt từ bảng raw).
+  * **`AN-07`:** Thêm cột `last_view` trên `analytics_sessions` (auto-migrate `ADD COLUMN IF NOT EXISTS`) và bỏ hoàn toàn correlated subquery ở `/api/admin/analytics/realtime`; thêm composite index `idx_ae_created_type_valid (created_at DESC, event_type, is_valid)` và L1 RAM cache 30 giây cho `/overview`, `/funnel`, `/trend`.
+* **LiLa Analytics — Giai đoạn 1 Sửa lỗi Độ Chính Xác Dữ Liệu (`AN-01` → `AN-04`, `lila-pwa-v56`):**
+  * **`AN-01`:** Nâng cấp `upsertSession` cho phép cập nhật `traffic_source` (và `utm_*`, `referrer_host`, `ref_code`, `is_pwa`) từ `direct` lên nguồn thật khi client batch gửi sau server click; rút ngắn initial flush `public/analytics.js` xuống `300ms`.
+  * **`AN-02`:** Chèn `analytics_events` trước (`ON CONFLICT DO NOTHING RETURNING`) rồi mới cộng delta vào `analytics_sessions` để chống đếm trùng khi retry; dedup `trackPageView` trong `2s` (chống đếm đôi `home` lúc boot); loại trừ hoàn toàn tài khoản `role === 'admin'` và view `#admin` ở cả Frontend & Backend.
+  * **`AN-03`:** Đếm `pageViews` và `clicks` theo nguồn trực tiếp từ `analytics_events.created_at >= cutoff` (hết lệch số liệu khi phiên vắt qua nửa đêm `00:00` VN).
+  * **`AN-04`:** Tách rạch ròi `anonymousVisitors` (loại trừ `visitor_id` đã có phiên đăng nhập trong cùng kỳ) ở cả `/overview` và `/realtime`; chuyển `session_id` sang `localStorage` timeout 30 phút để mở nhiều tab vẫn tính 1 Session duy nhất.
+  * Mở rộng hồi quy trong `tests/test_analytics_p0.js` (`npm run lint` 0 lỗi, toàn bộ test PASS).
 * **Thiết kế lại danh sách Bảng Xếp Hạng từ hạng #4+ (Mẫu A — Premium Compact Leaderboard Card, `lila-pwa-v53`):**
   * Chuyển danh sách `#4+` từ `<table>` sang `<ol class="lb-list">` với mini card phẳng đồng bộ Podium: huy hiệu số hạng tròn, avatar viền theo màu cấp bậc VIP, tên in đậm, pill cấp bậc có icon (mở Bottom Sheet VIP), số tiền căn phải theo màu tab; bỏ số đơn duyệt và thanh kéo `.lb-sheet-notch`, đổi tiêu đề thành `Từ hạng #4`.
   * Tính `aboveRank`, `gapToAbove`, `progressToAbove` ngay tầng server trong `GET /api/leaderboard` kèm lớp bảo vệ riêng tư (trả `null` nếu người hiện tại hoặc người phía trên bật `amountHidden`).

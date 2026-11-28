@@ -64,9 +64,10 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link id="webFont" media="print" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/styles.css?v=2.9.33" />
+  <link rel="stylesheet" href="/styles.css?v=2.9.37" />
   <link rel="stylesheet" href="/selectPopup.css?v=5" />
-  <script src="/app.js?v=2.9.31" defer></script>
+  <script src="/analytics.js?v=1.0.1" defer></script>
+  <script src="/app.js?v=2.9.35" defer></script>
   <script src="/selectPopup.js?v=4" defer></script>
 </head>
 <body>
@@ -1561,6 +1562,10 @@
           <span>Thành Viên</span>
           <span class="admin-tab-badge" id="admTabUsersBadge">0</span>
         </button>
+        <button type="button" class="admin-tab-btn" data-admin-tab="analytics" role="tab" aria-selected="false">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
+          <span>LiLa Analytics</span>
+        </button>
         <button type="button" class="admin-tab-btn" data-admin-tab="settings" role="tab" aria-selected="false">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
           <span>Cấu Hình Hệ Thống</span>
@@ -1840,6 +1845,233 @@
       </div>
 
       <!-- TAB 4: SYSTEM SETTINGS (3 ORGANIZED CARDS) -->
+      <!-- TAB 4: LILA ANALYTICS (P0: TRAFFIC, PER-MEMBER CLICK TIMELINE & TOP PRODUCTS) -->
+      <div id="admTabAnalytics" class="admin-tab-pane">
+        <div class="panel adm-an-panel">
+          <div class="adm-an-toolbar">
+            <div>
+              <h2 class="adm-an-title">📊 LiLa Analytics</h2>
+              <p class="adm-an-sub">Theo dõi lượt truy cập, nguồn đến và chi tiết từng thành viên đã click sản phẩm nào</p>
+            </div>
+            <div class="adm-an-controls">
+              <div class="adm-an-range-group" id="admAnRangeGroup" role="tablist" aria-label="Khoảng thời gian">
+                <button type="button" class="adm-an-range-btn" data-an-range="1">Hôm nay</button>
+                <button type="button" class="adm-an-range-btn" data-an-range="yesterday">Hôm qua</button>
+                <button type="button" class="adm-an-range-btn active" data-an-range="7">7 ngày</button>
+                <button type="button" class="adm-an-range-btn" data-an-range="30">30 ngày</button>
+                <button type="button" class="adm-an-range-btn" data-an-range="90">90 ngày</button>
+              </div>
+              <select id="admAnSourceFilter" class="adm-an-select" aria-label="Lọc theo nguồn truy cập">
+                <option value="">Tất cả nguồn</option>
+                <option value="zalo">Zalo</option>
+                <option value="facebook">Facebook</option>
+                <option value="tiktok">TikTok</option>
+                <option value="google">Google</option>
+                <option value="share_link">Link chia sẻ</option>
+                <option value="utm">Chiến dịch UTM</option>
+                <option value="referral">Website khác</option>
+                <option value="direct">Trực tiếp</option>
+              </select>
+              <select id="admAnDeviceFilter" class="adm-an-select" aria-label="Lọc theo thiết bị">
+                <option value="">Tất cả thiết bị</option>
+                <option value="mobile">Mobile</option>
+                <option value="desktop">Desktop</option>
+                <option value="tablet">Tablet</option>
+              </select>
+              <button type="button" class="btn btn-sm btn-secondary" id="admAnExportMembersBtn">Xuất CSV TV</button>
+              <button type="button" class="btn btn-sm btn-secondary" id="admAnExportProductsBtn">Xuất CSV SP</button>
+              <button type="button" class="btn btn-sm btn-secondary" id="admAnRefreshBtn">Làm mới</button>
+            </div>
+          </div>
+
+          <div id="admAnErrorBar" class="adm-an-error-bar hidden" role="alert">
+            <span id="admAnErrorText">Không thể tải một số dữ liệu Analytics. Vui lòng thử lại.</span>
+            <button type="button" class="btn btn-sm btn-secondary" id="admAnRetryBtn">Thử lại</button>
+          </div>
+
+          <div class="adm-an-kpi-grid" id="admAnKpiGrid">
+            <div class="adm-an-kpi"><span>Unique Visitors</span><strong id="anKpiVisitors">0</strong></div>
+            <div class="adm-an-kpi"><span>Page Views</span><strong id="anKpiPageViews">0</strong></div>
+            <div class="adm-an-kpi"><span>Phiên truy cập</span><strong id="anKpiSessions">0</strong></div>
+            <div class="adm-an-kpi is-accent"><span>Click hợp lệ</span><strong id="anKpiValidClicks">0</strong></div>
+            <div class="adm-an-kpi is-shopee"><span>Click Shopee</span><strong id="anKpiShopeeClicks">0</strong></div>
+            <div class="adm-an-kpi is-tiktok"><span>Click TikTok</span><strong id="anKpiTiktokClicks">0</strong></div>
+            <div class="adm-an-kpi is-emerald"><span>Thành viên hoạt động</span><strong id="anKpiActiveMembers">0</strong></div>
+            <div class="adm-an-kpi"><span>Khách ẩn danh</span><strong id="anKpiAnonVisitors">0</strong></div>
+          </div>
+
+          <div class="adm-an-sources-wrap">
+            <div class="adm-an-sec-label">Nguồn truy cập</div>
+            <div class="adm-an-sources-strip" id="admAnSourcesStrip">
+              <span class="adm-an-muted">Đang tải dữ liệu...</span>
+            </div>
+          </div>
+
+          <!-- P1: DAILY TREND SVG CHART -->
+          <div class="adm-an-chart-wrap">
+            <div class="adm-an-sec-label">Xu hướng Visitors &amp; Valid Clicks theo ngày</div>
+            <div id="admAnTrendChart" class="adm-an-trend-chart">
+              <span class="adm-an-muted">Đang tải biểu đồ...</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- P1: REAL-TIME ANALYTICS (5-MIN ACTIVE WINDOW) & 7-STEP CONVERSION FUNNEL -->
+        <div class="adm-an-two-col">
+          <div class="panel adm-an-panel">
+            <div class="adm-an-sec-head">
+              <div>
+                <h3><span class="adm-an-live-dot" aria-hidden="true"></span> Real-time (5 phút qua)</h3>
+                <p class="adm-an-sub" id="admAnRealtimeSummary">Đang online: 0 người</p>
+              </div>
+              <select id="admAnRealtimeFilter" class="adm-an-select" aria-label="Lọc người online">
+                <option value="all">Tất cả</option>
+                <option value="members">Thành viên</option>
+                <option value="anonymous">Khách ẩn danh</option>
+              </select>
+            </div>
+            <div id="admAnRealtimeSessions" class="adm-an-rt-list"></div>
+            <div class="adm-an-sec-label" style="margin-top:12px">Click sản phẩm mới nhất</div>
+            <div id="admAnRealtimeClicks" class="adm-an-rt-list"></div>
+          </div>
+
+          <div class="panel adm-an-panel">
+            <div class="adm-an-sec-head">
+              <div>
+                <h3>🎯 Phễu chuyển đổi (7 bước)</h3>
+                <p class="adm-an-sub">Đối chiếu từ lượt truy cập đến đơn hàng Cashback thực tế</p>
+              </div>
+            </div>
+            <div id="admAnFunnelBody" class="adm-an-funnel-list">
+              <span class="adm-an-muted">Đang tải phễu...</span>
+            </div>
+            <p class="adm-an-funnel-note">
+              Lưu ý: Lượt click không đồng nghĩa với lượt mua. Số đơn hàng và Cashback chỉ tính từ dữ liệu đối soát thực tế của sàn.
+            </p>
+          </div>
+        </div>
+
+        <!-- PRIORITY #1: PER-MEMBER CLICK ACTIVITY TABLE -->
+        <div class="panel adm-an-panel">
+          <div class="adm-an-sec-head">
+            <div>
+              <h3>👥 Thành viên &amp; Hành vi Click sản phẩm</h3>
+              <p class="adm-an-sub">Bấm vào từng thành viên để xem chi tiết sản phẩm đã click, thời điểm, vị trí và nguồn đến</p>
+            </div>
+            <div class="adm-an-filters">
+              <input type="search" id="admAnMemberSearch" class="adm-an-input" placeholder="Tìm tên, mã user, SĐT..." />
+              <select id="admAnMemberSort" class="adm-an-select" aria-label="Sắp xếp thành viên">
+                <option value="clicks">Click nhiều nhất</option>
+                <option value="sessions">Truy cập nhiều nhất</option>
+                <option value="recent">Hoạt động gần đây</option>
+              </select>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="data-table adm-an-table">
+              <thead>
+                <tr>
+                  <th>Thành viên</th>
+                  <th>Nguồn gần nhất</th>
+                  <th>Phiên</th>
+                  <th>Tổng Click</th>
+                  <th>Shopee / TikTok</th>
+                  <th>Hoạt động cuối</th>
+                  <th>Chi tiết</th>
+                </tr>
+              </thead>
+              <tbody id="admAnMembersBody">
+                <tr><td colspan="7" class="text-center">Chọn tab LiLa Analytics để tải dữ liệu.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="adm-an-pager" id="admAnMembersPager">
+            <button type="button" class="btn btn-sm btn-secondary" id="admAnMembersPrev" disabled>← Trang trước</button>
+            <span id="admAnMembersPageInfo" class="adm-an-muted">Trang 1</span>
+            <button type="button" class="btn btn-sm btn-secondary" id="admAnMembersNext" disabled>Trang sau →</button>
+          </div>
+        </div>
+
+        <!-- TOP CLICKED PRODUCTS -->
+        <div class="panel adm-an-panel">
+          <div class="adm-an-sec-head">
+            <div>
+              <h3>🔥 Top Sản Phẩm Được Click Nhiều Nhất</h3>
+              <p class="adm-an-sub">Phân tách Click hợp lệ, Số người khác nhau click và vị trí phát sinh (Kệ Deal / So sánh)</p>
+            </div>
+            <div class="adm-an-filters">
+              <select id="admAnProdPlatform" class="adm-an-select" aria-label="Lọc sàn sản phẩm">
+                <option value="">Tất cả sàn</option>
+                <option value="shopee">Shopee</option>
+                <option value="tiktok">TikTok Shop</option>
+              </select>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="data-table adm-an-table">
+              <thead>
+                <tr>
+                  <th>Sản phẩm</th>
+                  <th>Sàn</th>
+                  <th>Valid / Raw Clicks</th>
+                  <th>Người click</th>
+                  <th>Kệ Deal / So sánh</th>
+                  <th>Đơn khớp</th>
+                </tr>
+              </thead>
+              <tbody id="admAnProductsBody">
+                <tr><td colspan="6" class="text-center">Đang chờ dữ liệu...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Member Activity Timeline Modal -->
+      <div id="admAnMemberModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="admAnModalTitle">
+        <div class="adm-an-modal-card">
+          <div class="adm-an-modal-head">
+            <div class="adm-an-modal-head-info">
+              <h3 id="admAnModalTitle">Lịch sử hoạt động thành viên</h3>
+              <p id="admAnModalSub" class="adm-an-sub"></p>
+            </div>
+            <button type="button" class="adm-an-modal-close" id="admAnModalCloseBtn" aria-label="Đóng">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+          <div class="adm-an-modal-body">
+            <div class="adm-an-modal-filters">
+              <select id="admAnTimelinePlat" class="adm-an-select" aria-label="Lọc sàn trong lịch sử">
+                <option value="">Tất cả sàn</option>
+                <option value="shopee">Chỉ Shopee</option>
+                <option value="tiktok">Chỉ TikTok Shop</option>
+              </select>
+            </div>
+            <div class="table-wrap adm-an-timeline-wrap">
+              <table class="data-table adm-an-table">
+                <thead>
+                  <tr>
+                    <th>Thời gian</th>
+                    <th>Hành động &amp; Sản phẩm</th>
+                    <th>Vị trí</th>
+                    <th>Nguồn đến</th>
+                    <th>Đối chiếu đơn</th>
+                  </tr>
+                </thead>
+                <tbody id="admAnTimelineBody">
+                  <tr><td colspan="5" class="text-center">Đang tải...</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="adm-an-pager" id="admAnTimelinePager">
+              <button type="button" class="btn btn-sm btn-secondary" id="admAnTimelinePrev" disabled>← Trang trước</button>
+              <span id="admAnTimelinePageInfo" class="adm-an-muted">Trang 1</span>
+              <button type="button" class="btn btn-sm btn-secondary" id="admAnTimelineNext" disabled>Trang sau →</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div id="admTabSettings" class="admin-tab-pane">
         <div class="admin-settings-grid">
           <!-- Card 1: Affiliate & API Integrations -->
