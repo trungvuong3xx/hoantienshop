@@ -1,8 +1,8 @@
 // Service Worker for LiLa PWA
-const CACHE_NAME = 'lila-pwa-v52';
+const CACHE_NAME = 'lila-pwa-v53';
 const OFFLINE_URL = '/offline.html';
 // Lean customer shell assets; admin assets are lazy-loaded and cached on demand.
-const SHELL_ASSETS = ["/","/styles.css?v=2.9.32","/selectPopup.css?v=5","/app.js?v=2.9.30","/selectPopup.js?v=4"];
+const SHELL_ASSETS = ["/","/styles.css?v=2.9.33","/selectPopup.css?v=5","/app.js?v=2.9.31","/selectPopup.js?v=4"];
 const LAZY_ADMIN_PATHS = ['/adminMobile.css', '/csvImport.js', '/tiktokReply.js', '/adminMobile.js'];
 
 self.addEventListener('message', (event) => {

@@ -219,7 +219,33 @@ async function runTests() {
     assert(!rawLbJson.includes(user1.email), 'Raw email must never leak in leaderboard');
     assert(lbRes.data.myRankSpend && lbRes.data.myRankSpend.code === user1.code);
 
-    console.log('PASS: Stage 2 VIP Tiering (admin table, auto upgrade/downgrade, override) & Public Leaderboard (2 rankings, PII masked)');
+    // 7. Server-side gapToAbove / aboveRank / progressToAbove + amountHidden privacy guard
+    const spendEntry2 = lbRes.data.topBySpend[spendIdx2];
+    if (spendIdx2 > 0) {
+      const aboveSpend = lbRes.data.topBySpend[spendIdx2 - 1];
+      if (!aboveSpend.amountHidden && !spendEntry2.amountHidden) {
+        assert.strictEqual(spendEntry2.aboveRank, spendIdx2);
+        assert.strictEqual(spendEntry2.gapToAbove, Math.max(0, Math.round(aboveSpend.totalSpend - spendEntry2.totalSpend)));
+        assert(Number.isFinite(spendEntry2.progressToAbove) && spendEntry2.progressToAbove >= 0 && spendEntry2.progressToAbove <= 100);
+      }
+    }
+    // When user directly above hides amount, guest viewer must NOT receive gapToAbove (prevents reverse-engineering)
+    const dbForPrivacy = ensureDbLoaded();
+    const u1Ref = dbForPrivacy.users.find((u) => u.id === user1.id);
+    if (u1Ref) {
+      u1Ref.leaderboardHideAmount = true;
+      const guestLbRes = await api('/api/leaderboard');
+      assert.strictEqual(guestLbRes.status, 200);
+      const guestSpendIdx1 = guestLbRes.data.topBySpend.findIndex((r) => r.code === user1.code);
+      if (guestSpendIdx1 >= 0 && guestSpendIdx1 + 1 < guestLbRes.data.topBySpend.length) {
+        const belowHidden = guestLbRes.data.topBySpend[guestSpendIdx1 + 1];
+        assert.strictEqual(belowHidden.gapToAbove, null, 'gapToAbove must be null when user above hides amount');
+        assert.strictEqual(belowHidden.progressToAbove, null, 'progressToAbove must be null when user above hides amount');
+      }
+      u1Ref.leaderboardHideAmount = false;
+    }
+
+    console.log('PASS: Stage 2 VIP Tiering (admin table, auto upgrade/downgrade, override) & Public Leaderboard (2 rankings, PII masked, gap privacy)');
   } finally {
     await new Promise((resolve) => server.close(resolve));
   }

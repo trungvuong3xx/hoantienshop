@@ -6632,108 +6632,6 @@ body:has(#view-admin.active) .floating-zalo {
     background: transparent;
     color: var(--text-sub);
   }
-  #view-leaderboard .table-responsive {
-    overflow: visible;
-  }
-  #view-leaderboard .data-table {
-    border-collapse: separate;
-    border-spacing: 0;
-    width: 100%;
-  }
-  #view-leaderboard .data-table thead {
-    display: none;
-  }
-  #view-leaderboard .data-table tbody {
-    display: flex;
-    flex-direction: column;
-    gap: 0;
-  }
-  /* Clean divided mobile list (no nested heavy cards), aligned 4-column grid */
-  #view-leaderboard .data-table tbody tr {
-    display: grid;
-    grid-template-columns: 30px 36px minmax(0, 1fr) auto;
-    grid-template-rows: auto auto;
-    column-gap: 8px;
-    row-gap: 2px;
-    align-items: center;
-    padding: 10px 6px;
-    border: none;
-    border-bottom: 1px solid #f1f5f9;
-    border-radius: 0;
-    background: transparent;
-  }
-  #view-leaderboard .data-table tbody tr:last-child {
-    border-bottom: none;
-  }
-  #view-leaderboard .data-table tbody tr.is-me {
-    background: var(--shopee-light);
-    border: 1px solid #fed7aa;
-    border-radius: 12px;
-    padding: 10px 8px;
-    margin: 4px 0;
-  }
-  #view-leaderboard .data-table tbody tr td {
-    padding: 0;
-    border: none;
-    min-width: 0;
-  }
-  #view-leaderboard .data-table tbody tr td.lb-col-rank {
-    grid-column: 1;
-    grid-row: 1 / span 2;
-    display: flex;
-    justify-content: center;
-  }
-  #view-leaderboard .data-table tbody tr td.lb-col-user {
-    display: contents;
-  }
-  #view-leaderboard .data-table tbody tr td.lb-col-user .lb-user-row {
-    display: contents;
-  }
-  #view-leaderboard .data-table tbody tr td.lb-col-user .lb-user-avatar {
-    grid-column: 2;
-    grid-row: 1 / span 2;
-    width: 34px;
-    height: 34px;
-    font-size: 12px;
-  }
-  #view-leaderboard .data-table tbody tr td.lb-col-user .lb-user-meta {
-    grid-column: 3;
-    grid-row: 1;
-    min-width: 0;
-    overflow: hidden;
-  }
-  #view-leaderboard .data-table tbody tr td.lb-col-user strong {
-    display: block;
-    font-size: 13.5px;
-    line-height: 1.3;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  #view-leaderboard .data-table tbody tr td.lb-col-user .lb-user-code {
-    display: none;
-  }
-  #view-leaderboard .data-table tbody tr td.lb-col-tier {
-    grid-column: 3;
-    grid-row: 2;
-  }
-  #view-leaderboard .data-table tbody tr td.lb-col-tier .lb-tier-pill {
-    padding: 1px 7px;
-    font-size: 11px;
-  }
-  #view-leaderboard .data-table tbody tr td.lb-col-metric {
-    grid-column: 4;
-    grid-row: 1 / span 2;
-    text-align: right;
-  }
-  #view-leaderboard .data-table tbody tr td.lb-col-metric .lb-metric-val {
-    font-size: 14px;
-  }
-  #view-leaderboard .data-table tbody tr td[colspan] {
-    grid-column: 1 / -1;
-    padding: 16px 8px;
-    text-align: center;
-  }
   .lb-my-rank.is-sticky-bottom {
     position: sticky;
     bottom: calc(74px + env(safe-area-inset-bottom, 0px));
@@ -6746,17 +6644,6 @@ body:has(#view-admin.active) .floating-zalo {
   .lb-tabs .lb-tab-btn {
     font-size: 12px;
     padding: 6px 4px;
-  }
-  #view-leaderboard .data-table tbody tr {
-    grid-template-columns: 26px 32px minmax(0, 1fr) auto;
-    column-gap: 6px;
-  }
-  #view-leaderboard .data-table tbody tr td.lb-col-user .lb-user-avatar {
-    width: 30px;
-    height: 30px;
-  }
-  #view-leaderboard .data-table tbody tr td.lb-col-metric .lb-metric-val {
-    font-size: 13px;
   }
 }
 
@@ -10612,6 +10499,11 @@ details.faq-accordion[open] p {
   --lb-stage-glow: rgba(254, 215, 170, 0.32);
   --lb-accent: #ee4d2d;
   --lb-accent-soft: #fff5f2;
+  --lb-accent-border: rgba(238, 77, 45, 0.38);
+  --tier-bronze: #b45309;
+  --tier-silver: #64748b;
+  --tier-gold: #ca8a04;
+  --tier-diamond: #0891b2;
   --lb-my-bar-bg: linear-gradient(135deg, #fde68a 0%, #fbbf24 55%, #f59e0b 100%);
   --lb-my-bar-text: #0f172a;
   --lb-share-btn-bg: #0f172a;
@@ -10626,6 +10518,7 @@ details.faq-accordion[open] p {
   --lb-stage-glow: rgba(167, 243, 208, 0.3);
   --lb-accent: #059669;
   --lb-accent-soft: #ecfdf5;
+  --lb-accent-border: rgba(5, 150, 105, 0.38);
 }
 
 .lb-layout {
@@ -11022,83 +10915,92 @@ details.faq-accordion[open] p {
   margin-top: -22px;
   background: var(--bg-card);
   border-radius: 24px 24px 0 0;
-  padding: 10px 16px 18px;
+  padding: 16px 14px 18px;
   z-index: 2;
   min-height: 84px;
 }
 
-.lb-sheet-notch {
-  display: flex;
-  justify-content: center;
-  margin-bottom: 10px;
-}
-
-.lb-sheet-notch span {
-  width: 38px;
-  height: 4px;
-  border-radius: 999px;
-  background: #e2e8f0;
-}
-
 #view-leaderboard .lb-list-heading {
   font-size: 12px;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--text-muted);
-  margin: 0 0 8px;
+  font-weight: 700;
+  color: #64748b;
+  letter-spacing: 0.01em;
+  margin: 0 0 10px 2px;
 }
 
 #view-leaderboard .lb-table-wrap {
   border: none;
   border-radius: 0;
-  overflow-x: visible;
+  overflow: visible;
 }
 
-#view-leaderboard .lb-data-table {
-  width: 100%;
-  border-collapse: collapse;
+/* ================= MẪU A: PREMIUM COMPACT LEADERBOARD CARD (#4+) ================= */
+#view-leaderboard .lb-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
-#view-leaderboard .lb-data-table thead th {
-  font-size: 11.5px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  color: var(--text-muted);
-  background: transparent;
-  border-bottom: 1px solid var(--border);
-  padding: 8px 10px;
+#view-leaderboard .lb-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 11px 12px;
+  border-radius: 15px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, background-color 0.16s ease;
 }
 
-#view-leaderboard .lb-data-table tbody td {
-  padding: 11px 10px;
-  border-bottom: 1px solid #f1f5f9;
-  vertical-align: middle;
+#view-leaderboard .lb-card.is-me {
+  background: var(--lb-accent-soft);
+  border: 1.5px solid var(--lb-accent-border);
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.05);
 }
 
-#view-leaderboard .lb-data-table tbody tr:last-child td {
-  border-bottom: none;
+#view-leaderboard .lb-card-main {
+  display: grid;
+  grid-template-columns: 32px 42px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
 }
 
-#view-leaderboard .lb-data-table tbody tr.is-me {
-  background: #fffbeb;
+#view-leaderboard .lb-rank-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
 }
 
-.lb-rank-cell {
+#view-leaderboard .lb-rank-badge {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #1e293b;
+  color: #ffffff;
+  border: 2px solid #ffffff;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.14);
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  justify-content: center;
+  font-size: 12px;
   font-weight: 800;
-  font-size: 14px;
-  color: var(--text-main);
   font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+#view-leaderboard .lb-card.is-me .lb-rank-badge {
+  background: var(--lb-accent);
 }
 
 .lb-trend {
   display: inline-flex;
   align-items: center;
-  font-size: 10px;
+  font-size: 9.5px;
   font-weight: 800;
   line-height: 1;
 }
@@ -11107,18 +11009,316 @@ details.faq-accordion[open] p {
 .lb-trend.is-down { color: #dc2626; }
 .lb-trend.is-flat { color: #94a3b8; }
 
-.lb-user-orders-sub {
-  font-size: 11.5px;
-  color: var(--text-muted);
-  font-weight: 500;
+#view-leaderboard .lb-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+  color: #334155;
+  font-size: 14px;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+  border: 3px solid var(--tier-bronze);
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.08);
+}
+
+#view-leaderboard .lb-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+#view-leaderboard .lb-avatar.tier-bronze { border-color: var(--tier-bronze); }
+#view-leaderboard .lb-avatar.tier-silver { border-color: var(--tier-silver); }
+#view-leaderboard .lb-avatar.tier-gold { border-color: var(--tier-gold); }
+#view-leaderboard .lb-avatar.tier-diamond { border-color: var(--tier-diamond); }
+
+#view-leaderboard .lb-info {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+#view-leaderboard .lb-name-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+#view-leaderboard .lb-name {
+  font-size: 14px;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#view-leaderboard .lb-me-badge {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: var(--lb-accent);
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  line-height: 1.1;
+}
+
+#view-leaderboard .lb-badges-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+#view-leaderboard .lb-card-tier-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  color: #0f172a;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.3;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 0.15s ease, transform 0.12s ease;
+}
+
+#view-leaderboard .lb-card-tier-pill:hover {
+  border-color: #cbd5e1;
+}
+
+#view-leaderboard .lb-card-tier-pill:active {
+  transform: scale(0.97);
+}
+
+#view-leaderboard .lb-card-tier-pill.tier-bronze { border-color: rgba(180, 83, 9, 0.3); }
+#view-leaderboard .lb-card-tier-pill.tier-silver { border-color: rgba(100, 116, 139, 0.35); }
+#view-leaderboard .lb-card-tier-pill.tier-gold { border-color: rgba(202, 138, 4, 0.38); }
+#view-leaderboard .lb-card-tier-pill.tier-diamond { border-color: rgba(8, 145, 178, 0.38); }
+
+#view-leaderboard .lb-card-tier-pill .vip-badge-svg {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+}
+
+#view-leaderboard .lb-near-top3-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--lb-accent-soft);
+  color: var(--lb-accent);
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+#view-leaderboard .lb-metric-col {
+  text-align: right;
+  flex-shrink: 0;
 }
 
 #view-leaderboard .lb-metric-val {
-  font-size: 14px;
+  display: block;
+  font-size: 14.5px;
   font-weight: 800;
   color: var(--lb-accent);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+  line-height: 1.25;
+}
+
+/* Competitive progress bar below card main row */
+#view-leaderboard .lb-card-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding-top: 7px;
+  border-top: 1px solid #f1f5f9;
+}
+
+#view-leaderboard .lb-card.is-me .lb-card-progress {
+  border-top-color: rgba(15, 23, 42, 0.08);
+}
+
+#view-leaderboard .lb-progress-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+#view-leaderboard .lb-progress-text {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #475569;
+  line-height: 1.3;
+}
+
+#view-leaderboard .lb-progress-text strong {
+  color: #0f172a;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+#view-leaderboard .lb-me-overtake-btn {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--lb-accent);
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+#view-leaderboard .lb-me-overtake-btn:hover {
+  text-decoration: underline;
+}
+
+#view-leaderboard .lb-progress-track {
+  width: 100%;
+  height: 5px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  overflow: hidden;
+}
+
+#view-leaderboard .lb-card.is-me .lb-progress-track {
+  background: rgba(15, 23, 42, 0.1);
+}
+
+#view-leaderboard .lb-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--lb-accent);
+  transition: width 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #view-leaderboard .lb-progress-fill {
+    transition: none;
+  }
+}
+
+/* Separator when current user is outside loaded top rows */
+#view-leaderboard .lb-list-ellipsis {
+  text-align: center;
+  color: #94a3b8;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 4px;
+  padding: 2px 0;
+  user-select: none;
+}
+
+/* Ghost empty rows (#5, #6 when list has 4 or 5 members) */
+#view-leaderboard .lb-card-ghost {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 12px;
+  border-radius: 15px;
+  background: #f8fafc;
+  border: 1.5px dashed #cbd5e1;
+}
+
+#view-leaderboard .lb-card-ghost .lb-ghost-rank {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #e2e8f0;
+  color: #64748b;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  margin: 0 auto;
+}
+
+#view-leaderboard .lb-ghost-copy {
+  min-width: 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #64748b;
+  line-height: 1.35;
+}
+
+#view-leaderboard .lb-ghost-cta {
+  flex-shrink: 0;
+  padding: 6px 11px;
+  border-radius: 999px;
+  background: var(--lb-accent-soft);
+  border: 1px solid var(--lb-accent-border);
+  color: var(--lb-accent);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+#view-leaderboard .lb-ghost-cta:hover {
+  background: var(--lb-accent);
+  color: #ffffff;
+}
+
+/* Load more button */
+#view-leaderboard .lb-more-wrap {
+  margin-top: 12px;
+  display: flex;
+  justify-content: center;
+}
+
+#view-leaderboard .lb-more-btn {
+  width: 100%;
+  max-width: 260px;
+  padding: 9px 16px;
+  border-radius: 999px;
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, background-color 0.15s ease;
+}
+
+#view-leaderboard .lb-more-btn:hover {
+  border-color: var(--lb-accent);
+  color: var(--lb-accent);
+  background: var(--lb-accent-soft);
+}
+
+#view-leaderboard .lb-skeleton-card,
+#view-leaderboard .lb-error-card {
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid #f1f5f9;
+  background: #ffffff;
 }
 
 .lb-sheet-note {
@@ -11413,43 +11613,45 @@ details.faq-accordion[open] p {
   }
 
   .lb-sheet {
-    padding: 10px 12px 14px;
+    padding: 14px 12px 16px;
   }
 
-  #view-leaderboard .lb-data-table thead {
-    display: none;
+  #view-leaderboard .lb-card {
+    padding: 10px 10px;
   }
 
-  #view-leaderboard .lb-data-table tbody tr {
-    display: grid;
-    grid-template-columns: 46px minmax(0, 1fr) auto;
-    align-items: center;
+  #view-leaderboard .lb-card-main {
+    grid-template-columns: 28px 38px minmax(0, 1fr) auto;
     gap: 8px;
-    padding: 10px 6px;
-    border-bottom: 1px solid #f1f5f9;
   }
 
-  #view-leaderboard .lb-data-table tbody td {
-    padding: 0;
-    border: none;
-  }
-
-  #view-leaderboard .lb-data-table tbody td.lb-col-tier {
-    display: none;
-  }
-
-  #view-leaderboard .lb-data-table tbody td.lb-col-metric {
-    text-align: right;
-  }
-
-  #view-leaderboard .lb-user-avatar {
+  #view-leaderboard .lb-avatar {
     width: 36px;
     height: 36px;
     font-size: 13px;
   }
 
-  #view-leaderboard .lb-user-meta strong {
+  #view-leaderboard .lb-name {
     font-size: 13.5px;
+  }
+
+  #view-leaderboard .lb-metric-val {
+    font-size: 13.5px;
+  }
+
+  #view-leaderboard .lb-card-ghost {
+    grid-template-columns: 28px minmax(0, 1fr) auto;
+    gap: 8px;
+    padding: 10px;
+  }
+
+  #view-leaderboard .lb-ghost-copy {
+    font-size: 12px;
+  }
+
+  #view-leaderboard .lb-ghost-cta {
+    padding: 5px 9px;
+    font-size: 11.5px;
   }
 }
 

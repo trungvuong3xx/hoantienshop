@@ -1885,10 +1885,31 @@ function registerCashbackRoutes(app) {
     const authUser = getAuthUser(req);
     const viewerId = authUser?.id || null;
 
-    const toPublicEntry = (entry, idx, kind, forSelf = false) => {
+    const toPublicEntry = (entry, idx, kind, rankedList = null, forSelf = false) => {
       const isSelf = Boolean(forSelf || (viewerId && entry.userId === viewerId));
       const maskAnon = Boolean(entry.leaderboardAnonymous && !isSelf);
       const maskAmt = Boolean(entry.leaderboardHideAmount && !isSelf);
+
+      let aboveRank = null;
+      let gapToAbove = null;
+      let progressToAbove = null;
+      if (Array.isArray(rankedList) && idx > 0) {
+        const aboveEntry = rankedList[idx - 1];
+        if (aboveEntry) {
+          const aboveIsSelf = Boolean(viewerId && aboveEntry.userId === viewerId);
+          const aboveMaskAmt = Boolean(aboveEntry.leaderboardHideAmount && !aboveIsSelf);
+          if (!maskAmt && !aboveMaskAmt) {
+            const aboveVal = Math.max(0, Number(kind === 'cashback' ? aboveEntry.totalCashback : aboveEntry.totalSpend) || 0);
+            const myVal = Math.max(0, Number(kind === 'cashback' ? entry.totalCashback : entry.totalSpend) || 0);
+            aboveRank = idx;
+            gapToAbove = Math.max(0, Math.round(aboveVal - myVal));
+            progressToAbove = aboveVal > 0
+              ? Math.max(0, Math.min(100, Math.round((myVal / aboveVal) * 100)))
+              : 100;
+          }
+        }
+      }
+
       return {
         rank: idx + 1,
         code: maskAnon ? 'ANON' : entry.code,
@@ -1904,12 +1925,15 @@ function registerCashbackRoutes(app) {
         totalCashback: maskAmt ? null : entry.totalCashback,
         approvedOrderCount: entry.approvedOrderCount || 0,
         rankDelta: kind === 'cashback' ? (entry.cashbackRankDelta ?? null) : (entry.spendRankDelta ?? null),
-        badges: Array.isArray(entry.badges) ? entry.badges : []
+        badges: Array.isArray(entry.badges) ? entry.badges : [],
+        aboveRank,
+        gapToAbove,
+        progressToAbove
       };
     };
 
-    const topBySpend = rankedSpend.slice(0, 20).map((e, i) => toPublicEntry(e, i, 'spend'));
-    const topByCashback = rankedCashback.slice(0, 20).map((e, i) => toPublicEntry(e, i, 'cashback'));
+    const topBySpend = rankedSpend.slice(0, 20).map((e, i) => toPublicEntry(e, i, 'spend', rankedSpend));
+    const topByCashback = rankedCashback.slice(0, 20).map((e, i) => toPublicEntry(e, i, 'cashback', rankedCashback));
 
     const myPrivacyHidden = Boolean(authUser && authUser.hideFromLeaderboard);
     let myRankSpend = null;
@@ -1927,7 +1951,7 @@ function registerCashbackRoutes(app) {
       const sIdx = rankedSpend.findIndex((r) => r.userId === authUser.id);
       const cIdx = rankedCashback.findIndex((r) => r.userId === authUser.id);
       if (sIdx >= 0) {
-        myRankSpend = toPublicEntry(rankedSpend[sIdx], sIdx, 'spend');
+        myRankSpend = toPublicEntry(rankedSpend[sIdx], sIdx, 'spend', rankedSpend);
         const avgSpend = myRankSpend.approvedOrderCount > 0
           ? Math.round(myRankSpend.totalSpend / myRankSpend.approvedOrderCount)
           : 0;
@@ -1947,7 +1971,7 @@ function registerCashbackRoutes(app) {
         }
       }
       if (cIdx >= 0) {
-        myRankCashback = toPublicEntry(rankedCashback[cIdx], cIdx, 'cashback');
+        myRankCashback = toPublicEntry(rankedCashback[cIdx], cIdx, 'cashback', rankedCashback);
         const avgCb = myRankCashback.approvedOrderCount > 0
           ? Math.round(myRankCashback.totalCashback / myRankCashback.approvedOrderCount)
           : 0;

@@ -64,9 +64,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link id="webFont" media="print" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/styles.css?v=2.9.32" />
+  <link rel="stylesheet" href="/styles.css?v=2.9.33" />
   <link rel="stylesheet" href="/selectPopup.css?v=5" />
-  <script src="/app.js?v=2.9.30" defer></script>
+  <script src="/app.js?v=2.9.31" defer></script>
   <script src="/selectPopup.js?v=4" defer></script>
 </head>
 <body>
@@ -1251,25 +1251,15 @@
 
             <!-- Rising White Sheet for Ranks #4+ -->
             <div class="lb-sheet">
-              <div class="lb-sheet-notch" aria-hidden="true"><span></span></div>
               <div id="leaderboardListHeading" class="lb-list-heading hidden"></div>
 
-              <div id="leaderboardTableWrap" class="table-responsive lb-table-wrap">
-                <table class="data-table lb-data-table">
-                  <thead>
-                    <tr>
-                      <th style="width: 78px;">Hạng</th>
-                      <th>Thành viên</th>
-                      <th>Cấp bậc</th>
-                      <th id="lbMetricHeader">Tổng mua sắm</th>
-                    </tr>
-                  </thead>
-                  <tbody id="leaderboardTableBody">
-                    <tr><td colspan="4"><div class="skeleton-row"><div class="skeleton-line w-60"></div><div class="skeleton-line w-30"></div></div></td></tr>
-                    <tr><td colspan="4"><div class="skeleton-row"><div class="skeleton-line w-50"></div><div class="skeleton-line w-30"></div></div></td></tr>
-                    <tr><td colspan="4"><div class="skeleton-row"><div class="skeleton-line w-40"></div><div class="skeleton-line w-30"></div></div></td></tr>
-                  </tbody>
-                </table>
+              <div id="leaderboardTableWrap" class="lb-table-wrap">
+                <ol id="leaderboardTableBody" class="lb-list" aria-label="Danh sách thành viên từ hạng 4 trở xuống">
+                  <li class="lb-skeleton-card"><div class="skeleton-row"><div class="skeleton-line w-60"></div><div class="skeleton-line w-30"></div></div></li>
+                  <li class="lb-skeleton-card"><div class="skeleton-row"><div class="skeleton-line w-50"></div><div class="skeleton-line w-30"></div></div></li>
+                  <li class="lb-skeleton-card"><div class="skeleton-row"><div class="skeleton-line w-40"></div><div class="skeleton-line w-30"></div></div></li>
+                </ol>
+                <div id="leaderboardMoreWrap" class="lb-more-wrap hidden"></div>
               </div>
               <div id="leaderboardSheetNote" class="lb-sheet-note hidden"></div>
             </div>

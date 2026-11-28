@@ -36,6 +36,7 @@ let currentUser = null;
 let latestLeaderboardData = null;
 let activeLeaderboardTab = 'spend';
 let activeLeaderboardPeriod = '';
+let lbVisibleRowsCount = 8;
 let lbMeObserver = null;
 let lbShareScriptPromise = null;
 let lbCurrentSharePayload = null;
@@ -7179,8 +7180,82 @@ function observeMyRankVisibility() {
   targets.forEach((el) => lbMeObserver.observe(el));
 }
 
+function renderLbListCardHtml(item, isCashback) {
+  const metricVal = isCashback ? item.totalCashback : item.totalSpend;
+  const isMe = Boolean(item.isSelf || (currentUser && item.code && currentUser.code === item.code));
+  const metricDisplay = item.amountHidden && !isMe ? '•••.•••đ' : fmtVnd(metricVal);
+  const rawTier = String(item.vipTier || '').toLowerCase();
+  const tierCode = ['bronze', 'silver', 'gold', 'diamond'].includes(rawTier) ? rawTier : 'bronze';
+  const shortTier = String(item.vipTierName || '').replace(/^Thành viên\s+/i, '') || 'Đồng';
+  const initial = item.isAnonymous && !isMe
+    ? '?'
+    : (String(item.displayName || 'U').trim().charAt(0).toUpperCase() || 'U');
+  const avatarInner = (!item.isAnonymous || isMe) && isSafeAvatarUrl(item.avatarUrl)
+    ? `<img src="${escapeHtml(item.avatarUrl)}" alt="${escapeHtml(item.displayName)}" loading="lazy" />`
+    : escapeHtml(initial);
+  const trendHtml = renderRankTrendHtml(item.rankDelta);
+
+  const hasProgress = item.gapToAbove !== null && item.gapToAbove !== undefined && item.aboveRank !== null && item.aboveRank !== undefined;
+  const gapNum = hasProgress ? Math.max(0, Math.round(Number(item.gapToAbove) || 0)) : null;
+  const pctNum = hasProgress && Number.isFinite(Number(item.progressToAbove))
+    ? Math.max(4, Math.min(100, Math.round(Number(item.progressToAbove))))
+    : null;
+  const nearTop3 = Boolean(item.rank === 4 && hasProgress && pctNum !== null && pctNum >= 85);
+
+  let progressHtml = '';
+  if (hasProgress && pctNum !== null) {
+    const gapCopy = gapNum <= 0
+      ? `Ngang điểm hạng #${item.aboveRank}`
+      : `Còn <strong>${fmtVnd(gapNum)}</strong> để vượt hạng #${item.aboveRank}`;
+    const overtakeBtn = isMe && gapNum > 0
+      ? `<button type="button" class="lb-me-overtake-btn" data-nav="home">Mua sắm để vượt #${item.aboveRank}</button>`
+      : '';
+    progressHtml = `
+      <div class="lb-card-progress">
+        <div class="lb-progress-row">
+          <span class="lb-progress-text">${gapCopy}</span>
+          ${overtakeBtn}
+        </div>
+        <div class="lb-progress-track" aria-hidden="true">
+          <div class="lb-progress-fill" style="width:${pctNum}%"></div>
+        </div>
+      </div>
+    `;
+  }
+
+  return `
+    <li class="lb-card${isMe ? ' is-me' : ''}" data-lb-rank="${item.rank}">
+      <div class="lb-card-main">
+        <div class="lb-rank-col">
+          <span class="lb-rank-badge">${item.rank}</span>
+          ${trendHtml}
+        </div>
+        <span class="lb-avatar tier-${tierCode}">${avatarInner}</span>
+        <div class="lb-info">
+          <div class="lb-name-line">
+            <strong class="lb-name">${escapeHtml(item.displayName)}</strong>
+            ${isMe ? '<span class="lb-me-badge">BẠN</span>' : ''}
+          </div>
+          <div class="lb-badges-line">
+            <button type="button" class="lb-card-tier-pill tier-${tierCode}" data-open-vip-sheet="1">${renderVipBadgeSvg(item.vipTier || item.vipTierIcon, false)}<span>${escapeHtml(shortTier)}</span></button>
+            ${nearTop3 ? '<span class="lb-near-top3-pill">Sắp vào Top 3</span>' : ''}
+          </div>
+        </div>
+        <div class="lb-metric-col">
+          <strong class="lb-metric-val">${metricDisplay}</strong>
+        </div>
+      </div>
+      ${progressHtml}
+    </li>
+  `;
+}
+
 function renderLeaderboardTable(mode = 'spend', { animate = false } = {}) {
-  activeLeaderboardTab = mode === 'cashback' ? 'cashback' : 'spend';
+  const nextTab = mode === 'cashback' ? 'cashback' : 'spend';
+  if (nextTab !== activeLeaderboardTab) {
+    lbVisibleRowsCount = 8;
+  }
+  activeLeaderboardTab = nextTab;
   const viewEl = document.getElementById('view-leaderboard');
   const headerEl = document.getElementById('lbMetricHeader');
   const heroTitleEl = document.getElementById('lbHeroTitle');
@@ -7466,11 +7541,16 @@ function renderLeaderboardTable(mode = 'spend', { animate = false } = {}) {
     podiumEl.classList.remove('hidden');
   }
 
-  // 3. Ranks #4+ inside the Rising White Sheet (or compact #4 CTA with ghost slots #4, #5, #6)
+  // 3. Ranks #4+ inside the Rising White Sheet (Mẫu A: Premium Compact Leaderboard Card)
   const tableRows = list.slice(3);
+  const moreWrap = document.getElementById('leaderboardMoreWrap');
   if (tableRows.length === 0) {
     listHeadingEl?.classList.add('hidden');
     tableWrap?.classList.add('hidden');
+    if (moreWrap) {
+      moreWrap.classList.add('hidden');
+      moreWrap.innerHTML = '';
+    }
     tbody.innerHTML = '';
     if (sheetNoteEl) {
       const amInTop3 = Boolean(myRank && myRank.rank <= 3);
@@ -7514,44 +7594,52 @@ function renderLeaderboardTable(mode = 'spend', { animate = false } = {}) {
   } else {
     sheetNoteEl?.classList.add('hidden');
     if (listHeadingEl) {
-      const firstRank = tableRows[0].rank;
-      const lastRank = tableRows[tableRows.length - 1].rank;
-      listHeadingEl.textContent = firstRank === lastRank ? `Hạng ${firstRank}` : `Hạng ${firstRank} – ${lastRank}`;
+      listHeadingEl.textContent = 'Từ hạng #4';
       listHeadingEl.classList.remove('hidden');
     }
     tableWrap?.classList.remove('hidden');
-    tbody.innerHTML = tableRows
-      .map((item) => {
-        const metricVal = isCashback ? item.totalCashback : item.totalSpend;
-        const isMe = Boolean(item.isSelf || (currentUser && item.code && currentUser.code === item.code));
-        const metricDisplay = item.amountHidden && !isMe ? '•••.•••đ' : fmtVnd(metricVal);
-        const shortTier = String(item.vipTierName || '').replace(/^Thành viên\s+/i, '');
-        const initial = item.isAnonymous && !isMe
-          ? '?'
-          : (String(item.displayName || 'U').trim().charAt(0).toUpperCase() || 'U');
-        const avatarInner = (!item.isAnonymous || isMe) && isSafeAvatarUrl(item.avatarUrl)
-          ? `<img src="${escapeHtml(item.avatarUrl)}" alt="${escapeHtml(item.displayName)}" loading="lazy" />`
-          : escapeHtml(initial);
-        const orderSub = item.approvedOrderCount > 0
-          ? `${item.approvedOrderCount} đơn duyệt${shortTier ? ` • ${shortTier}` : ''}`
-          : (shortTier || '');
-        return `
-          <tr class="${isMe ? 'is-me' : ''}" data-lb-rank="${item.rank}">
-            <td class="lb-col-rank"><span class="lb-rank-cell">${item.rank}${renderRankTrendHtml(item.rankDelta)}</span></td>
-            <td class="lb-col-user">
-              <div class="lb-user-row">
-                <span class="lb-user-avatar">${avatarInner}</span>
-                <div class="lb-user-meta">
-                  <strong>${escapeHtml(item.displayName)}${isMe ? ' (Bạn)' : ''}</strong>
-                  ${orderSub ? `<div class="lb-user-orders-sub">${escapeHtml(orderSub)}</div>` : ''}
-                </div>
-              </div>
-            </td>
-            <td class="lb-col-tier"><span class="lb-tier-pill" data-open-vip-sheet="1" role="button" tabindex="0">${renderVipBadgeSvg(item.vipTier || item.vipTierIcon, false)}<span>${escapeHtml(shortTier || item.vipTierName || '')}</span></span></td>
-            <td class="lb-col-metric"><strong class="lb-metric-val">${metricDisplay}</strong></td>
-          </tr>`;
-      })
-      .join('');
+
+    const visibleRows = tableRows.slice(0, lbVisibleRowsCount);
+    const itemsHtml = visibleRows.map((item) => renderLbListCardHtml(item, isCashback));
+
+    // If logged-in user is ranked below the currently visible rows (e.g. outside top 20), append ··· + their card
+    if (myRank && Number(myRank.rank) > 3) {
+      const alreadyShown = visibleRows.some(
+        (r) => r.isSelf || (currentUser && r.code && currentUser.code === r.code) || Number(r.rank) === Number(myRank.rank)
+      );
+      const lastVisibleRank = visibleRows.length > 0 ? Number(visibleRows[visibleRows.length - 1].rank) : 3;
+      if (!alreadyShown && Number(myRank.rank) > lastVisibleRank) {
+        itemsHtml.push('<li class="lb-list-ellipsis" aria-hidden="true">•••</li>');
+        itemsHtml.push(renderLbListCardHtml(myRank, isCashback));
+      }
+    }
+
+    // Ghost empty rows (#5, #6) ONLY when total leaderboard has 4 or 5 members
+    if (list.length === 4 || list.length === 5) {
+      const ghostRanks = list.length === 4 ? [5, 6] : [6];
+      ghostRanks.forEach((ghostRank) => {
+        itemsHtml.push(`
+          <li class="lb-card-ghost" data-lb-ghost-rank="${ghostRank}">
+            <span class="lb-ghost-rank">${ghostRank}</span>
+            <span class="lb-ghost-copy">Chỗ trống, mua sắm để chiếm</span>
+            <button type="button" class="lb-ghost-cta" data-nav="home">Mua sắm ngay</button>
+          </li>
+        `);
+      });
+    }
+
+    tbody.innerHTML = itemsHtml.join('');
+
+    if (moreWrap) {
+      const remaining = tableRows.length - visibleRows.length;
+      if (remaining > 0) {
+        moreWrap.innerHTML = `<button type="button" class="lb-more-btn" id="lbLoadMoreBtn">Xem thêm (${remaining} thành viên)</button>`;
+        moreWrap.classList.remove('hidden');
+      } else {
+        moreWrap.innerHTML = '';
+        moreWrap.classList.add('hidden');
+      }
+    }
   }
 
   // 4. Real VIP Tiers Benefits Card
@@ -7701,6 +7789,9 @@ on('lbCelebrateShareBtn', 'click', () => {
 
 async function loadPublicLeaderboard(periodOverride) {
   if (periodOverride === 'weekly' || periodOverride === 'monthly' || periodOverride === 'yearly' || periodOverride === 'all_time' || periodOverride === 'season') {
+    if (periodOverride !== activeLeaderboardPeriod) {
+      lbVisibleRowsCount = 8;
+    }
     activeLeaderboardPeriod = periodOverride;
   }
   const tbody = document.getElementById('leaderboardTableBody');
@@ -7716,7 +7807,7 @@ async function loadPublicLeaderboard(periodOverride) {
   } catch (err) {
     tableWrap?.classList.remove('hidden');
     if (tbody) {
-      tbody.innerHTML = `<tr><td colspan="4"><div class="lb-error-box"><span>${escapeHtml(err.message || 'Không thể tải bảng xếp hạng.')}</span><button type="button" class="btn btn-outline btn-sm" id="lbRetryBtn">Thử lại</button></div></td></tr>`;
+      tbody.innerHTML = `<li class="lb-error-card"><div class="lb-error-box"><span>${escapeHtml(err.message || 'Không thể tải bảng xếp hạng.')}</span><button type="button" class="btn btn-outline btn-sm" id="lbRetryBtn">Thử lại</button></div></li>`;
     }
   }
 }
@@ -8042,10 +8133,15 @@ document.addEventListener('click', (e) => {
     closeLeaderboardShareModal();
     return;
   }
+  if (e.target.closest('#lbLoadMoreBtn')) {
+    lbVisibleRowsCount += 10;
+    renderLeaderboardTable(activeLeaderboardTab);
+    return;
+  }
   if (e.target.closest('#lbRetryBtn')) {
     const tbody = document.getElementById('leaderboardTableBody');
     if (tbody) {
-      tbody.innerHTML = '<tr><td colspan="4"><div class="skeleton-row"><div class="skeleton-line w-60"></div><div class="skeleton-line w-30"></div></div></td></tr>';
+      tbody.innerHTML = '<li class="lb-skeleton-card"><div class="skeleton-row"><div class="skeleton-line w-60"></div><div class="skeleton-line w-30"></div></div></li>';
     }
     loadPublicLeaderboard();
     return;

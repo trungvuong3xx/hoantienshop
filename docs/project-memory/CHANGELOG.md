@@ -6,6 +6,10 @@
 ---
 
 ## 2026-11-27 — 2026-11-28
+* **Thiết kế lại danh sách Bảng Xếp Hạng từ hạng #4+ (Mẫu A — Premium Compact Leaderboard Card, `lila-pwa-v53`):**
+  * Chuyển danh sách `#4+` từ `<table>` sang `<ol class="lb-list">` với mini card phẳng đồng bộ Podium: huy hiệu số hạng tròn, avatar viền theo màu cấp bậc VIP, tên in đậm, pill cấp bậc có icon (mở Bottom Sheet VIP), số tiền căn phải theo màu tab; bỏ số đơn duyệt và thanh kéo `.lb-sheet-notch`, đổi tiêu đề thành `Từ hạng #4`.
+  * Tính `aboveRank`, `gapToAbove`, `progressToAbove` ngay tầng server trong `GET /api/leaderboard` kèm lớp bảo vệ riêng tư (trả `null` nếu người hiện tại hoặc người phía trên bật `amountHidden`).
+  * Hiển thị thanh tiến trình cạnh tranh (`Còn Xđ để vượt hạng #Y`), nhãn `Sắp vào Top 3` cho hạng `#4`, thẻ nhấn `BẠN` + nút `Mua sắm để vượt #X`, 2 hàng trống nét đứt `#5/#6` khi có 4–5 người, và nút `Xem thêm` phân trang client (8 dòng đầu, +10 mỗi lần bấm).
 * **Kiểm toán toàn diện P0 + P1 + P2 & Xác minh Affiliate Attribution (2026-11-28):**
   * Kiểm chứng trực tiếp live redirect HTTP 301/302 và Publisher ID cho cả **Shopee** (`s.shopee.vn/an_redir` $\rightarrow$ `mmp_pid=an_17346310715`) và **TikTok Shop** (AccessTrade v2 `shorten.asia` $\rightarrow$ `go.isclix.com/deep_link/7110811489339796158/6648523843406889655` giữ nguyên `sub1` & `utm_source`).
   * Sửa `BUG-016`: Bổ sung cột `source` và `deal_group` cho bảng `clicks` trên PostgreSQL để giữ trọn attribution cho `compare_sp_to_tt`, `compare_tt_to_sp` và `home_deal_shelf`.
